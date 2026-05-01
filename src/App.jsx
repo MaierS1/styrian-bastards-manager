@@ -1898,9 +1898,9 @@ export default function App() {
           </div>
         ))}
       </section>
+      )}
 
-
-{canManageMembers() && (
+      {canManageMembers() && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>CSV Mitglieder-Import</h2>
 
@@ -1967,7 +1967,7 @@ export default function App() {
       </section>
       )}
 
-{canManageMembers() && (
+      {canManageMembers() && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>{editingId ? 'Mitglied bearbeiten' : 'Mitglied hinzufügen'}</h2>
 
