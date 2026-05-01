@@ -143,6 +143,10 @@ export default function App() {
   const [receiptFile, setReceiptFile] = useState(null)
   const [editingCashId, setEditingCashId] = useState(null)
 
+  const [cashbookRows, setCashbookRows] = useState([])
+  const [cashbookFileName, setCashbookFileName] = useState('')
+  const [cashbookImporting, setCashbookImporting] = useState(false)
+
   useEffect(() => {
     checkUser()
 
@@ -1298,6 +1302,186 @@ export default function App() {
     loadAll()
   }
 
+  function parseEuroAmount(value) {
+    const cleaned = String(value || '')
+      .trim()
+      .replace('€', '')
+      .replace(/\s/g, '')
+      .replace(/\./g, '')
+      .replace(',', '.')
+
+    const amount = Number(cleaned)
+
+    if (!Number.isFinite(amount) || amount === 0) {
+      return null
+    }
+
+    return amount
+  }
+
+  function normalizeCashDate(value) {
+    const text = String(value || '').trim()
+
+    if (!text || text === '-') return ''
+
+    const parts = text.split('.')
+
+    if (parts.length === 3) {
+      const day = parts[0].padStart(2, '0')
+      const month = parts[1].padStart(2, '0')
+      const year = parts[2]
+
+      return `${year}-${month}-${day}`
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      return text
+    }
+
+    return ''
+  }
+
+  function getCashCategoryFromText(value) {
+    const text = String(value || '').toLowerCase()
+
+    if (text.includes('mitglied') || text.includes('beitrag')) return 'mitgliedsbeitrag'
+    if (text.includes('pfand')) return 'pfandbecher'
+    if (text.includes('turnier') || text.includes('event') || text.includes('veranstaltung')) return 'veranstaltung'
+    if (text.includes('shirt') || text.includes('fanartikel') || text.includes('merch')) return 'fanartikel'
+
+    return 'sonstiges'
+  }
+
+  function cashbookRowToEntries(row) {
+    const date = normalizeCashDate(getCsvValue(row, ['datum']))
+    const description = getCsvValue(row, ['bezeichnung', 'beschreibung', 'description'])
+    const note = getCsvValue(row, ['anmerkung', 'notiz', 'notes'])
+    const number = getCsvValue(row, ['nummer', 'belegnummer'])
+    const importedEntries = []
+
+    if (!date || !description) return importedEntries
+
+    const options = [
+      {
+        amount: parseEuroAmount(getCsvValue(row, ['einnahme e-banking', 'einnahme ebanking', 'einnahme bank'])),
+        type: 'einnahme',
+        payment: 'E-Banking',
+      },
+      {
+        amount: parseEuroAmount(getCsvValue(row, ['ausgabe e-banking', 'ausgabe ebanking', 'ausgabe bank'])),
+        type: 'ausgabe',
+        payment: 'E-Banking',
+      },
+      {
+        amount: parseEuroAmount(getCsvValue(row, ['einnahme bar'])),
+        type: 'einnahme',
+        payment: 'Bar',
+      },
+      {
+        amount: parseEuroAmount(getCsvValue(row, ['ausgabe bar'])),
+        type: 'ausgabe',
+        payment: 'Bar',
+      },
+      {
+        amount: parseEuroAmount(getCsvValue(row, ['betrag'])),
+        type: normalizeCashType(getCsvValue(row, ['typ', 'type'])),
+        payment: getCsvValue(row, ['zahlungsart', 'payment']) || '',
+      },
+    ]
+
+    options.forEach((option) => {
+      if (!option.amount || !option.type) return
+
+      const fullDescription = [
+        description,
+        note ? `Anmerkung: ${note}` : '',
+        number ? `Nr.: ${number}` : '',
+        option.payment ? `Zahlungsart: ${option.payment}` : '',
+      ]
+        .filter(Boolean)
+        .join(' | ')
+
+      importedEntries.push({
+        entry_date: date,
+        type: option.type,
+        category: getCashCategoryFromText(`${description} ${note}`),
+        amount: option.amount,
+        description: fullDescription,
+        receipt_url: null,
+        event_id: cashEventId || null,
+      })
+    })
+
+    return importedEntries
+  }
+
+  function normalizeCashType(value) {
+    const text = String(value || '').toLowerCase()
+
+    if (text.includes('aus')) return 'ausgabe'
+    if (text.includes('ein')) return 'einnahme'
+
+    return ''
+  }
+
+  function handleCashbookFile(event) {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      setCashbookRows([])
+      setCashbookFileName('')
+      return
+    }
+
+    setCashbookFileName(file.name)
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      try {
+        const rows = parseCsvText(String(reader.result || ''))
+        const entries = rows.flatMap(cashbookRowToEntries)
+
+        setCashbookRows(entries)
+
+        if (entries.length === 0) {
+          alert('Keine gültigen Kassa-Einträge gefunden. Prüfe bitte Datum, Bezeichnung und Beträge.')
+        }
+      } catch (error) {
+        alert(`Kassabuch konnte nicht gelesen werden: ${error.message}`)
+      }
+    }
+
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  async function importCashbookRows() {
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+
+    if (cashbookRows.length === 0) {
+      alert('Bitte zuerst eine Kassabuch-CSV auswählen.')
+      return
+    }
+
+    setCashbookImporting(true)
+
+    try {
+      const { error } = await supabase
+        .from('cash_entries')
+        .insert(cashbookRows)
+
+      if (error) return alert(error.message)
+
+      setCashbookRows([])
+      setCashbookFileName('')
+      await loadCashEntries()
+
+      alert('Kassabuch wurde importiert.')
+    } finally {
+      setCashbookImporting(false)
+    }
+  }
+
   function editCashEntry(entry) {
     if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
@@ -1884,6 +2068,65 @@ export default function App() {
                 {entry.description}
               </div>
             ))}
+          </>
+        )}
+
+        <h3 style={headingStyle}>Kassabuch CSV importieren</h3>
+
+        <p style={mutedTextStyle}>
+          Unterstützt dein altes Format mit Einnahme/Ausgabe Bar und E-Banking. Leere Zeilen und Summenzeilen werden ignoriert.
+          Wenn oben ein Event ausgewählt ist, werden die importierten Einträge diesem Event zugeordnet.
+        </p>
+
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={handleCashbookFile}
+          style={inputStyle}
+        />
+
+        {cashbookFileName && (
+          <p style={mutedTextStyle}>
+            Datei: <strong>{cashbookFileName}</strong>
+          </p>
+        )}
+
+        {cashbookRows.length > 0 && (
+          <>
+            <h3 style={headingStyle}>Vorschau: {cashbookRows.length} Kassa-Einträge</h3>
+
+            {cashbookRows.slice(0, 5).map((entry, index) => (
+              <div key={`${entry.entry_date}-${entry.description}-${index}`} style={cardStyle}>
+                <strong>
+                  {entry.type === 'einnahme' ? '+' : '-'} {Number(entry.amount || 0).toFixed(2)} €
+                </strong>
+                <br />
+                {entry.entry_date} · {entry.category}
+                <br />
+                {entry.description}
+              </div>
+            ))}
+
+            {cashbookRows.length > 5 && (
+              <p style={mutedTextStyle}>
+                Es werden nur die ersten 5 Einträge angezeigt. Insgesamt werden {cashbookRows.length} Einträge importiert.
+              </p>
+            )}
+
+            <button onClick={importCashbookRows} style={buttonStyle} disabled={cashbookImporting}>
+              {cashbookImporting ? 'Import läuft...' : 'Kassabuch importieren'}
+            </button>
+
+            <button
+              onClick={() => {
+                setCashbookRows([])
+                setCashbookFileName('')
+              }}
+              style={secondaryButtonStyle}
+              disabled={cashbookImporting}
+            >
+              Import abbrechen
+            </button>
           </>
         )}
 
