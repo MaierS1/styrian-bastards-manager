@@ -675,6 +675,10 @@ export default function App() {
       if (!grouped[monthKey]) {
         grouped[monthKey] = {
           monthKey,
+          openingBankIncome: 0,
+          openingBankExpense: 0,
+          openingCashIncome: 0,
+          openingCashExpense: 0,
           openingBank: 0,
           openingCash: 0,
           incomeBank: 0,
@@ -683,7 +687,10 @@ export default function App() {
           expenseCash: 0,
           totalIncome: 0,
           totalExpense: 0,
+          totalIncomeWithOpening: 0,
+          totalExpenseWithOpening: 0,
           monthMovement: 0,
+          differenceWithOpening: 0,
           runningBalance: 0,
           entries: [],
         }
@@ -693,10 +700,16 @@ export default function App() {
       const paymentMethod = getPaymentMethod(entry)
 
       if (entry.is_opening) {
-        const openingAmount = entry.type === 'ausgabe' ? -amount : amount
+        if (paymentMethod === 'ebanking') {
+          if (entry.type === 'einnahme') grouped[monthKey].openingBankIncome += amount
+          if (entry.type === 'ausgabe') grouped[monthKey].openingBankExpense += amount
+        } else {
+          if (entry.type === 'einnahme') grouped[monthKey].openingCashIncome += amount
+          if (entry.type === 'ausgabe') grouped[monthKey].openingCashExpense += amount
+        }
 
-        if (paymentMethod === 'ebanking') grouped[monthKey].openingBank += openingAmount
-        else grouped[monthKey].openingCash += openingAmount
+        grouped[monthKey].openingBank = grouped[monthKey].openingBankIncome - grouped[monthKey].openingBankExpense
+        grouped[monthKey].openingCash = grouped[monthKey].openingCashIncome - grouped[monthKey].openingCashExpense
 
         grouped[monthKey].entries.push(entry)
         return
@@ -714,7 +727,6 @@ export default function App() {
         else grouped[monthKey].expenseCash += amount
       }
 
-      grouped[monthKey].monthMovement = grouped[monthKey].totalIncome - grouped[monthKey].totalExpense
       grouped[monthKey].entries.push(entry)
     })
 
@@ -724,6 +736,14 @@ export default function App() {
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
       .map((month) => {
         const openingTotal = month.openingBank + month.openingCash
+        month.monthMovement = month.totalIncome - month.totalExpense
+        month.totalIncomeWithOpening =
+          month.openingBankIncome + month.openingCashIncome + month.totalIncome
+        month.totalExpenseWithOpening =
+          month.openingBankExpense + month.openingCashExpense + month.totalExpense
+        month.differenceWithOpening =
+          month.totalIncomeWithOpening - month.totalExpenseWithOpening
+
         runningBalance += openingTotal + month.monthMovement
 
         return {
@@ -1006,15 +1026,15 @@ export default function App() {
       startY: 32,
       head: [[
         'Monat',
-        'Übertrag Bank',
-        'Übertrag Bar',
+        'Übertrag Bank netto',
+        'Übertrag Bar netto',
         'Einnahme Bank',
         'Ausgabe Bank',
         'Einnahme Bar',
         'Ausgabe Bar',
-        'Einnahmen ges.',
-        'Ausgaben ges.',
-        'Monatsdiff.',
+        'Einnahmen inkl. Übertrag',
+        'Ausgaben inkl. Übertrag',
+        'Differenz',
         'Saldo'
       ]],
       body: summary.map((month) => [
@@ -1025,9 +1045,9 @@ export default function App() {
         `${month.expenseBank.toFixed(2)} EUR`,
         `${month.incomeCash.toFixed(2)} EUR`,
         `${month.expenseCash.toFixed(2)} EUR`,
-        `${month.totalIncome.toFixed(2)} EUR`,
-        `${month.totalExpense.toFixed(2)} EUR`,
-        `${month.monthMovement.toFixed(2)} EUR`,
+        `${month.totalIncomeWithOpening.toFixed(2)} EUR`,
+        `${month.totalExpenseWithOpening.toFixed(2)} EUR`,
+        `${month.differenceWithOpening.toFixed(2)} EUR`,
         `${month.runningBalance.toFixed(2)} EUR`,
       ]),
     })
@@ -1518,9 +1538,12 @@ export default function App() {
     const date = rawDate || (description.toLowerCase().includes('übertrag') || description.toLowerCase().includes('uebertrag') ? row.__month_start : '')
     const note = getCsvValue(row, ['anmerkung', 'notiz', 'notes'])
     const number = getCsvValue(row, ['nummer', 'belegnummer'])
-    const isOpening = description.toLowerCase().includes('übertrag') || description.toLowerCase().includes('uebertrag')
+    const lowerDescription = description.toLowerCase()
+    const isOpening = lowerDescription.includes('übertrag vorjahr') || lowerDescription.includes('uebertrag vorjahr')
+    const isCarryForward = lowerDescription.includes('übertrag vormonat') || lowerDescription.includes('uebertrag vormonat')
     const importedEntries = []
 
+    if (isCarryForward) return importedEntries
     if (!date || !description) return importedEntries
 
     const options = [
@@ -2326,15 +2349,15 @@ export default function App() {
               <tr>
                 {[
                   'Monat',
-                  'Übertrag E-Banking',
-                  'Übertrag Bar',
+                  'Übertrag Bank netto',
+                  'Übertrag Bar netto',
                   'Einnahme E-Banking',
                   'Ausgabe E-Banking',
                   'Einnahme Bar',
                   'Ausgabe Bar',
-                  'Einnahmen gesamt',
-                  'Ausgaben gesamt',
-                  'Monatsdifferenz',
+                  'Einnahmen ges. inkl. Übertrag',
+                  'Ausgaben ges. inkl. Übertrag',
+                  'Differenz wie Excel',
                   'Saldo laufend',
                 ].map((header) => (
                   <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
@@ -2353,10 +2376,10 @@ export default function App() {
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.expenseBank.toFixed(2)} €</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.incomeCash.toFixed(2)} €</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.expenseCash.toFixed(2)} €</td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalIncome.toFixed(2)} €</strong></td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalExpense.toFixed(2)} €</strong></td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb', color: month.monthMovement >= 0 ? '#166534' : '#b91c1c' }}>
-                    <strong>{month.monthMovement.toFixed(2)} €</strong>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalIncomeWithOpening.toFixed(2)} €</strong></td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalExpenseWithOpening.toFixed(2)} €</strong></td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb', color: month.differenceWithOpening >= 0 ? '#166534' : '#b91c1c' }}>
+                    <strong>{month.differenceWithOpening.toFixed(2)} €</strong>
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.runningBalance.toFixed(2)} €</strong></td>
                 </tr>
