@@ -613,6 +613,11 @@ export default function App() {
   function getCashBalance() {
     return cashEntries.reduce((sum, entry) => {
       const amount = Number(entry.amount || 0)
+
+      if (entry.is_opening) {
+        return sum + amount
+      }
+
       return entry.type === 'einnahme' ? sum + amount : sum - amount
     }, 0)
   }
@@ -670,19 +675,30 @@ export default function App() {
       if (!grouped[monthKey]) {
         grouped[monthKey] = {
           monthKey,
+          openingBank: 0,
+          openingCash: 0,
           incomeBank: 0,
           expenseBank: 0,
           incomeCash: 0,
           expenseCash: 0,
           totalIncome: 0,
           totalExpense: 0,
-          difference: 0,
+          monthMovement: 0,
+          runningBalance: 0,
           entries: [],
         }
       }
 
       const amount = Number(entry.amount || 0)
       const paymentMethod = getPaymentMethod(entry)
+
+      if (entry.is_opening) {
+        if (paymentMethod === 'ebanking') grouped[monthKey].openingBank += amount
+        else grouped[monthKey].openingCash += amount
+
+        grouped[monthKey].entries.push(entry)
+        return
+      }
 
       if (entry.type === 'einnahme') {
         grouped[monthKey].totalIncome += amount
@@ -696,24 +712,25 @@ export default function App() {
         else grouped[monthKey].expenseCash += amount
       }
 
-      grouped[monthKey].difference = grouped[monthKey].totalIncome - grouped[monthKey].totalExpense
+      grouped[monthKey].monthMovement = grouped[monthKey].totalIncome - grouped[monthKey].totalExpense
       grouped[monthKey].entries.push(entry)
     })
 
+    let runningBalance = 0
+
     return Object.values(grouped)
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
-      .map((month, index, months) => {
-        const runningBalance = months
-          .slice(0, index + 1)
-          .reduce((sum, item) => sum + item.difference, 0)
+      .map((month) => {
+        const openingTotal = month.openingBank + month.openingCash
+        runningBalance += openingTotal + month.monthMovement
 
         return {
           ...month,
+          openingTotal,
           runningBalance,
         }
       })
   }
-
 
   function getOpenFeesCount() {
     return fees.filter((fee) => !fee.paid && Number(fee.amount) > 0).length
@@ -727,13 +744,13 @@ export default function App() {
 
   function getIncomeTotal() {
     return cashEntries
-      .filter((entry) => entry.type === 'einnahme')
+      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
   function getExpenseTotal() {
     return cashEntries
-      .filter((entry) => entry.type === 'ausgabe')
+      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
@@ -767,13 +784,13 @@ export default function App() {
 
   function getEventIncomeTotal(eventId) {
     return getCashEntriesForEvent(eventId)
-      .filter((entry) => entry.type === 'einnahme')
+      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
   function getEventExpenseTotal(eventId) {
     return getCashEntriesForEvent(eventId)
-      .filter((entry) => entry.type === 'ausgabe')
+      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
@@ -987,24 +1004,28 @@ export default function App() {
       startY: 32,
       head: [[
         'Monat',
+        'Übertrag Bank',
+        'Übertrag Bar',
         'Einnahme Bank',
         'Ausgabe Bank',
         'Einnahme Bar',
         'Ausgabe Bar',
         'Einnahmen ges.',
         'Ausgaben ges.',
-        'Differenz',
+        'Monatsdiff.',
         'Saldo'
       ]],
       body: summary.map((month) => [
         getCashMonthLabel(month.monthKey),
+        `${month.openingBank.toFixed(2)} EUR`,
+        `${month.openingCash.toFixed(2)} EUR`,
         `${month.incomeBank.toFixed(2)} EUR`,
         `${month.expenseBank.toFixed(2)} EUR`,
         `${month.incomeCash.toFixed(2)} EUR`,
         `${month.expenseCash.toFixed(2)} EUR`,
         `${month.totalIncome.toFixed(2)} EUR`,
         `${month.totalExpense.toFixed(2)} EUR`,
-        `${month.difference.toFixed(2)} EUR`,
+        `${month.monthMovement.toFixed(2)} EUR`,
         `${month.runningBalance.toFixed(2)} EUR`,
       ]),
     })
@@ -1490,10 +1511,12 @@ export default function App() {
   }
 
   function cashbookRowToEntries(row) {
-    const date = normalizeCashDate(getCsvValue(row, ['datum']))
+    const rawDate = normalizeCashDate(getCsvValue(row, ['datum']))
     const description = getCsvValue(row, ['bezeichnung', 'beschreibung', 'description'])
+    const date = rawDate || (description.toLowerCase().includes('übertrag') || description.toLowerCase().includes('uebertrag') ? row.__month_start : '')
     const note = getCsvValue(row, ['anmerkung', 'notiz', 'notes'])
     const number = getCsvValue(row, ['nummer', 'belegnummer'])
+    const isOpening = description.toLowerCase().includes('übertrag') || description.toLowerCase().includes('uebertrag')
     const importedEntries = []
 
     if (!date || !description) return importedEntries
@@ -1546,11 +1569,12 @@ export default function App() {
         entry_date: date,
         type: option.type,
         category: getCashCategoryFromText(`${description} ${note}`),
-        amount: option.amount,
+        amount: isOpening && option.type === 'ausgabe' ? -Math.abs(option.amount) : option.amount,
         description: fullDescription,
         receipt_url: null,
         event_id: cashEventId || null,
         payment_method: option.payment_method || 'bar',
+        is_opening: isOpening,
       })
     })
 
@@ -1564,6 +1588,68 @@ export default function App() {
     if (text.includes('ein')) return 'einnahme'
 
     return ''
+  }
+
+  function parseCashbookTextWithMonths(rawText) {
+    const cleaned = String(rawText || '').replace(/^\uFEFF/, '').trim()
+    if (!cleaned) return []
+
+    const lines = cleaned.split(/\r?\n/).filter((line) => line.trim())
+    if (lines.length < 2) return []
+
+    const separator = lines[0].includes(';') ? ';' : ','
+    const headers = parseCsvLine(lines[0], separator).map((header) => header.trim())
+
+    const monthNumbers = {
+      'jänner': '01',
+      'jaenner': '01',
+      'januar': '01',
+      'februar': '02',
+      'märz': '03',
+      'maerz': '03',
+      'april': '04',
+      'mai': '05',
+      'juni': '06',
+      'juli': '07',
+      'august': '08',
+      'september': '09',
+      'oktober': '10',
+      'november': '11',
+      'dezember': '12',
+    }
+
+    let currentMonthDate = ''
+
+    return lines.slice(1).map((line) => {
+      const values = parseCsvLine(line, separator)
+      const row = {}
+
+      headers.forEach((header, index) => {
+        row[header] = values[index] || ''
+      })
+
+      const firstCell = String(values[0] || '').trim()
+      const monthMatch = firstCell.match(/^([A-Za-zÄÖÜäöüß]+)\s+(\d{4})$/)
+
+      if (monthMatch) {
+        const monthName = monthMatch[1]
+          .toLowerCase()
+          .replace('ä', 'ae')
+          .replace('ö', 'oe')
+          .replace('ü', 'ue')
+          .replace('ß', 'ss')
+
+        const month = monthNumbers[monthName]
+        const year = monthMatch[2]
+
+        if (month) {
+          currentMonthDate = `${year}-${month}-01`
+        }
+      }
+
+      row.__month_start = currentMonthDate
+      return row
+    })
   }
 
   function handleCashbookFile(event) {
@@ -1581,7 +1667,7 @@ export default function App() {
 
     reader.onload = () => {
       try {
-        const rows = parseCsvText(String(reader.result || ''))
+        const rows = parseCashbookTextWithMonths(String(reader.result || ''))
         const entries = rows.flatMap(cashbookRowToEntries)
 
         setCashbookRows(entries)
@@ -1695,6 +1781,7 @@ export default function App() {
       category: cashCategory,
       event_id: cashEventId || selectedEventId || null,
       payment_method: cashPaymentMethod,
+      is_opening: false,
       amount: Number(cashAmount),
       description: cashDescription,
       receipt_url: null,
@@ -2237,13 +2324,15 @@ export default function App() {
               <tr>
                 {[
                   'Monat',
+                  'Übertrag E-Banking',
+                  'Übertrag Bar',
                   'Einnahme E-Banking',
                   'Ausgabe E-Banking',
                   'Einnahme Bar',
                   'Ausgabe Bar',
                   'Einnahmen gesamt',
                   'Ausgaben gesamt',
-                  'Differenz',
+                  'Monatsdifferenz',
                   'Saldo laufend',
                 ].map((header) => (
                   <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
@@ -2256,14 +2345,16 @@ export default function App() {
               {getCashbookDetailedSummary().map((month) => (
                 <tr key={month.monthKey}>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{getCashMonthLabel(month.monthKey)}</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.openingBank.toFixed(2)} €</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.openingCash.toFixed(2)} €</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.incomeBank.toFixed(2)} €</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.expenseBank.toFixed(2)} €</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.incomeCash.toFixed(2)} €</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.expenseCash.toFixed(2)} €</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalIncome.toFixed(2)} €</strong></td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalExpense.toFixed(2)} €</strong></td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb', color: month.difference >= 0 ? '#166534' : '#b91c1c' }}>
-                    <strong>{month.difference.toFixed(2)} €</strong>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb', color: month.monthMovement >= 0 ? '#166534' : '#b91c1c' }}>
+                    <strong>{month.monthMovement.toFixed(2)} €</strong>
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.runningBalance.toFixed(2)} €</strong></td>
                 </tr>
@@ -2381,7 +2472,7 @@ export default function App() {
               {entry.type === 'einnahme' ? '+' : '-'} {Number(entry.amount).toFixed(2)} €
             </strong>
             <br />
-            {entry.category} · {entry.entry_date} · {getPaymentMethodLabel(getPaymentMethod(entry))}
+            {entry.is_opening ? 'Übertrag' : entry.category} · {entry.entry_date} · {getPaymentMethodLabel(getPaymentMethod(entry))}
             <br />
             {entry.description}
 
