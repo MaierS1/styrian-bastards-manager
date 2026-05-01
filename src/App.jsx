@@ -1362,6 +1362,26 @@ export default function App() {
     loadCashEntries()
   }
 
+  async function deleteCashEntry(entry) {
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+
+    const confirmed = window.confirm(
+      `Kassa-Eintrag wirklich löschen?\n\n${entry.type === 'einnahme' ? 'Einnahme' : 'Ausgabe'} ${Number(entry.amount || 0).toFixed(2)} €\n${entry.description || ''}\n\nDas kann nicht rückgängig gemacht werden.`
+    )
+
+    if (!confirmed) return
+
+    const { error } = await supabase
+      .from('cash_entries')
+      .delete()
+      .eq('id', entry.id)
+
+    if (error) return alert(error.message)
+
+    await loadCashEntries()
+    alert('Kassa-Eintrag wurde gelöscht.')
+  }
+
   async function openReceipt(path) {
     const { data, error } = await supabase.storage
       .from('receipts')
@@ -1867,6 +1887,14 @@ export default function App() {
                 </button>
               </>
             )}
+
+            <br />
+            <button
+              onClick={() => deleteCashEntry(entry)}
+              style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
+            >
+              Kassa-Eintrag löschen
+            </button>
           </div>
         ))}
       </section>
