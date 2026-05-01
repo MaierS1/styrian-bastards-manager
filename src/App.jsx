@@ -110,6 +110,7 @@ export default function App() {
   const [memberSearch, setMemberSearch] = useState('')
   const [memberStatusFilter, setMemberStatusFilter] = useState('alle')
   const [memberTypeFilter, setMemberTypeFilter] = useState('alle')
+  const [roleFilter, setRoleFilter] = useState('alle')
   const [feeFilter, setFeeFilter] = useState('alle')
 
   const [cashSearch, setCashSearch] = useState('')
@@ -121,6 +122,7 @@ export default function App() {
   const [memberEmail, setMemberEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [memberType, setMemberType] = useState('vollmitglied')
+  const [role, setRole] = useState('mitglied')
   const [street, setStreet] = useState('')
   const [postalCode, setPostalCode] = useState('')
   const [city, setCity] = useState('')
@@ -305,6 +307,44 @@ export default function App() {
     return 'vollmitglied'
   }
 
+  function normalizeRole(value) {
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace('ö', 'oe')
+      .replace('ü', 'ue')
+      .replace('ä', 'ae')
+      .replace('ß', 'ss')
+      .replace(/[^a-z0-9]/g, '')
+
+    if (normalized.includes('obmannstv') || normalized.includes('obmannstellvertreter')) return 'obmann_stv'
+    if (normalized === 'obmann') return 'obmann'
+    if (normalized.includes('kassierstv') || normalized.includes('kassierstellvertreter')) return 'kassier_stv'
+    if (normalized === 'kassier') return 'kassier'
+    if (normalized.includes('schriftfuehrerstv') || normalized.includes('schriftfuehrerstellvertreter') || normalized.includes('schriftfuhrerstv')) return 'schriftfuehrer_stv'
+    if (normalized.includes('schriftfuehrer') || normalized.includes('schriftfuhrer')) return 'schriftfuehrer'
+    if (normalized.includes('beirat')) return 'beirat'
+    if (normalized.includes('helfer')) return 'helfer'
+
+    return 'mitglied'
+  }
+
+  function getRoleLabel(value) {
+    const labels = {
+      mitglied: 'Mitglied',
+      obmann: 'Obmann',
+      obmann_stv: 'Obmann-Stellvertreter',
+      kassier: 'Kassier',
+      kassier_stv: 'Kassier-Stellvertreter',
+      schriftfuehrer: 'Schriftführer',
+      schriftfuehrer_stv: 'Schriftführer-Stellvertreter',
+      beirat: 'Beirat',
+      helfer: 'Helfer',
+    }
+
+    return labels[value] || 'Mitglied'
+  }
+
   function getCsvValue(row, keys) {
     const normalizedRow = {}
 
@@ -398,6 +438,7 @@ export default function App() {
     const city = getCsvValue(row, ['ort', 'city', 'stadt'])
     const birthdate = getCsvValue(row, ['geburtsdatum', 'birthdate', 'birthday', 'geburtstag'])
     const clothingSize = getCsvValue(row, ['kleidergroesse', 'kleidergröße', 'clothing_size', 'groesse', 'größe'])
+    const role = normalizeRole(getCsvValue(row, ['rolle', 'funktion', 'vereinsfunktion', 'role']))
 
     return {
       first_name: firstName,
@@ -405,11 +446,13 @@ export default function App() {
       email,
       phone,
       member_type: memberType,
+      role,
       street,
       postal_code: postalCode,
       city,
       birthdate: birthdate || null,
       clothing_size: clothingSize,
+      role,
       status: 'aktiv',
     }
   }
@@ -684,13 +727,16 @@ export default function App() {
       const matchesType =
         memberTypeFilter === 'alle' || member.member_type === memberTypeFilter
 
+      const matchesRole =
+        roleFilter === 'alle' || (member.role || 'mitglied') === roleFilter
+
       const matchesFee =
         feeFilter === 'alle' ||
         (feeFilter === 'offen' && fee && !fee.paid && Number(fee.amount) > 0) ||
         (feeFilter === 'bezahlt' && fee && fee.paid) ||
         (feeFilter === 'gratis' && fee && Number(fee.amount) === 0)
 
-      return matchesSearch && matchesStatus && matchesType && matchesFee
+      return matchesSearch && matchesStatus && matchesType && matchesRole && matchesFee
     })
   }
 
@@ -723,11 +769,12 @@ export default function App() {
 
     autoTable(doc, {
       startY: 25,
-      head: [['Nr.', 'Name', 'Art', 'Status', 'E-Mail', 'Telefon', 'Adresse', 'Geburtsdatum', 'Größe']],
+      head: [['Nr.', 'Name', 'Art', 'Funktion', 'Status', 'E-Mail', 'Telefon', 'Adresse', 'Geburtsdatum', 'Größe']],
       body: filteredMembers.map((m) => [
         m.member_number || '',
         `${m.first_name || ''} ${m.last_name || ''}`,
         m.member_type || '',
+        getRoleLabel(m.role || 'mitglied'),
         m.status || '',
         m.email || '',
         m.phone || '',
@@ -1006,6 +1053,34 @@ export default function App() {
     alert(`Check-in erfolgreich: ${member.first_name} ${member.last_name} für ${activeEventName}`)
   }
 
+  async function deleteMember(member) {
+    const confirmed = window.confirm(
+      `Mitglied wirklich löschen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nDas kann nicht rückgängig gemacht werden.`
+    )
+
+    if (!confirmed) return
+
+    const secondConfirm = window.confirm(
+      'Bitte nochmals bestätigen: Dieses Mitglied und verknüpfte Daten können gelöscht werden.'
+    )
+
+    if (!secondConfirm) return
+
+    const { error } = await supabase
+      .from('members')
+      .delete()
+      .eq('id', member.id)
+
+    if (error) return alert(error.message)
+
+    if (editingId === member.id) {
+      resetForm()
+    }
+
+    await loadAll()
+    alert('Mitglied wurde gelöscht.')
+  }
+
   function resetForm() {
     setEditingId(null)
     setFirstName('')
@@ -1013,6 +1088,7 @@ export default function App() {
     setMemberEmail('')
     setPhone('')
     setMemberType('vollmitglied')
+    setRole('mitglied')
     setStreet('')
     setPostalCode('')
     setCity('')
@@ -1024,6 +1100,7 @@ export default function App() {
     setMemberSearch('')
     setMemberStatusFilter('alle')
     setMemberTypeFilter('alle')
+    setRoleFilter('alle')
     setFeeFilter('alle')
   }
 
@@ -1040,6 +1117,7 @@ export default function App() {
     setMemberEmail(member.email || '')
     setPhone(member.phone || '')
     setMemberType(member.member_type || 'vollmitglied')
+    setRole(member.role || 'mitglied')
     setStreet(member.street || '')
     setPostalCode(member.postal_code || '')
     setCity(member.city || '')
@@ -1060,6 +1138,7 @@ export default function App() {
       email: memberEmail,
       phone,
       member_type: memberType,
+      role,
       street,
       postal_code: postalCode,
       city,
@@ -1728,6 +1807,8 @@ export default function App() {
                 <br />
                 Mitgliedsart: {member.member_type}
                 <br />
+                Funktion: {getRoleLabel(member.role || 'mitglied')}
+                <br />
                 Adresse: {member.street || '-'}, {member.postal_code || '-'} {member.city || '-'}
               </div>
             ))}
@@ -1769,6 +1850,18 @@ export default function App() {
           <option value="ehrenmitglied">Ehrenmitglied</option>
           <option value="foerdermitglied">Fördermitglied</option>
           <option value="probejahr">Probejahr</option>
+        </select>
+
+        <select value={role} onChange={(e) => setRole(e.target.value)} style={inputStyle}>
+          <option value="mitglied">Mitglied</option>
+          <option value="obmann">Obmann</option>
+          <option value="obmann_stv">Obmann-Stellvertreter</option>
+          <option value="kassier">Kassier</option>
+          <option value="kassier_stv">Kassier-Stellvertreter</option>
+          <option value="schriftfuehrer">Schriftführer</option>
+          <option value="schriftfuehrer_stv">Schriftführer-Stellvertreter</option>
+          <option value="beirat">Beirat</option>
+          <option value="helfer">Helfer</option>
         </select>
 
         <input placeholder="Straße" value={street} onChange={(e) => setStreet(e.target.value)} style={inputStyle} />
@@ -1828,6 +1921,19 @@ export default function App() {
           <option value="probejahr">Probejahr</option>
         </select>
 
+        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} style={inputStyle}>
+          <option value="alle">Alle Funktionen</option>
+          <option value="mitglied">Mitglied</option>
+          <option value="obmann">Obmann</option>
+          <option value="obmann_stv">Obmann-Stellvertreter</option>
+          <option value="kassier">Kassier</option>
+          <option value="kassier_stv">Kassier-Stellvertreter</option>
+          <option value="schriftfuehrer">Schriftführer</option>
+          <option value="schriftfuehrer_stv">Schriftführer-Stellvertreter</option>
+          <option value="beirat">Beirat</option>
+          <option value="helfer">Helfer</option>
+        </select>
+
         <select value={feeFilter} onChange={(e) => setFeeFilter(e.target.value)} style={inputStyle}>
           <option value="alle">Alle Beiträge</option>
           <option value="offen">Beitrag offen</option>
@@ -1859,6 +1965,8 @@ export default function App() {
               Mitgliedsnummer: {member.member_number || '-'}
               <br />
               Mitgliedsart: {member.member_type}
+              <br />
+              Vereinsfunktion: {getRoleLabel(member.role || 'mitglied')}
               <br />
               Adresse: {member.street}, {member.postal_code} {member.city}
               <br />
@@ -1897,6 +2005,13 @@ export default function App() {
 
               <button onClick={() => changeMemberStatus(member.id, 'ausgetreten')} style={buttonStyle}>
                 Ausgetreten
+              </button>
+
+              <button
+                onClick={() => deleteMember(member)}
+                style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
+              >
+                Mitglied löschen
               </button>
 
               <button onClick={() => checkInMember(member)} style={buttonStyle}>
