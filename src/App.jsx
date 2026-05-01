@@ -127,6 +127,10 @@ export default function App() {
   const [birthdate, setBirthdate] = useState('')
   const [clothingSize, setClothingSize] = useState('')
 
+  const [csvRows, setCsvRows] = useState([])
+  const [csvImporting, setCsvImporting] = useState(false)
+  const [csvFileName, setCsvFileName] = useState('')
+
   const [cashType, setCashType] = useState('einnahme')
   const [cashCategory, setCashCategory] = useState('sonstiges')
   const [cashEventId, setCashEventId] = useState('')
@@ -282,6 +286,222 @@ export default function App() {
     if (type === 'foerdermitglied') return 40
     return 0
   }
+
+  function normalizeMemberType(value) {
+    const normalized = String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace('ö', 'oe')
+      .replace('ü', 'ue')
+      .replace('ä', 'ae')
+      .replace('ß', 'ss')
+
+    if (normalized.includes('foerder')) return 'foerdermitglied'
+    if (normalized.includes('förder')) return 'foerdermitglied'
+    if (normalized.includes('ehren')) return 'ehrenmitglied'
+    if (normalized.includes('probe')) return 'probejahr'
+    if (normalized.includes('voll')) return 'vollmitglied'
+
+    return 'vollmitglied'
+  }
+
+  function getCsvValue(row, keys) {
+    const normalizedRow = {}
+
+    Object.keys(row).forEach((key) => {
+      const normalizedKey = key
+        .trim()
+        .toLowerCase()
+        .replace('ä', 'ae')
+        .replace('ö', 'oe')
+        .replace('ü', 'ue')
+        .replace('ß', 'ss')
+        .replace(/[^a-z0-9]/g, '')
+
+      normalizedRow[normalizedKey] = row[key]
+    })
+
+    for (const key of keys) {
+      const normalizedKey = key
+        .trim()
+        .toLowerCase()
+        .replace('ä', 'ae')
+        .replace('ö', 'oe')
+        .replace('ü', 'ue')
+        .replace('ß', 'ss')
+        .replace(/[^a-z0-9]/g, '')
+
+      if (normalizedRow[normalizedKey] !== undefined) {
+        return String(normalizedRow[normalizedKey] || '').trim()
+      }
+    }
+
+    return ''
+  }
+
+  function parseCsvLine(line, separator) {
+    const result = []
+    let current = ''
+    let inQuotes = false
+
+    for (let i = 0; i < line.length; i += 1) {
+      const char = line[i]
+      const nextChar = line[i + 1]
+
+      if (char === '"' && nextChar === '"') {
+        current += '"'
+        i += 1
+      } else if (char === '"') {
+        inQuotes = !inQuotes
+      } else if (char === separator && !inQuotes) {
+        result.push(current)
+        current = ''
+      } else {
+        current += char
+      }
+    }
+
+    result.push(current)
+    return result
+  }
+
+  function parseCsvText(text) {
+    const cleaned = text.replace(/^\uFEFF/, '').trim()
+    if (!cleaned) return []
+
+    const lines = cleaned.split(/\r?\n/).filter((line) => line.trim())
+    if (lines.length < 2) return []
+
+    const separator = lines[0].includes(';') ? ';' : ','
+    const headers = parseCsvLine(lines[0], separator).map((header) => header.trim())
+
+    return lines.slice(1).map((line) => {
+      const values = parseCsvLine(line, separator)
+      const row = {}
+
+      headers.forEach((header, index) => {
+        row[header] = values[index] || ''
+      })
+
+      return row
+    })
+  }
+
+  function csvRowToMember(row) {
+    const firstName = getCsvValue(row, ['vorname', 'first_name', 'firstname', 'first name'])
+    const lastName = getCsvValue(row, ['nachname', 'last_name', 'lastname', 'last name'])
+    const email = getCsvValue(row, ['email', 'e-mail', 'mail'])
+    const phone = getCsvValue(row, ['telefon', 'phone', 'handy', 'mobil'])
+    const memberType = normalizeMemberType(getCsvValue(row, ['mitgliedsart', 'member_type', 'mitgliedart', 'art']))
+    const street = getCsvValue(row, ['strasse', 'straße', 'street', 'adresse'])
+    const postalCode = getCsvValue(row, ['plz', 'postal_code', 'postcode', 'zip'])
+    const city = getCsvValue(row, ['ort', 'city', 'stadt'])
+    const birthdate = getCsvValue(row, ['geburtsdatum', 'birthdate', 'birthday', 'geburtstag'])
+    const clothingSize = getCsvValue(row, ['kleidergroesse', 'kleidergröße', 'clothing_size', 'groesse', 'größe'])
+
+    return {
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      phone,
+      member_type: memberType,
+      street,
+      postal_code: postalCode,
+      city,
+      birthdate: birthdate || null,
+      clothing_size: clothingSize,
+      status: 'aktiv',
+    }
+  }
+
+  function handleCsvFile(event) {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      setCsvRows([])
+      setCsvFileName('')
+      return
+    }
+
+    setCsvFileName(file.name)
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      try {
+        const rows = parseCsvText(String(reader.result || ''))
+        const membersForPreview = rows
+          .map(csvRowToMember)
+          .filter((member) => member.first_name && member.last_name)
+
+        setCsvRows(membersForPreview)
+
+        if (membersForPreview.length === 0) {
+          alert('Keine gültigen Mitglieder gefunden. Mindestens Vorname und Nachname müssen vorhanden sein.')
+        }
+      } catch (error) {
+        alert(`CSV konnte nicht gelesen werden: ${error.message}`)
+      }
+    }
+
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  async function importCsvMembers() {
+    if (csvRows.length === 0) {
+      alert('Bitte zuerst eine CSV-Datei auswählen.')
+      return
+    }
+
+    setCsvImporting(true)
+
+    try {
+      const existingKeys = new Set(
+        members.map((member) =>
+          `${String(member.first_name || '').trim().toLowerCase()}|${String(member.last_name || '').trim().toLowerCase()}|${String(member.email || '').trim().toLowerCase()}`
+        )
+      )
+
+      const membersToInsert = csvRows.filter((member) => {
+        const key = `${String(member.first_name || '').trim().toLowerCase()}|${String(member.last_name || '').trim().toLowerCase()}|${String(member.email || '').trim().toLowerCase()}`
+        return !existingKeys.has(key)
+      })
+
+      if (membersToInsert.length === 0) {
+        alert('Keine neuen Mitglieder gefunden. Möglicherweise sind alle bereits vorhanden.')
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('members')
+        .insert(membersToInsert)
+        .select()
+
+      if (error) return alert(error.message)
+
+      const feeRows = (data || []).map((member) => ({
+        member_id: member.id,
+        year: 2026,
+        amount: getAmountByType(member.member_type),
+        paid: false,
+        payment_method: 'bar',
+      }))
+
+      if (feeRows.length > 0) {
+        const { error: feeError } = await supabase.from('membership_fees').insert(feeRows)
+        if (feeError) return alert(feeError.message)
+      }
+
+      setCsvRows([])
+      setCsvFileName('')
+      await loadAll()
+
+      alert(`${membersToInsert.length} Mitglieder wurden importiert.`)
+    } finally {
+      setCsvImporting(false)
+    }
+  }
+
 
   function getCashBalance() {
     return cashEntries.reduce((sum, entry) => {
@@ -1470,6 +1690,70 @@ export default function App() {
             )}
           </div>
         ))}
+      </section>
+
+
+      <section style={sectionStyle}>
+        <h2 style={headingStyle}>CSV Mitglieder-Import</h2>
+
+        <p style={mutedTextStyle}>
+          CSV-Datei mit Spalten wie Vorname, Nachname, E-Mail, Telefon, Mitgliedsart, Straße, PLZ, Ort,
+          Geburtsdatum und Kleidergröße hochladen. Trennzeichen Komma oder Semikolon funktionieren.
+        </p>
+
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={handleCsvFile}
+          style={inputStyle}
+        />
+
+        {csvFileName && (
+          <p style={mutedTextStyle}>
+            Datei: <strong>{csvFileName}</strong>
+          </p>
+        )}
+
+        {csvRows.length > 0 && (
+          <>
+            <h3 style={headingStyle}>Vorschau: {csvRows.length} Mitglieder</h3>
+
+            {csvRows.slice(0, 5).map((member, index) => (
+              <div key={`${member.first_name}-${member.last_name}-${index}`} style={cardStyle}>
+                <strong>
+                  {member.first_name} {member.last_name}
+                </strong>
+                <br />
+                {member.email || '-'}
+                <br />
+                Mitgliedsart: {member.member_type}
+                <br />
+                Adresse: {member.street || '-'}, {member.postal_code || '-'} {member.city || '-'}
+              </div>
+            ))}
+
+            {csvRows.length > 5 && (
+              <p style={mutedTextStyle}>
+                Es werden nur die ersten 5 Zeilen angezeigt. Insgesamt werden {csvRows.length} Mitglieder importiert.
+              </p>
+            )}
+
+            <button onClick={importCsvMembers} style={buttonStyle} disabled={csvImporting}>
+              {csvImporting ? 'Import läuft...' : 'CSV Mitglieder importieren'}
+            </button>
+
+            <button
+              onClick={() => {
+                setCsvRows([])
+                setCsvFileName('')
+              }}
+              style={secondaryButtonStyle}
+              disabled={csvImporting}
+            >
+              Import abbrechen
+            </button>
+          </>
+        )}
       </section>
 
       <section style={sectionStyle}>
