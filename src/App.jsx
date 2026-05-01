@@ -615,7 +615,7 @@ export default function App() {
       const amount = Number(entry.amount || 0)
 
       if (entry.is_opening) {
-        return sum + amount
+        return entry.type === 'einnahme' ? sum + amount : sum - amount
       }
 
       return entry.type === 'einnahme' ? sum + amount : sum - amount
@@ -693,8 +693,10 @@ export default function App() {
       const paymentMethod = getPaymentMethod(entry)
 
       if (entry.is_opening) {
-        if (paymentMethod === 'ebanking') grouped[monthKey].openingBank += amount
-        else grouped[monthKey].openingCash += amount
+        const openingAmount = entry.type === 'ausgabe' ? -amount : amount
+
+        if (paymentMethod === 'ebanking') grouped[monthKey].openingBank += openingAmount
+        else grouped[monthKey].openingCash += openingAmount
 
         grouped[monthKey].entries.push(entry)
         return
@@ -1569,7 +1571,7 @@ export default function App() {
         entry_date: date,
         type: option.type,
         category: getCashCategoryFromText(`${description} ${note}`),
-        amount: isOpening && option.type === 'ausgabe' ? -Math.abs(option.amount) : option.amount,
+        amount: option.amount,
         description: fullDescription,
         receipt_url: null,
         event_id: cashEventId || null,
