@@ -141,6 +141,7 @@ export default function App() {
   const [cashAmount, setCashAmount] = useState('')
   const [cashDescription, setCashDescription] = useState('')
   const [receiptFile, setReceiptFile] = useState(null)
+  const [editingCashId, setEditingCashId] = useState(null)
 
   useEffect(() => {
     checkUser()
@@ -1297,6 +1298,56 @@ export default function App() {
     loadAll()
   }
 
+  function editCashEntry(entry) {
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+
+    setEditingCashId(entry.id)
+    setCashType(entry.type || 'einnahme')
+    setCashCategory(entry.category || 'sonstiges')
+    setCashEventId(entry.event_id || '')
+    setCashAmount(String(entry.amount || ''))
+    setCashDescription(entry.description || '')
+    setReceiptFile(null)
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function resetCashForm() {
+    setEditingCashId(null)
+    resetCashForm()
+  }
+
+  async function updateCashEntry() {
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+
+    if (!editingCashId) {
+      alert('Kein Kassa-Eintrag zum Bearbeiten ausgewählt.')
+      return
+    }
+
+    if (!cashAmount || !cashDescription) {
+      alert('Betrag und Beschreibung sind Pflicht.')
+      return
+    }
+
+    const { error } = await supabase
+      .from('cash_entries')
+      .update({
+        type: cashType,
+        category: cashCategory,
+        event_id: cashEventId || null,
+        amount: Number(cashAmount),
+        description: cashDescription,
+      })
+      .eq('id', editingCashId)
+
+    if (error) return alert(error.message)
+
+    resetCashForm()
+    await loadCashEntries()
+    alert('Kassa-Eintrag wurde aktualisiert.')
+  }
+
   async function addCashEntry() {
     if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
@@ -1353,11 +1404,7 @@ export default function App() {
 
     if (error) return alert(error.message)
 
-    setCashType('einnahme')
-    setCashCategory('sonstiges')
-    setCashAmount('')
-    setCashDescription('')
-    setReceiptFile(null)
+    resetCashForm()
 
     loadCashEntries()
   }
@@ -1756,7 +1803,7 @@ export default function App() {
 
         <h3 style={headingStyle}>Aktueller Kassastand: {getCashBalance().toFixed(2)} €</h3>
 
-        <h3 style={headingStyle}>Kassa-Eintrag erfassen</h3>
+        <h3 style={headingStyle}>{editingCashId ? 'Kassa-Eintrag bearbeiten' : 'Kassa-Eintrag erfassen'}</h3>
 
         <select value={cashType} onChange={(e) => setCashType(e.target.value)} style={inputStyle}>
           <option value="einnahme">Einnahme</option>
@@ -1808,9 +1855,20 @@ export default function App() {
           </p>
         )}
 
-        <button onClick={addCashEntry} style={buttonStyle}>
-          Kassa-Eintrag speichern
-        </button>
+        {editingCashId ? (
+          <>
+            <button onClick={updateCashEntry} style={buttonStyle}>
+              Änderungen speichern
+            </button>
+            <button onClick={resetCashForm} style={secondaryButtonStyle}>
+              Bearbeiten abbrechen
+            </button>
+          </>
+        ) : (
+          <button onClick={addCashEntry} style={buttonStyle}>
+            Kassa-Eintrag speichern
+          </button>
+        )}
 
         {offlineCashEntries.length > 0 && (
           <>
@@ -1889,6 +1947,10 @@ export default function App() {
             )}
 
             <br />
+            <button onClick={() => editCashEntry(entry)} style={secondaryButtonStyle}>
+              Kassa-Eintrag bearbeiten
+            </button>
+
             <button
               onClick={() => deleteCashEntry(entry)}
               style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
