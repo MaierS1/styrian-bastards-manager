@@ -86,6 +86,7 @@ export default function App() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [user, setUser] = useState(null)
+  const [currentMember, setCurrentMember] = useState(null)
 
   const [members, setMembers] = useState([])
   const [fees, setFees] = useState([])
@@ -123,6 +124,7 @@ export default function App() {
   const [phone, setPhone] = useState('')
   const [memberType, setMemberType] = useState('vollmitglied')
   const [role, setRole] = useState('mitglied')
+  const [appRole, setAppRole] = useState('readonly')
   const [street, setStreet] = useState('')
   const [postalCode, setPostalCode] = useState('')
   const [city, setCity] = useState('')
@@ -194,12 +196,64 @@ export default function App() {
     setUser(user)
 
     if (user) {
+      await loadCurrentMember(user.id)
       loadAll()
     }
   }
 
+  async function loadCurrentMember(authUserId) {
+    const { data, error } = await supabase
+      .from('members')
+      .select('*')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle()
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setCurrentMember(data)
+  }
+
   async function loadAll() {
     await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadEventCheckins(), loadEvents()])
+  }
+
+  function getAppRole() {
+    return currentMember?.app_role || 'readonly'
+  }
+
+  function isAdmin() {
+    return getAppRole() === 'admin'
+  }
+
+  function canManageMembers() {
+    return ['admin', 'members'].includes(getAppRole())
+  }
+
+  function canManageCash() {
+    return ['admin', 'cashier'].includes(getAppRole())
+  }
+
+  function canUseCheckin() {
+    return ['admin', 'checkin'].includes(getAppRole())
+  }
+
+  function canManageEvents() {
+    return ['admin', 'checkin'].includes(getAppRole())
+  }
+
+  function getAppRoleLabel(value) {
+    const labels = {
+      admin: 'Admin',
+      members: 'Mitgliederverwaltung',
+      cashier: 'Kassa',
+      checkin: 'Check-in',
+      readonly: 'Nur Lesen',
+    }
+
+    return labels[value] || 'Nur Lesen'
   }
 
   async function login() {
@@ -211,6 +265,7 @@ export default function App() {
   async function logout() {
     await supabase.auth.signOut()
     setUser(null)
+    setCurrentMember(null)
     setMembers([])
     setFees([])
     setCashEntries([])
@@ -447,6 +502,7 @@ export default function App() {
       phone,
       member_type: memberType,
       role,
+      app_role: appRole,
       street,
       postal_code: postalCode,
       city,
@@ -491,6 +547,8 @@ export default function App() {
   }
 
   async function importCsvMembers() {
+    if (!canManageMembers()) return alert('Keine Berechtigung für Mitglieder-Import.')
+
     if (csvRows.length === 0) {
       alert('Bitte zuerst eine CSV-Datei auswählen.')
       return
@@ -982,6 +1040,8 @@ export default function App() {
   }
 
   async function createEvent() {
+    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
+
     if (!newEventName.trim()) {
       alert('Bitte einen Eventnamen eingeben.')
       return
@@ -1018,6 +1078,8 @@ export default function App() {
   }
 
   async function updateEventStatus(eventId, status) {
+    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
+
     const { error } = await supabase
       .from('events')
       .update({ status })
@@ -1029,6 +1091,8 @@ export default function App() {
   }
 
   async function checkInMember(member) {
+    if (!canUseCheckin()) return alert('Keine Berechtigung für Check-in.')
+
     const activeEventName = getActiveEventName()
 
     if (!activeEventName) {
@@ -1054,6 +1118,8 @@ export default function App() {
   }
 
   async function deleteMember(member) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Mitglieder löschen.')
+
     const confirmed = window.confirm(
       `Mitglied wirklich löschen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nDas kann nicht rückgängig gemacht werden.`
     )
@@ -1089,6 +1155,7 @@ export default function App() {
     setPhone('')
     setMemberType('vollmitglied')
     setRole('mitglied')
+    setAppRole('readonly')
     setStreet('')
     setPostalCode('')
     setCity('')
@@ -1118,6 +1185,7 @@ export default function App() {
     setPhone(member.phone || '')
     setMemberType(member.member_type || 'vollmitglied')
     setRole(member.role || 'mitglied')
+    setAppRole(member.app_role || 'readonly')
     setStreet(member.street || '')
     setPostalCode(member.postal_code || '')
     setCity(member.city || '')
@@ -1127,6 +1195,8 @@ export default function App() {
   }
 
   async function saveMember() {
+    if (!canManageMembers()) return alert('Keine Berechtigung für Mitgliederverwaltung.')
+
     if (!firstName || !lastName) {
       alert('Vorname und Nachname sind Pflicht.')
       return
@@ -1139,6 +1209,7 @@ export default function App() {
       phone,
       member_type: memberType,
       role,
+      app_role: appRole,
       street,
       postal_code: postalCode,
       city,
@@ -1168,12 +1239,16 @@ export default function App() {
   }
 
   async function changeMemberStatus(id, status) {
+    if (!canManageMembers()) return alert('Keine Berechtigung für Mitgliederverwaltung.')
+
     const { error } = await supabase.from('members').update({ status }).eq('id', id)
     if (error) return alert(error.message)
     loadMembers()
   }
 
   async function markFeePaid(fee, paymentMethod = 'bar') {
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+
     const today = new Date().toISOString().slice(0, 10)
 
     const { error: feeError } = await supabase
@@ -1206,6 +1281,8 @@ export default function App() {
   }
 
   async function markFeeOpen(fee) {
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+
     const { error: feeError } = await supabase
       .from('membership_fees')
       .update({
@@ -1221,6 +1298,8 @@ export default function App() {
   }
 
   async function addCashEntry() {
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+
     if (!cashAmount || !cashDescription) {
       alert('Betrag und Beschreibung sind Pflicht.')
       return
@@ -1343,6 +1422,24 @@ export default function App() {
       <p>
         Eingeloggt als: <strong>{user.email}</strong>
       </p>
+
+      <p>
+        App-Recht:{' '}
+        <strong>{getAppRoleLabel(getAppRole())}</strong>
+        {currentMember && (
+          <>
+            {' '}· Mitglied: <strong>{currentMember.first_name} {currentMember.last_name}</strong>
+          </>
+        )}
+      </p>
+
+      {!currentMember && (
+        <div style={{ ...cardStyle, background: '#fef2f2', borderColor: '#b91c1c' }}>
+          <strong>Kein Mitglied mit diesem Login verknüpft.</strong>
+          <br />
+          Bitte in Supabase beim passenden Mitglied die Spalte auth_user_id mit deiner Supabase User ID befüllen und app_role setzen.
+        </div>
+      )}
 
       <p>
         Verbindung:{' '}
@@ -1479,6 +1576,7 @@ export default function App() {
         ))}
       </section>
 
+{canUseCheckin() && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Event Check-in / QR-Code Scanner</h2>
 
@@ -1520,6 +1618,7 @@ export default function App() {
           </div>
         ))}
       </section>
+      )}
 
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Dashboard</h2>
@@ -1615,6 +1714,7 @@ export default function App() {
         </div>
       </section>
 
+{canManageCash() && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Kassa</h2>
 
@@ -1772,6 +1872,7 @@ export default function App() {
       </section>
 
 
+{canManageMembers() && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>CSV Mitglieder-Import</h2>
 
@@ -1836,7 +1937,9 @@ export default function App() {
           </>
         )}
       </section>
+      )}
 
+{canManageMembers() && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>{editingId ? 'Mitglied bearbeiten' : 'Mitglied hinzufügen'}</h2>
 
@@ -1863,6 +1966,16 @@ export default function App() {
           <option value="beirat">Beirat</option>
           <option value="helfer">Helfer</option>
         </select>
+
+        {isAdmin() && (
+          <select value={appRole} onChange={(e) => setAppRole(e.target.value)} style={inputStyle}>
+            <option value="readonly">App-Recht: Nur Lesen</option>
+            <option value="checkin">App-Recht: Check-in</option>
+            <option value="cashier">App-Recht: Kassa</option>
+            <option value="members">App-Recht: Mitgliederverwaltung</option>
+            <option value="admin">App-Recht: Admin</option>
+          </select>
+        )}
 
         <input placeholder="Straße" value={street} onChange={(e) => setStreet(e.target.value)} style={inputStyle} />
         <input placeholder="PLZ" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} style={inputStyle} />
@@ -1893,6 +2006,8 @@ export default function App() {
           </button>
         )}
       </section>
+      )}
+      )}
 
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Mitglieder & Beiträge 2026</h2>
@@ -1968,6 +2083,8 @@ export default function App() {
               <br />
               Vereinsfunktion: {getRoleLabel(member.role || 'mitglied')}
               <br />
+              App-Recht: {getAppRoleLabel(member.app_role || 'readonly')}
+              <br />
               Adresse: {member.street}, {member.postal_code} {member.city}
               <br />
               Geburtsdatum: {member.birthdate || '-'}
@@ -2007,12 +2124,14 @@ export default function App() {
                 Ausgetreten
               </button>
 
-              <button
-                onClick={() => deleteMember(member)}
-                style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
-              >
-                Mitglied löschen
-              </button>
+              {isAdmin() && (
+                <button
+                  onClick={() => deleteMember(member)}
+                  style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
+                >
+                  Mitglied löschen
+                </button>
+              )}
 
               <button onClick={() => checkInMember(member)} style={buttonStyle}>
                 {isCheckedInToday(member.id) ? 'Heute eingecheckt' : 'Manuell einchecken'}
