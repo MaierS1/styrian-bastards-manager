@@ -137,6 +137,7 @@ export default function App() {
 
   const [cashType, setCashType] = useState('einnahme')
   const [cashCategory, setCashCategory] = useState('sonstiges')
+  const [cashPaymentMethod, setCashPaymentMethod] = useState('bar')
   const [cashEventId, setCashEventId] = useState('')
   const [cashAmount, setCashAmount] = useState('')
   const [cashDescription, setCashDescription] = useState('')
@@ -616,6 +617,104 @@ export default function App() {
     }, 0)
   }
 
+  function getPaymentMethod(entry) {
+    if (entry.payment_method) return entry.payment_method
+
+    const text = String(entry.description || '').toLowerCase()
+
+    if (text.includes('e-banking') || text.includes('ebanking') || text.includes('bank')) return 'ebanking'
+    if (text.includes('bar')) return 'bar'
+
+    return 'bar'
+  }
+
+  function getPaymentMethodLabel(value) {
+    if (value === 'ebanking') return 'E-Banking'
+    if (value === 'bar') return 'Bar'
+    return '-'
+  }
+
+  function getCashMonthKey(dateText) {
+    if (!dateText) return 'ohne-datum'
+    return String(dateText).slice(0, 7)
+  }
+
+  function getCashMonthLabel(monthKey) {
+    if (monthKey === 'ohne-datum') return 'Ohne Datum'
+
+    const [year, month] = monthKey.split('-')
+    const names = [
+      'Jänner',
+      'Februar',
+      'März',
+      'April',
+      'Mai',
+      'Juni',
+      'Juli',
+      'August',
+      'September',
+      'Oktober',
+      'November',
+      'Dezember',
+    ]
+
+    return `${names[Number(month) - 1] || month} ${year}`
+  }
+
+  function getCashbookDetailedSummary() {
+    const grouped = {}
+
+    cashEntries.forEach((entry) => {
+      const monthKey = getCashMonthKey(entry.entry_date)
+
+      if (!grouped[monthKey]) {
+        grouped[monthKey] = {
+          monthKey,
+          incomeBank: 0,
+          expenseBank: 0,
+          incomeCash: 0,
+          expenseCash: 0,
+          totalIncome: 0,
+          totalExpense: 0,
+          difference: 0,
+          entries: [],
+        }
+      }
+
+      const amount = Number(entry.amount || 0)
+      const paymentMethod = getPaymentMethod(entry)
+
+      if (entry.type === 'einnahme') {
+        grouped[monthKey].totalIncome += amount
+        if (paymentMethod === 'ebanking') grouped[monthKey].incomeBank += amount
+        else grouped[monthKey].incomeCash += amount
+      }
+
+      if (entry.type === 'ausgabe') {
+        grouped[monthKey].totalExpense += amount
+        if (paymentMethod === 'ebanking') grouped[monthKey].expenseBank += amount
+        else grouped[monthKey].expenseCash += amount
+      }
+
+      grouped[monthKey].difference = grouped[monthKey].totalIncome - grouped[monthKey].totalExpense
+      grouped[monthKey].entries.push(entry)
+    })
+
+    return Object.values(grouped)
+      .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+      .map((month, index, months) => {
+        const runningBalance = months
+          .slice(0, index + 1)
+          .reduce((sum, item) => sum + item.difference, 0)
+
+        return {
+          ...month,
+          runningBalance,
+        }
+      })
+  }
+
+
   function getOpenFeesCount() {
     return fees.filter((fee) => !fee.paid && Number(fee.amount) > 0).length
   }
@@ -861,10 +960,11 @@ export default function App() {
 
     autoTable(doc, {
       startY: 48,
-      head: [['Datum', 'Typ', 'Event', 'Kategorie', 'Beschreibung', 'Betrag']],
+      head: [['Datum', 'Typ', 'Zahlungsart', 'Event', 'Kategorie', 'Beschreibung', 'Betrag']],
       body: filteredCash.map((e) => [
         e.entry_date || '',
         e.type || '',
+        getPaymentMethodLabel(getPaymentMethod(e)),
         getEventNameById(e.event_id) || '-',
         e.category || '',
         e.description || '',
@@ -873,6 +973,43 @@ export default function App() {
     })
 
     doc.save('styrian-bastards-kassabuch.pdf')
+  }
+
+
+  function exportDetailedCashbookPdf() {
+    const doc = new jsPDF()
+    const summary = getCashbookDetailedSummary()
+
+    doc.text('Styrian Bastards - Kassabuch Detailübersicht', 14, 15)
+    doc.text(`Kassastand: ${getCashBalance().toFixed(2)} EUR`, 14, 23)
+
+    autoTable(doc, {
+      startY: 32,
+      head: [[
+        'Monat',
+        'Einnahme Bank',
+        'Ausgabe Bank',
+        'Einnahme Bar',
+        'Ausgabe Bar',
+        'Einnahmen ges.',
+        'Ausgaben ges.',
+        'Differenz',
+        'Saldo'
+      ]],
+      body: summary.map((month) => [
+        getCashMonthLabel(month.monthKey),
+        `${month.incomeBank.toFixed(2)} EUR`,
+        `${month.expenseBank.toFixed(2)} EUR`,
+        `${month.incomeCash.toFixed(2)} EUR`,
+        `${month.expenseCash.toFixed(2)} EUR`,
+        `${month.totalIncome.toFixed(2)} EUR`,
+        `${month.totalExpense.toFixed(2)} EUR`,
+        `${month.difference.toFixed(2)} EUR`,
+        `${month.runningBalance.toFixed(2)} EUR`,
+      ]),
+    })
+
+    doc.save('styrian-bastards-kassabuch-detail.pdf')
   }
 
   function exportOpenFeesPdf() {
@@ -1366,21 +1503,25 @@ export default function App() {
         amount: parseEuroAmount(getCsvValue(row, ['einnahme e-banking', 'einnahme ebanking', 'einnahme bank'])),
         type: 'einnahme',
         payment: 'E-Banking',
+        payment_method: 'ebanking',
       },
       {
         amount: parseEuroAmount(getCsvValue(row, ['ausgabe e-banking', 'ausgabe ebanking', 'ausgabe bank'])),
         type: 'ausgabe',
         payment: 'E-Banking',
+        payment_method: 'ebanking',
       },
       {
         amount: parseEuroAmount(getCsvValue(row, ['einnahme bar'])),
         type: 'einnahme',
         payment: 'Bar',
+        payment_method: 'bar',
       },
       {
         amount: parseEuroAmount(getCsvValue(row, ['ausgabe bar'])),
         type: 'ausgabe',
         payment: 'Bar',
+        payment_method: 'bar',
       },
       {
         amount: parseEuroAmount(getCsvValue(row, ['betrag'])),
@@ -1409,6 +1550,7 @@ export default function App() {
         description: fullDescription,
         receipt_url: null,
         event_id: cashEventId || null,
+        payment_method: option.payment_method || 'bar',
       })
     })
 
@@ -1488,6 +1630,7 @@ export default function App() {
     setEditingCashId(entry.id)
     setCashType(entry.type || 'einnahme')
     setCashCategory(entry.category || 'sonstiges')
+    setCashPaymentMethod(getPaymentMethod(entry))
     setCashEventId(entry.event_id || '')
     setCashAmount(String(entry.amount || ''))
     setCashDescription(entry.description || '')
@@ -1498,7 +1641,12 @@ export default function App() {
 
   function resetCashForm() {
     setEditingCashId(null)
-    resetCashForm()
+    setCashType('einnahme')
+    setCashCategory('sonstiges')
+    setCashPaymentMethod('bar')
+    setCashAmount('')
+    setCashDescription('')
+    setReceiptFile(null)
   }
 
   async function updateCashEntry() {
@@ -1520,6 +1668,7 @@ export default function App() {
         type: cashType,
         category: cashCategory,
         event_id: cashEventId || null,
+        payment_method: cashPaymentMethod,
         amount: Number(cashAmount),
         description: cashDescription,
       })
@@ -1545,6 +1694,7 @@ export default function App() {
       type: cashType,
       category: cashCategory,
       event_id: cashEventId || selectedEventId || null,
+      payment_method: cashPaymentMethod,
       amount: Number(cashAmount),
       description: cashDescription,
       receipt_url: null,
@@ -1709,6 +1859,9 @@ export default function App() {
         </button>
         <button onClick={exportCashPdf} style={secondaryButtonStyle}>
           Kassabuch PDF
+        </button>
+        <button onClick={exportDetailedCashbookPdf} style={secondaryButtonStyle}>
+          Kassabuch Detail PDF
         </button>
         <button onClick={exportOpenFeesPdf} style={secondaryButtonStyle}>
           Offene Beiträge PDF
@@ -2002,6 +2155,11 @@ export default function App() {
           <option value="sonstiges">Sonstiges</option>
         </select>
 
+        <select value={cashPaymentMethod} onChange={(e) => setCashPaymentMethod(e.target.value)} style={inputStyle}>
+          <option value="bar">Bar</option>
+          <option value="ebanking">E-Banking</option>
+        </select>
+
         <select value={cashEventId} onChange={(e) => setCashEventId(e.target.value)} style={inputStyle}>
           <option value="">Keinem Event zuordnen</option>
           {events.map((event) => (
@@ -2070,6 +2228,53 @@ export default function App() {
             ))}
           </>
         )}
+
+        <h3 style={headingStyle}>Kassabuch Detailübersicht</h3>
+
+        <div style={{ ...cardStyle, overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+            <thead>
+              <tr>
+                {[
+                  'Monat',
+                  'Einnahme E-Banking',
+                  'Ausgabe E-Banking',
+                  'Einnahme Bar',
+                  'Ausgabe Bar',
+                  'Einnahmen gesamt',
+                  'Ausgaben gesamt',
+                  'Differenz',
+                  'Saldo laufend',
+                ].map((header) => (
+                  <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {getCashbookDetailedSummary().map((month) => (
+                <tr key={month.monthKey}>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{getCashMonthLabel(month.monthKey)}</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.incomeBank.toFixed(2)} €</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.expenseBank.toFixed(2)} €</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.incomeCash.toFixed(2)} €</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.expenseCash.toFixed(2)} €</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalIncome.toFixed(2)} €</strong></td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalExpense.toFixed(2)} €</strong></td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb', color: month.difference >= 0 ? '#166534' : '#b91c1c' }}>
+                    <strong>{month.difference.toFixed(2)} €</strong>
+                  </td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.runningBalance.toFixed(2)} €</strong></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <button onClick={exportDetailedCashbookPdf} style={secondaryButtonStyle}>
+          Kassabuch Detail PDF
+        </button>
 
         <h3 style={headingStyle}>Kassabuch CSV importieren</h3>
 
@@ -2176,7 +2381,7 @@ export default function App() {
               {entry.type === 'einnahme' ? '+' : '-'} {Number(entry.amount).toFixed(2)} €
             </strong>
             <br />
-            {entry.category} · {entry.entry_date}
+            {entry.category} · {entry.entry_date} · {getPaymentMethodLabel(getPaymentMethod(entry))}
             <br />
             {entry.description}
 
