@@ -2035,7 +2035,6 @@ export default function App() {
         )}
       </section>
       )}
-      )}
 
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Mitglieder & Beiträge 2026</h2>
