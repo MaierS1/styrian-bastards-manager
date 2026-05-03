@@ -147,6 +147,7 @@ export default function App() {
   const [fees, setFees] = useState([])
   const [cashEntries, setCashEntries] = useState([])
   const [cashMonthClosings, setCashMonthClosings] = useState([])
+  const [auditLogs, setAuditLogs] = useState([])
   const [eventCheckins, setEventCheckins] = useState([])
   const [events, setEvents] = useState([])
   const [documents, setDocuments] = useState([])
@@ -295,7 +296,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadEventCheckins(), loadEvents(), loadDocuments()])
+    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadAuditLogs(), loadEventCheckins(), loadEvents(), loadDocuments()])
   }
 
   function getAppRole() {
@@ -348,6 +349,7 @@ export default function App() {
     setFees([])
     setCashEntries([])
     setCashMonthClosings([])
+    setAuditLogs([])
     setEventCheckins([])
     setEvents([])
     setDocuments([])
@@ -394,6 +396,37 @@ export default function App() {
 
     if (error) return alert(error.message)
     setCashMonthClosings(data || [])
+  }
+
+  async function loadAuditLogs() {
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (error) {
+      console.warn(error.message)
+      return
+    }
+
+    setAuditLogs(data || [])
+  }
+
+  async function createAuditLog(action, tableName, recordId, oldData = null, newData = null) {
+    const { error } = await supabase.from('audit_logs').insert({
+      action,
+      table_name: tableName,
+      record_id: recordId || null,
+      old_data: oldData,
+      new_data: newData,
+      user_id: user?.id || null,
+      user_email: user?.email || null,
+    })
+
+    if (error) {
+      console.warn('Audit Log Fehler:', error.message)
+    }
   }
 
   async function loadEventCheckins() {
@@ -544,6 +577,11 @@ export default function App() {
     })
 
     if (error) return alert(error.message)
+
+    await createAuditLog('cancel', 'cash_entries', entry.id, entry, {
+      is_cancelled: true,
+      cancellation_reason: reason.trim(),
+    })
 
     await loadCashEntries()
     setSelectedCashYear(String(carryoverToYear))
@@ -1049,6 +1087,8 @@ export default function App() {
 
     if (error) return alert(error.message)
 
+    await createAuditLog('close_month', 'cash_month_closings', null, null, { year: Number(year), month: Number(month), note: note || null })
+
     await loadCashMonthClosings()
     alert('Monat wurde abgeschlossen.')
   }
@@ -1069,6 +1109,8 @@ export default function App() {
       .eq('month', Number(month))
 
     if (error) return alert(error.message)
+
+    await createAuditLog('reopen_month', 'cash_month_closings', null, { year: Number(year), month: Number(month) }, null)
 
     await loadCashMonthClosings()
     alert('Monatsabschluss wurde aufgehoben.')
@@ -1572,6 +1614,104 @@ export default function App() {
     )
   }
 
+  function getCategorySummary() {
+    const grouped = {}
+
+    getCashEntriesForSelectedYear()
+      .filter((entry) => !entry.is_cancelled && !entry.is_opening)
+      .forEach((entry) => {
+        const category = entry.category || 'sonstiges'
+
+        if (!grouped[category]) {
+          grouped[category] = {
+            category,
+            income: 0,
+            expense: 0,
+            balance: 0,
+            count: 0,
+          }
+        }
+
+        const amount = Number(entry.amount || 0)
+
+        if (entry.type === 'einnahme') grouped[category].income += amount
+        if (entry.type === 'ausgabe') grouped[category].expense += amount
+
+        grouped[category].balance = grouped[category].income - grouped[category].expense
+        grouped[category].count += 1
+      })
+
+    return Object.values(grouped).sort((a, b) => a.category.localeCompare(b.category))
+  }
+
+  function exportTaxAdvisorProCsv() {
+    const rows = getFilteredCashEntries()
+      .filter((entry) => !entry.is_opening)
+      .map((entry) => ({
+        Belegnummer: entry.receipt_number || '',
+        Datum: entry.entry_date || '',
+        Jahr: getEntryYear(entry),
+        Monat: String(entry.entry_date || '').slice(5, 7),
+        Typ: entry.type || '',
+        Einnahme: entry.type === 'einnahme' && !entry.is_cancelled ? Number(entry.amount || 0).toFixed(2) : '',
+        Ausgabe: entry.type === 'ausgabe' && !entry.is_cancelled ? Number(entry.amount || 0).toFixed(2) : '',
+        BetragNettoFuerAuswertung: entry.is_cancelled ? '0.00' : getCashEntrySignedAmount(entry).toFixed(2),
+        Zahlungsart: getPaymentMethodLabel(getPaymentMethod(entry)),
+        Kategorie: entry.category || '',
+        Event: getEventNameById(entry.event_id) || '',
+        Beschreibung: entry.description || '',
+        BelegVorhanden: entry.receipt_url ? 'ja' : 'nein',
+        Belegpfad: entry.receipt_url || '',
+        Storniert: entry.is_cancelled ? 'ja' : 'nein',
+        StorniertAm: entry.cancelled_at || '',
+        StornoGrund: entry.cancellation_reason || '',
+      }))
+
+    const headers = [
+      'Belegnummer',
+      'Datum',
+      'Jahr',
+      'Monat',
+      'Typ',
+      'Einnahme',
+      'Ausgabe',
+      'BetragNettoFuerAuswertung',
+      'Zahlungsart',
+      'Kategorie',
+      'Event',
+      'Beschreibung',
+      'BelegVorhanden',
+      'Belegpfad',
+      'Storniert',
+      'StorniertAm',
+      'StornoGrund',
+    ]
+
+    downloadTextFile(
+      `styrian-bastards-steuerberater-pro-${selectedCashYear}.csv`,
+      rowsToCsv(headers, rows),
+      'text/csv;charset=utf-8'
+    )
+  }
+
+  function exportCategorySummaryCsv() {
+    const rows = getCategorySummary().map((item) => ({
+      Kategorie: item.category,
+      Einnahmen: item.income.toFixed(2),
+      Ausgaben: item.expense.toFixed(2),
+      Ergebnis: item.balance.toFixed(2),
+      Buchungen: item.count,
+    }))
+
+    const headers = ['Kategorie', 'Einnahmen', 'Ausgaben', 'Ergebnis', 'Buchungen']
+
+    downloadTextFile(
+      `styrian-bastards-kategorien-${selectedCashYear}.csv`,
+      rowsToCsv(headers, rows),
+      'text/csv;charset=utf-8'
+    )
+  }
+
   function exportExcelStyleCashbookCsv() {
     const summary = getCashbookDetailedSummary()
     const rows = []
@@ -1871,6 +2011,7 @@ export default function App() {
       events,
       event_checkins: eventCheckins,
       documents,
+      audit_logs: auditLogs,
     }
 
     downloadTextFile(
@@ -2014,6 +2155,22 @@ export default function App() {
     } finally {
       setRestoreImporting(false)
     }
+  }
+
+  function exportAuditLogsCsv() {
+    const rows = auditLogs.map((log) => ({
+      Datum: log.created_at || '',
+      Benutzer: log.user_email || '',
+      Aktion: log.action || '',
+      Tabelle: log.table_name || '',
+      Datensatz: log.record_id || '',
+      Vorher: JSON.stringify(log.old_data || {}),
+      Nachher: JSON.stringify(log.new_data || {}),
+    }))
+
+    const headers = ['Datum', 'Benutzer', 'Aktion', 'Tabelle', 'Datensatz', 'Vorher', 'Nachher']
+
+    downloadTextFile('styrian-bastards-audit-log.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
   }
 
   function exportMembersPdf() {
@@ -2322,6 +2479,8 @@ export default function App() {
 
     if (error) return alert(error.message)
 
+    await createAuditLog('insert', 'events', data?.id, null, data)
+
     resetEventForm()
     await loadEvents()
 
@@ -2358,6 +2517,13 @@ export default function App() {
 
     if (error) return alert(error.message)
 
+    await createAuditLog('update', 'events', editingEventId, events.find((event) => event.id === editingEventId), {
+      name: newEventName.trim(),
+      event_date: newEventDate || getTodayDate(),
+      location: newEventLocation.trim() || null,
+      notes: newEventNotes.trim() || null,
+    })
+
     if (selectedEventId === editingEventId) {
       setEventName(newEventName.trim())
     }
@@ -2376,6 +2542,8 @@ export default function App() {
       .eq('id', eventId)
 
     if (error) return alert(error.message)
+
+    await createAuditLog('status_change', 'events', eventId, events.find((event) => event.id === eventId), { status })
 
     loadEvents()
   }
@@ -2409,6 +2577,8 @@ export default function App() {
       .eq('id', event.id)
 
     if (error) return alert(error.message)
+
+    await createAuditLog('delete', 'events', event.id, event, null)
 
     if (selectedEventId === event.id) {
       setSelectedEventId('')
@@ -2555,11 +2725,14 @@ export default function App() {
     }
 
     if (editingId) {
+      const oldMember = members.find((member) => member.id === editingId)
       const { error } = await supabase.from('members').update(payload).eq('id', editingId)
       if (error) return alert(error.message)
+      await createAuditLog('update', 'members', editingId, oldMember, payload)
     } else {
       const { data, error } = await supabase.from('members').insert(payload).select().single()
       if (error) return alert(error.message)
+      await createAuditLog('insert', 'members', data.id, null, data)
 
       await supabase.from('membership_fees').insert({
         member_id: data.id,
@@ -2577,8 +2750,10 @@ export default function App() {
   async function changeMemberStatus(id, status) {
     if (!canManageMembers()) return alert('Keine Berechtigung für Mitgliederverwaltung.')
 
+    const oldMember = members.find((member) => member.id === id)
     const { error } = await supabase.from('members').update({ status }).eq('id', id)
     if (error) return alert(error.message)
+    await createAuditLog('status_change', 'members', id, oldMember, { status })
     loadMembers()
   }
 
@@ -2613,6 +2788,7 @@ export default function App() {
     })
 
     if (cashError) return alert(cashError.message)
+    await createAuditLog('payment_mark_paid', 'membership_fees', fee.id, fee, { paid: true, paid_at: today, payment_method: paymentMethod })
     loadAll()
   }
 
@@ -2630,6 +2806,7 @@ export default function App() {
     if (feeError) return alert(feeError.message)
 
     await supabase.from('cash_entries').delete().eq('membership_fee_id', fee.id)
+    await createAuditLog('payment_mark_open', 'membership_fees', fee.id, fee, { paid: false, paid_at: null })
     loadAll()
   }
 
@@ -2914,6 +3091,11 @@ export default function App() {
 
       if (error) return alert(error.message)
 
+      await createAuditLog('bulk_import', 'cash_entries', null, null, {
+        count: rowsWithReceiptNumbers.length,
+        file: cashbookFileName,
+      })
+
       setCashbookRows([])
       setCashbookFileName('')
       await loadCashEntries()
@@ -2999,6 +3181,16 @@ export default function App() {
       return
     }
 
+    if (cashType === 'ausgabe' && !receiptFile) {
+      const proceedWithoutReceipt = window.confirm(
+        'Für Ausgaben sollte ein Beleg hochgeladen werden. Trotzdem ohne Beleg speichern?'
+      )
+
+      if (!proceedWithoutReceipt) return
+    }
+
+    const oldCashEntry = cashEntries.find((entry) => entry.id === editingCashId)
+
     const { error } = await supabase
       .from('cash_entries')
       .update({
@@ -3012,6 +3204,15 @@ export default function App() {
       .eq('id', editingCashId)
 
     if (error) return alert(error.message)
+
+    await createAuditLog('update', 'cash_entries', editingCashId, oldCashEntry, {
+      type: cashType,
+      category: cashCategory,
+      event_id: cashEventId || null,
+      payment_method: cashPaymentMethod,
+      amount: Number(cashAmount),
+      description: cashDescription,
+    })
 
     resetCashForm()
     await loadCashEntries()
@@ -3072,12 +3273,14 @@ export default function App() {
       receiptUrl = filePath
     }
 
-    const { error } = await supabase.from('cash_entries').insert({
+    const { data, error } = await supabase.from('cash_entries').insert({
       ...baseEntry,
       receipt_url: receiptUrl,
-    })
+    }).select().single()
 
     if (error) return alert(error.message)
+
+    await createAuditLog('insert', 'cash_entries', data?.id, null, data)
 
     resetCashForm()
 
@@ -3168,6 +3371,13 @@ export default function App() {
 
     if (error) return alert(error.message)
 
+    await createAuditLog('insert', 'documents', null, null, {
+      title: documentTitle,
+      category: documentCategory,
+      file_path: filePath,
+      file_name: documentFile.name,
+    })
+
     resetDocumentForm()
     await loadDocuments()
     alert('Dokument wurde hochgeladen.')
@@ -3203,6 +3413,8 @@ export default function App() {
       .eq('id', document.id)
 
     if (error) return alert(error.message)
+
+    await createAuditLog('delete', 'documents', document.id, document, null)
 
     await loadDocuments()
     alert('Dokument wurde gelöscht.')
@@ -3313,6 +3525,14 @@ export default function App() {
           Steuerberater CSV
         </button>
 
+        <button onClick={exportTaxAdvisorProCsv} style={secondaryButtonStyle}>
+          Steuerberater PRO CSV
+        </button>
+
+        <button onClick={exportCategorySummaryCsv} style={secondaryButtonStyle}>
+          Kategorien-Auswertung CSV
+        </button>
+
         <button onClick={exportExcelStyleCashbookCsv} style={secondaryButtonStyle}>
           Kassabuch wie Excel CSV
         </button>
@@ -3347,6 +3567,18 @@ export default function App() {
 
           <button onClick={exportTaxAdvisorCsv} style={secondaryButtonStyle}>
             Steuerberater CSV
+          </button>
+
+          <button onClick={exportTaxAdvisorProCsv} style={secondaryButtonStyle}>
+            Steuerberater PRO CSV
+          </button>
+
+          <button onClick={exportCategorySummaryCsv} style={secondaryButtonStyle}>
+            Kategorien-Auswertung CSV
+          </button>
+
+          <button onClick={exportAuditLogsCsv} style={secondaryButtonStyle}>
+            Audit Log CSV
           </button>
 
           <button onClick={exportExcelStyleCashbookCsv} style={secondaryButtonStyle}>
@@ -3973,6 +4205,12 @@ export default function App() {
           style={inputStyle}
         />
 
+        {cashType === 'ausgabe' && !receiptFile && (
+          <p style={{ ...mutedTextStyle, color: colors.red }}>
+            Hinweis: Für Ausgaben sollte ein Beleg hochgeladen werden.
+          </p>
+        )}
+
         {!isOnline && (
           <p style={{ color: '#c62828' }}>
             Offline-Modus: Belege werden offline noch nicht gespeichert. Der Kassa-Eintrag wird lokal vorgemerkt.
@@ -4107,6 +4345,35 @@ export default function App() {
         <button onClick={exportExcelStyleCashbookPdf} style={secondaryButtonStyle}>
           Kassabuch wie Excel PDF
         </button>
+
+        <h3 style={headingStyle}>Kategorien-Auswertung</h3>
+
+        <div style={{ ...cardStyle, overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 650 }}>
+            <thead>
+              <tr>
+                {['Kategorie', 'Einnahmen', 'Ausgaben', 'Ergebnis', 'Buchungen'].map((header) => (
+                  <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {getCategorySummary().map((item) => (
+                <tr key={item.category}>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.category}</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.income.toFixed(2)} €</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.expense.toFixed(2)} €</td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                    <strong>{item.balance.toFixed(2)} €</strong>
+                  </td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         <h3 style={headingStyle}>Kassabuch CSV importieren</h3>
 
@@ -4346,6 +4613,32 @@ export default function App() {
           </div>
         ))}
       </section>
+
+      {isAdmin() && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Audit Log</h2>
+
+          <p style={mutedTextStyle}>
+            Zeigt die letzten 100 protokollierten Änderungen. Der vollständige Export ist über „Audit Log CSV“ möglich.
+          </p>
+
+          <button onClick={exportAuditLogsCsv} style={secondaryButtonStyle}>
+            Audit Log CSV
+          </button>
+
+          {auditLogs.length === 0 && <p style={mutedTextStyle}>Noch keine Audit-Logs vorhanden.</p>}
+
+          {auditLogs.slice(0, 20).map((log) => (
+            <div key={log.id} style={cardStyle}>
+              <strong>{log.action}</strong> · {log.table_name}
+              <br />
+              {log.created_at ? new Date(log.created_at).toLocaleString('de-AT') : '-'} · {log.user_email || '-'}
+              <br />
+              Datensatz: {log.record_id || '-'}
+            </div>
+          ))}
+        </section>
+      )}
 
       {canManageMembers() && (
       <section style={sectionStyle}>
