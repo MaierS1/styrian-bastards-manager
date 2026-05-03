@@ -455,7 +455,7 @@ export default function App() {
   }
 
   function getCashBalanceForYear(year) {
-    return getCashEntriesForYear(year).reduce((sum, entry) => {
+    return getCashEntriesForYear(year).filter((entry) => !entry.is_cancelled).reduce((sum, entry) => {
       const amount = Number(entry.amount || 0)
 
       if (entry.is_opening) {
@@ -932,7 +932,7 @@ export default function App() {
 
 
   function getCashBalance() {
-    return getCashEntriesForSelectedYear().reduce((sum, entry) => {
+    return getCashEntriesForSelectedYear().filter((entry) => !entry.is_cancelled).reduce((sum, entry) => {
       const amount = Number(entry.amount || 0)
 
       if (entry.is_opening) {
@@ -990,7 +990,7 @@ export default function App() {
   function getCashbookDetailedSummary() {
     const grouped = {}
 
-    getCashEntriesForSelectedYear().forEach((entry) => {
+    getCashEntriesForSelectedYear().filter((entry) => !entry.is_cancelled).forEach((entry) => {
       const monthKey = getCashMonthKey(entry.entry_date)
 
       if (!grouped[monthKey]) {
@@ -1096,13 +1096,13 @@ export default function App() {
 
   function getIncomeTotal() {
     return getCashEntriesForSelectedYear()
-      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
+      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening && !entry.is_cancelled)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
   function getExpenseTotal() {
     return getCashEntriesForSelectedYear()
-      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
+      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening && !entry.is_cancelled)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
@@ -1131,18 +1131,18 @@ export default function App() {
 
   function getCashEntriesForEvent(eventId) {
     if (!eventId) return []
-    return cashEntries.filter((entry) => entry.event_id === eventId)
+    return cashEntries.filter((entry) => entry.event_id === eventId && !entry.is_cancelled)
   }
 
   function getEventIncomeTotal(eventId) {
     return getCashEntriesForEvent(eventId)
-      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
+      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening && !entry.is_cancelled)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
   function getEventExpenseTotal(eventId) {
     return getCashEntriesForEvent(eventId)
-      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
+      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening && !entry.is_cancelled)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
@@ -1215,7 +1215,7 @@ export default function App() {
         .filter((entry) => {
           if (!entry.entry_date) return false
           const date = new Date(entry.entry_date)
-          return date.getMonth() + 1 === monthNumber && entry.type === 'einnahme'
+          return date.getMonth() + 1 === monthNumber && entry.type === 'einnahme' && !entry.is_cancelled
         })
         .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
 
@@ -1223,7 +1223,7 @@ export default function App() {
         .filter((entry) => {
           if (!entry.entry_date) return false
           const date = new Date(entry.entry_date)
-          return date.getMonth() + 1 === monthNumber && entry.type === 'ausgabe'
+          return date.getMonth() + 1 === monthNumber && entry.type === 'ausgabe' && !entry.is_cancelled
         })
         .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
 
@@ -1410,6 +1410,7 @@ export default function App() {
 
   function exportCashCsv() {
     const rows = getFilteredCashEntries().map((entry) => ({
+      Belegnummer: entry.receipt_number || '',
       Datum: entry.entry_date || '',
       Jahr: getEntryYear(entry),
       Typ: entry.type || '',
@@ -1420,9 +1421,12 @@ export default function App() {
       Beschreibung: entry.description || '',
       Beleg: entry.receipt_url || '',
       Uebertrag: entry.is_opening ? 'ja' : 'nein',
+      Storniert: entry.is_cancelled ? 'ja' : 'nein',
+      StornoGrund: entry.cancellation_reason || '',
     }))
 
     const headers = [
+      'Belegnummer',
       'Datum',
       'Jahr',
       'Typ',
@@ -1433,6 +1437,8 @@ export default function App() {
       'Beschreibung',
       'Beleg',
       'Uebertrag',
+      'Storniert',
+      'StornoGrund',
     ]
 
     downloadTextFile(`styrian-bastards-kassabuch-${selectedCashYear}.csv`, rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
@@ -1444,7 +1450,7 @@ export default function App() {
       .map((entry) => ({
         Datum: entry.entry_date || '',
         Jahr: getEntryYear(entry),
-        Belegnummer: '',
+        Belegnummer: entry.receipt_number || '',
         Einnahme: entry.type === 'einnahme' ? Number(entry.amount || 0).toFixed(2) : '',
         Ausgabe: entry.type === 'ausgabe' ? Number(entry.amount || 0).toFixed(2) : '',
         Zahlungsart: getPaymentMethodLabel(getPaymentMethod(entry)),
@@ -1452,6 +1458,8 @@ export default function App() {
         Event: getEventNameById(entry.event_id) || '',
         Beschreibung: entry.description || '',
         Belegpfad: entry.receipt_url || '',
+        Storniert: entry.is_cancelled ? 'ja' : 'nein',
+        StornoGrund: entry.cancellation_reason || '',
       }))
 
     const headers = [
@@ -1465,6 +1473,8 @@ export default function App() {
       'Event',
       'Beschreibung',
       'Belegpfad',
+      'Storniert',
+      'StornoGrund',
     ]
 
     downloadTextFile(
@@ -1500,7 +1510,7 @@ export default function App() {
 
           rows.push({
             Monat: '',
-            Nummer: '',
+            Nummer: entry.receipt_number || '',
             Datum: entry.entry_date || '',
             Bezeichnung: entry.description || '',
             Kuerzel: entry.is_opening ? 'Übertrag' : entry.category || '',
@@ -1508,7 +1518,7 @@ export default function App() {
             AusgabeEBanking: entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? amount : '',
             EinnahmeBar: entry.type === 'einnahme' && paymentMethod === 'bar' ? amount : '',
             AusgabeBar: entry.type === 'ausgabe' && paymentMethod === 'bar' ? amount : '',
-            Anmerkung: getEventNameById(entry.event_id) || '',
+            Anmerkung: entry.is_cancelled ? `STORNIERT: ${entry.cancellation_reason || ''}` : getEventNameById(entry.event_id) || '',
           })
         })
 
@@ -1630,7 +1640,7 @@ export default function App() {
 
           rows.push([
             '',
-            '',
+            entry.receipt_number || '',
             entry.entry_date || '',
             entry.description || '',
             entry.is_opening ? 'Übertrag' : entry.category || '',
@@ -1638,7 +1648,7 @@ export default function App() {
             entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? `${amount} EUR` : '',
             entry.type === 'einnahme' && paymentMethod === 'bar' ? `${amount} EUR` : '',
             entry.type === 'ausgabe' && paymentMethod === 'bar' ? `${amount} EUR` : '',
-            getEventNameById(entry.event_id) || '',
+            entry.is_cancelled ? `STORNIERT: ${entry.cancellation_reason || ''}` : getEventNameById(entry.event_id) || '',
           ])
         })
 
@@ -1955,8 +1965,9 @@ export default function App() {
 
     autoTable(doc, {
       startY: 48,
-      head: [['Datum', 'Typ', 'Zahlungsart', 'Event', 'Kategorie', 'Beschreibung', 'Betrag']],
+      head: [['Belegnr.', 'Datum', 'Typ', 'Zahlungsart', 'Event', 'Kategorie', 'Beschreibung', 'Betrag', 'Status']],
       body: filteredCash.map((e) => [
+        e.receipt_number || '',
         e.entry_date || '',
         e.type || '',
         getPaymentMethodLabel(getPaymentMethod(e)),
@@ -1964,6 +1975,7 @@ export default function App() {
         e.category || '',
         e.description || '',
         `${Number(e.amount || 0).toFixed(2)} EUR`,
+        e.is_cancelled ? `STORNIERT: ${e.cancellation_reason || ''}` : 'OK',
       ]),
     })
 
@@ -2771,9 +2783,35 @@ export default function App() {
     setCashbookImporting(true)
 
     try {
+      const yearCounters = {}
+
+      cashEntries.forEach((entry) => {
+        const year = getEntryYear(entry)
+        const receiptNumber = String(entry.receipt_number || '')
+        const numberPart = Number(receiptNumber.replace(`${year}-`, ''))
+
+        if (receiptNumber.startsWith(`${year}-`) && Number.isFinite(numberPart)) {
+          yearCounters[year] = Math.max(yearCounters[year] || 0, numberPart)
+        }
+      })
+
+      const rowsWithReceiptNumbers = [...cashbookRows]
+        .sort((a, b) => String(a.entry_date || '').localeCompare(String(b.entry_date || '')))
+        .map((row) => {
+          const year = String(row.entry_year || String(row.entry_date || '').slice(0, 4) || new Date().getFullYear())
+          yearCounters[year] = (yearCounters[year] || 0) + 1
+
+          return {
+            ...row,
+            entry_year: Number(year),
+            receipt_number: row.receipt_number || `${year}-${String(yearCounters[year]).padStart(3, '0')}`,
+            is_cancelled: false,
+          }
+        })
+
       const { error } = await supabase
         .from('cash_entries')
-        .insert(cashbookRows)
+        .insert(rowsWithReceiptNumbers)
 
       if (error) return alert(error.message)
 
@@ -2789,6 +2827,7 @@ export default function App() {
 
   function editCashEntry(entry) {
     if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+    if (entry.is_cancelled) return alert('Stornierte Einträge können nicht bearbeitet werden.')
 
     setEditingCashId(entry.id)
     setCashType(entry.type || 'einnahme')
@@ -2810,6 +2849,26 @@ export default function App() {
     setCashAmount('')
     setCashDescription('')
     setReceiptFile(null)
+  }
+
+  function getNextReceiptNumber(year = new Date().getFullYear()) {
+    const prefix = `${year}-`
+
+    const maxNumber = cashEntries.reduce((max, entry) => {
+      const receiptNumber = String(entry.receipt_number || '')
+
+      if (!receiptNumber.startsWith(prefix)) return max
+
+      const numberPart = Number(receiptNumber.replace(prefix, ''))
+      return Number.isFinite(numberPart) ? Math.max(max, numberPart) : max
+    }, 0)
+
+    return `${prefix}${String(maxNumber + 1).padStart(3, '0')}`
+  }
+
+  function getCashEntrySignedAmount(entry) {
+    const amount = Number(entry.amount || 0)
+    return entry.type === 'einnahme' ? amount : -amount
   }
 
   async function updateCashEntry() {
@@ -2854,6 +2913,9 @@ export default function App() {
 
     const baseEntry = {
       entry_date: new Date().toISOString().slice(0, 10),
+      entry_year: Number(new Date().getFullYear()),
+      receipt_number: getNextReceiptNumber(new Date().getFullYear()),
+      is_cancelled: false,
       type: cashType,
       category: cashCategory,
       event_id: cashEventId || null,
@@ -2910,21 +2972,39 @@ export default function App() {
   async function deleteCashEntry(entry) {
     if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
+    if (entry.is_cancelled) {
+      alert('Dieser Kassa-Eintrag ist bereits storniert.')
+      return
+    }
+
+    const reason = window.prompt(
+      `Storno-Grund eingeben:\n\n${entry.receipt_number || 'ohne Belegnummer'} · ${entry.type === 'einnahme' ? 'Einnahme' : 'Ausgabe'} ${Number(entry.amount || 0).toFixed(2)} €\n${entry.description || ''}`
+    )
+
+    if (!reason || !reason.trim()) {
+      alert('Storno abgebrochen. Ein Grund ist erforderlich.')
+      return
+    }
+
     const confirmed = window.confirm(
-      `Kassa-Eintrag wirklich löschen?\n\n${entry.type === 'einnahme' ? 'Einnahme' : 'Ausgabe'} ${Number(entry.amount || 0).toFixed(2)} €\n${entry.description || ''}\n\nDas kann nicht rückgängig gemacht werden.`
+      `Kassa-Eintrag wirklich stornieren?\n\nBelegnummer: ${entry.receipt_number || '-'}\nGrund: ${reason}\n\nDer Eintrag bleibt im Kassabuch sichtbar und nachvollziehbar.`
     )
 
     if (!confirmed) return
 
     const { error } = await supabase
       .from('cash_entries')
-      .delete()
+      .update({
+        is_cancelled: true,
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: reason.trim(),
+      })
       .eq('id', entry.id)
 
     if (error) return alert(error.message)
 
     await loadCashEntries()
-    alert('Kassa-Eintrag wurde gelöscht.')
+    alert('Kassa-Eintrag wurde storniert.')
   }
 
   function resetDocumentForm() {
@@ -3950,16 +4030,25 @@ export default function App() {
             key={entry.id}
             style={{
               ...cardStyle,
-              background: entry.type === 'einnahme' ? '#eefbea' : '#fff0f0',
+              background: entry.is_cancelled ? '#f3f4f6' : entry.type === 'einnahme' ? '#eefbea' : '#fff0f0',
+              opacity: entry.is_cancelled ? 0.78 : 1,
             }}
           >
             <strong>
               {entry.type === 'einnahme' ? '+' : '-'} {Number(entry.amount).toFixed(2)} €
             </strong>
             <br />
-            {entry.is_opening ? 'Übertrag' : entry.category} · {entry.entry_date} · {getPaymentMethodLabel(getPaymentMethod(entry))}
+            Belegnr.: {entry.receipt_number || '-'} · {entry.is_opening ? 'Übertrag' : entry.category} · {entry.entry_date} · {getPaymentMethodLabel(getPaymentMethod(entry))}
             <br />
             {entry.description}
+            {entry.is_cancelled && (
+              <>
+                <br />
+                <strong style={{ color: colors.red }}>STORNIERT</strong>
+                <br />
+                Grund: {entry.cancellation_reason || '-'}
+              </>
+            )}
 
             {entry.receipt_url && (
               <>
@@ -3979,7 +4068,7 @@ export default function App() {
               onClick={() => deleteCashEntry(entry)}
               style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
             >
-              Kassa-Eintrag löschen
+              Kassa-Eintrag stornieren
             </button>
           </div>
         ))}
