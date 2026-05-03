@@ -8,10 +8,28 @@ import QRCode from 'qrcode'
 
 const isMobile = window.innerWidth < 768
 
+const colors = {
+  black: '#050505',
+  white: '#ffffff',
+  offWhite: '#f8fafc',
+  border: '#d1d5db',
+  text: '#111827',
+  muted: '#4b5563',
+  red: '#c1121f',
+  blue: '#003f88',
+  navy: '#0b1f3a',
+  successBg: '#ecfdf5',
+  successText: '#065f46',
+  dangerBg: '#fef2f2',
+  dangerText: '#991b1b',
+  infoBg: '#eff6ff',
+  infoText: '#1e3a8a',
+}
+
 const pageStyle = {
   minHeight: '100vh',
-  background: '#f3f4f6',
-  color: '#111827',
+  background: colors.black,
+  color: colors.text,
 }
 
 const inputStyle = {
@@ -23,63 +41,100 @@ const inputStyle = {
   fontSize: isMobile ? 17 : 16,
   lineHeight: 1.4,
   boxSizing: 'border-box',
-  border: '1px solid #9ca3af',
-  borderRadius: 8,
-  background: '#ffffff',
-  color: '#111827',
+  border: `2px solid ${colors.border}`,
+  borderRadius: 10,
+  background: colors.white,
+  color: colors.text,
+  outlineColor: colors.red,
 }
 
 const buttonStyle = {
   padding: isMobile ? 15 : 12,
   fontSize: isMobile ? 17 : 15,
-  fontWeight: 700,
+  fontWeight: 800,
   marginTop: 6,
   marginRight: isMobile ? 0 : 10,
   marginBottom: 8,
   width: isMobile ? '100%' : 'auto',
   cursor: 'pointer',
-  border: '1px solid #111827',
-  borderRadius: 8,
-  background: '#111827',
-  color: '#ffffff',
+  border: `2px solid ${colors.black}`,
+  borderRadius: 10,
+  background: colors.black,
+  color: colors.white,
+  boxShadow: '0 2px 4px rgba(0,0,0,0.18)',
 }
 
 const secondaryButtonStyle = {
   ...buttonStyle,
-  background: '#ffffff',
-  color: '#111827',
+  background: colors.white,
+  color: colors.black,
+  border: `2px solid ${colors.black}`,
+}
+
+const dangerButtonStyle = {
+  ...secondaryButtonStyle,
+  borderColor: colors.red,
+  color: colors.red,
 }
 
 const cardStyle = {
-  border: '1px solid #d1d5db',
+  border: `1px solid ${colors.border}`,
   padding: isMobile ? 16 : 16,
   marginBottom: 12,
-  borderRadius: 12,
-  background: '#ffffff',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+  borderRadius: 14,
+  background: colors.white,
+  boxShadow: '0 3px 10px rgba(0,0,0,0.10)',
   lineHeight: 1.6,
   fontSize: isMobile ? 16 : 15,
-  color: '#111827',
+  color: colors.text,
 }
 
 const sectionStyle = {
-  border: '1px solid #d1d5db',
-  borderRadius: 14,
+  border: `1px solid ${colors.border}`,
+  borderRadius: 16,
   padding: isMobile ? 16 : 24,
   marginBottom: 28,
-  background: '#ffffff',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+  background: colors.offWhite,
+  boxShadow: '0 4px 18px rgba(0,0,0,0.16)',
+  color: colors.text,
 }
 
 const headingStyle = {
-  color: '#111827',
+  color: colors.black,
   marginTop: 0,
   letterSpacing: '-0.02em',
+  borderLeft: `6px solid ${colors.red}`,
+  paddingLeft: 10,
 }
 
 const mutedTextStyle = {
-  color: '#4b5563',
+  color: colors.muted,
   lineHeight: 1.5,
+}
+
+const appHeaderStyle = {
+  background: colors.black,
+  color: colors.white,
+  padding: isMobile ? 18 : 24,
+  borderRadius: 18,
+  marginBottom: 22,
+  border: `2px solid ${colors.white}`,
+  boxShadow: '0 6px 18px rgba(0,0,0,0.28)',
+}
+
+const dashboardNumberStyle = {
+  fontSize: '30px',
+  marginTop: 10,
+  marginBottom: 0,
+  color: colors.black,
+  fontWeight: 900,
+}
+
+const dashboardLabelStyle = {
+  color: colors.black,
+  fontWeight: 900,
+  textTransform: 'uppercase',
+  letterSpacing: '0.03em',
 }
 
 export default function App() {
@@ -2396,24 +2451,24 @@ export default function App() {
 
 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
 
-  <div style={{ ...cardStyle, background: '#ecfdf5', color: '#065f46' }}>
-    <strong>Kassastand</strong>
-    <h2 style={{ fontSize: '28px', marginTop: 10 }}>{getCashBalance().toFixed(2)} €</h2>
+  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.black}` }}>
+    <strong style={dashboardLabelStyle}>Kassastand</strong>
+    <h2 style={dashboardNumberStyle}>{getCashBalance().toFixed(2)} €</h2>
   </div>
 
-  <div style={{ ...cardStyle, background: '#eff6ff', color: '#1e3a8a' }}>
-    <strong>Einnahmen</strong>
-    <h2 style={{ fontSize: '28px', marginTop: 10 }}>{getIncomeTotal().toFixed(2)} €</h2>
+  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.blue}` }}>
+    <strong style={dashboardLabelStyle}>Einnahmen</strong>
+    <h2 style={dashboardNumberStyle}>{getIncomeTotal().toFixed(2)} €</h2>
   </div>
 
-  <div style={{ ...cardStyle, background: '#fef2f2', color: '#991b1b' }}>
-    <strong>Ausgaben</strong>
-    <h2 style={{ fontSize: '28px', marginTop: 10 }}>{getExpenseTotal().toFixed(2)} €</h2>
+  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.red}` }}>
+    <strong style={dashboardLabelStyle}>Ausgaben</strong>
+    <h2 style={dashboardNumberStyle}>{getExpenseTotal().toFixed(2)} €</h2>
   </div>
 
-  <div style={{ ...cardStyle, background: '#f0fdf4', color: '#14532d' }}>
-    <strong>Ergebnis</strong>
-    <h2 style={{ fontSize: '28px', marginTop: 10 }}>{(getIncomeTotal() - getExpenseTotal()).toFixed(2)} €</h2>
+  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.navy}` }}>
+    <strong style={dashboardLabelStyle}>Ergebnis</strong>
+    <h2 style={dashboardNumberStyle}>{(getIncomeTotal() - getExpenseTotal()).toFixed(2)} €</h2>
   </div>
 
 </div>
