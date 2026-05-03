@@ -137,6 +137,32 @@ const dashboardLabelStyle = {
   letterSpacing: '0.03em',
 }
 
+const navStyle = {
+  position: 'sticky',
+  top: 0,
+  zIndex: 50,
+  background: colors.black,
+  padding: isMobile ? 10 : 14,
+  borderRadius: 16,
+  marginBottom: 22,
+  border: `1px solid ${colors.white}`,
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 8,
+  boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
+}
+
+const navButtonStyle = (active) => ({
+  padding: isMobile ? '12px 10px' : '12px 16px',
+  borderRadius: 12,
+  border: active ? `2px solid ${colors.red}` : `2px solid ${colors.white}`,
+  background: active ? colors.white : colors.black,
+  color: active ? colors.black : colors.white,
+  fontWeight: 900,
+  cursor: 'pointer',
+  flex: isMobile ? '1 1 45%' : '0 0 auto',
+})
+
 export default function App() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -220,6 +246,8 @@ export default function App() {
   const [restoreData, setRestoreData] = useState(null)
   const [restoreFileName, setRestoreFileName] = useState('')
   const [restoreImporting, setRestoreImporting] = useState(false)
+
+  const [activePage, setActivePage] = useState('dashboard')
 
   useEffect(() => {
     checkUser()
@@ -3510,6 +3538,40 @@ export default function App() {
         Logout
       </button>
 
+      <nav style={navStyle}>
+        {[
+          ['dashboard', 'Dashboard'],
+          ['members', 'Mitglieder'],
+          ['cash', 'Kassa'],
+          ['events', 'Events'],
+          ['documents', 'Dokumente'],
+          ['admin', 'Admin / Export'],
+        ].map(([pageKey, label]) => (
+          <button
+            key={pageKey}
+            onClick={() => setActivePage(pageKey)}
+            style={navButtonStyle(activePage === pageKey)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {activePage === 'cash' && !canManageCash() && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Kassa</h2>
+          <p>Für diesen Bereich hast du keine Berechtigung.</p>
+        </section>
+      )}
+
+      {activePage === 'members' && !canManageMembers() && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Mitglieder</h2>
+          <p>Für die Mitgliederverwaltung hast du keine Bearbeitungsrechte. Die Mitgliederliste bleibt weiter unten sichtbar, wenn sie freigegeben ist.</p>
+        </section>
+      )}
+
+      {activePage === 'admin' && (
       <div style={{ marginTop: 15 }}>
         <button onClick={exportMembersPdf} style={secondaryButtonStyle}>
           Mitgliederliste PDF
@@ -3547,7 +3609,9 @@ export default function App() {
           Anwesenheitsliste PDF
         </button>
       </div>
+      )}
 
+      {activePage === 'admin' && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Export & Backup</h2>
 
@@ -3670,7 +3734,10 @@ export default function App() {
           </div>
         )}
       </section>
+      )}
 
+      {activePage === 'events' && (
+      <>
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Event-Verwaltung</h2>
 
@@ -3846,7 +3913,10 @@ export default function App() {
         ))}
       </section>
       )}
+      </>
+      )}
 
+      {activePage === 'dashboard' && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Dashboard</h2>
 
@@ -4048,8 +4118,9 @@ export default function App() {
   ))}
 </div>
 </section>
+      )}
 
-{canManageCash() && (
+{activePage === 'cash' && canManageCash() && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Kassa</h2>
 
@@ -4527,6 +4598,7 @@ export default function App() {
       </section>
       )}
 
+      {activePage === 'documents' && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Dokumente</h2>
 
@@ -4613,8 +4685,9 @@ export default function App() {
           </div>
         ))}
       </section>
+      )}
 
-      {isAdmin() && (
+      {activePage === 'admin' && isAdmin() && (
         <section style={sectionStyle}>
           <h2 style={headingStyle}>Audit Log</h2>
 
@@ -4640,6 +4713,8 @@ export default function App() {
         </section>
       )}
 
+      {activePage === 'members' && (
+      <>
       {canManageMembers() && (
       <section style={sectionStyle}>
         <h2 style={headingStyle}>CSV Mitglieder-Import</h2>
@@ -4947,6 +5022,8 @@ export default function App() {
           )
         })}
       </section>
+      </>
+      )}
     </main>
   )
 }
