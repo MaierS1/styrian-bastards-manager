@@ -151,6 +151,8 @@ export default function App() {
   const [documents, setDocuments] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
+  const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
+  const [carryoverToYear, setCarryoverToYear] = useState(String(new Date().getFullYear()))
 
   const [eventName, setEventName] = useState('Heimspiel')
   const [selectedEventId, setSelectedEventId] = useState('')
@@ -442,6 +444,93 @@ export default function App() {
   function getCashEntriesForSelectedYear() {
     if (selectedCashYear === 'alle') return cashEntries
     return cashEntries.filter((entry) => getEntryYear(entry) === selectedCashYear)
+  }
+
+  function getCashEntriesForYear(year) {
+    return cashEntries.filter((entry) => getEntryYear(entry) === String(year))
+  }
+
+  function getCashBalanceForYear(year) {
+    return getCashEntriesForYear(year).reduce((sum, entry) => {
+      const amount = Number(entry.amount || 0)
+
+      if (entry.is_opening) {
+        return entry.type === 'einnahme' ? sum + amount : sum - amount
+      }
+
+      return entry.type === 'einnahme' ? sum + amount : sum - amount
+    }, 0)
+  }
+
+  function hasOpeningForYear(year) {
+    return cashEntries.some(
+      (entry) =>
+        getEntryYear(entry) === String(year) &&
+        entry.is_opening &&
+        String(entry.description || '').toLowerCase().includes('übertrag vorjahr')
+    )
+  }
+
+  async function createAutomaticCarryover() {
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+
+    if (!carryoverFromYear || !carryoverToYear) {
+      alert('Bitte Quelljahr und Zieljahr auswählen.')
+      return
+    }
+
+    if (String(carryoverFromYear) === String(carryoverToYear)) {
+      alert('Quelljahr und Zieljahr dürfen nicht gleich sein.')
+      return
+    }
+
+    if (Number(carryoverToYear) !== Number(carryoverFromYear) + 1) {
+      const proceed = window.confirm(
+        'Das Zieljahr ist nicht direkt das Folgejahr. Trotzdem Übertrag erstellen?'
+      )
+
+      if (!proceed) return
+    }
+
+    if (hasOpeningForYear(carryoverToYear)) {
+      alert(`Für ${carryoverToYear} existiert bereits ein Übertrag Vorjahr.`)
+      return
+    }
+
+    const balance = getCashBalanceForYear(carryoverFromYear)
+
+    if (balance === 0) {
+      const proceed = window.confirm(
+        `Der Endsaldo ${carryoverFromYear} ist 0,00 €. Trotzdem Übertrag erstellen?`
+      )
+
+      if (!proceed) return
+    }
+
+    const confirmed = window.confirm(
+      `Übertrag erstellen?\n\nEndsaldo ${carryoverFromYear}: ${balance.toFixed(2)} €\nZieljahr: ${carryoverToYear}\n\nDer Übertrag wird als Startsaldo am 01.01.${carryoverToYear} angelegt.`
+    )
+
+    if (!confirmed) return
+
+    const { error } = await supabase.from('cash_entries').insert({
+      entry_date: `${carryoverToYear}-01-01`,
+      entry_year: Number(carryoverToYear),
+      type: balance >= 0 ? 'einnahme' : 'ausgabe',
+      category: 'sonstiges',
+      payment_method: 'bar',
+      is_opening: true,
+      amount: Math.abs(balance),
+      description: `Übertrag Vorjahr automatisch aus ${carryoverFromYear}`,
+      receipt_url: null,
+      event_id: null,
+    })
+
+    if (error) return alert(error.message)
+
+    await loadCashEntries()
+    setSelectedCashYear(String(carryoverToYear))
+    alert('Übertrag wurde erstellt.')
   }
 
 
@@ -2681,6 +2770,56 @@ export default function App() {
             </option>
           ))}
         </select>
+
+        <h3 style={headingStyle}>Automatischer Jahresübertrag</h3>
+
+        <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
+          <p style={mutedTextStyle}>
+            Berechnet den Endsaldo eines Jahres und legt im Folgejahr automatisch einen Startsaldo
+            als „Übertrag Vorjahr“ an. Die App prüft vorher, ob im Zieljahr bereits ein Übertrag existiert.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(180px, 260px))', gap: 12 }}>
+            <div>
+              <label style={{ fontWeight: 800, color: colors.black }}>Von Jahr</label>
+              <select value={carryoverFromYear} onChange={(e) => setCarryoverFromYear(e.target.value)} style={inputStyle}>
+                {getAvailableCashYears().map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontWeight: 800, color: colors.black }}>Nach Jahr</label>
+              <input
+                type="number"
+                value={carryoverToYear}
+                onChange={(e) => setCarryoverToYear(e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
+          <p>
+            Endsaldo {carryoverFromYear}:{' '}
+            <strong style={{ color: colors.black }}>
+              {getCashBalanceForYear(carryoverFromYear).toFixed(2)} €
+            </strong>
+          </p>
+
+          <p>
+            Übertrag in {carryoverToYear}:{' '}
+            <strong style={{ color: hasOpeningForYear(carryoverToYear) ? colors.red : colors.successText }}>
+              {hasOpeningForYear(carryoverToYear) ? 'bereits vorhanden' : 'noch nicht vorhanden'}
+            </strong>
+          </p>
+
+          <button onClick={createAutomaticCarryover} style={buttonStyle}>
+            Übertrag automatisch erstellen
+          </button>
+        </div>
 
         <p>
           Verbindung:{' '}
