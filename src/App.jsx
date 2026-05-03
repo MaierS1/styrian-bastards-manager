@@ -1020,6 +1020,47 @@ export default function App() {
     return `${Math.max((value / getMonthlyMax()) * 140, 3)}px`
   }
 
+  function getDashboardMonthlyMax() {
+    const values = getMonthlyData().flatMap((item) => [item.income, item.expense])
+    return Math.max(...values, 1)
+  }
+
+  function getDashboardBarHeight(value) {
+    return `${Math.max((value / getDashboardMonthlyMax()) * 130, 4)}px`
+  }
+
+  function getMemberTypeStats() {
+    const types = [
+      ['vollmitglied', 'Vollmitglieder'],
+      ['foerdermitglied', 'Fördermitglieder'],
+      ['ehrenmitglied', 'Ehrenmitglieder'],
+      ['probejahr', 'Probejahr'],
+    ]
+
+    return types.map(([value, label]) => ({
+      value,
+      label,
+      count: members.filter((member) => member.member_type === value).length,
+    }))
+  }
+
+  function getFeeStats() {
+    const paid = fees.filter((fee) => fee.paid).length
+    const open = fees.filter((fee) => !fee.paid && Number(fee.amount || 0) > 0).length
+    const free = fees.filter((fee) => Number(fee.amount || 0) === 0).length
+
+    return [
+      { label: 'Bezahlt', count: paid, color: colors.blue },
+      { label: 'Offen', count: open, color: colors.red },
+      { label: 'Gratis', count: free, color: colors.black },
+    ]
+  }
+
+  function getStatsMax(items) {
+    return Math.max(...items.map((item) => item.count), 1)
+  }
+
+
   function getFilteredMembers() {
     return members.filter((member) => {
       const fee = getFee(member.id)
@@ -2504,6 +2545,102 @@ export default function App() {
   ) : (
     'Kein Event vorhanden'
   )}
+</div>
+
+<br />
+
+<div style={{ ...cardStyle, marginTop: 18 }}>
+  <strong style={dashboardLabelStyle}>Monatsdiagramm Einnahmen / Ausgaben</strong>
+
+  <div style={{ overflowX: 'auto', marginTop: 16 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, minWidth: 850, height: 190 }}>
+      {getMonthlyData().map((item) => (
+        <div key={item.month} style={{ textAlign: 'center', width: 62 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 5, height: 140 }}>
+            <div
+              title={`Einnahmen ${item.month}: ${item.income.toFixed(2)} €`}
+              style={{
+                width: 23,
+                height: getDashboardBarHeight(item.income),
+                background: colors.blue,
+                borderRadius: '6px 6px 0 0',
+              }}
+            />
+            <div
+              title={`Ausgaben ${item.month}: ${item.expense.toFixed(2)} €`}
+              style={{
+                width: 23,
+                height: getDashboardBarHeight(item.expense),
+                background: colors.red,
+                borderRadius: '6px 6px 0 0',
+              }}
+            />
+          </div>
+          <strong style={{ color: colors.black }}>{item.month}</strong>
+          <br />
+          <span style={{ fontSize: 11, color: colors.blue }}>{item.income.toFixed(0)}€</span>
+          {' / '}
+          <span style={{ fontSize: 11, color: colors.red }}>{item.expense.toFixed(0)}€</span>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <p style={mutedTextStyle}>
+    <strong style={{ color: colors.blue }}>Blau = Einnahmen</strong>
+    {' · '}
+    <strong style={{ color: colors.red }}>Rot = Ausgaben</strong>
+  </p>
+</div>
+
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 15 }}>
+  <div style={cardStyle}>
+    <strong style={dashboardLabelStyle}>Mitglieder nach Art</strong>
+
+    <div style={{ marginTop: 14 }}>
+      {getMemberTypeStats().map((item) => (
+        <div key={item.value} style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ color: colors.black }}>{item.label}</span>
+            <strong style={{ color: colors.black }}>{item.count}</strong>
+          </div>
+          <div style={{ height: 10, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
+            <div
+              style={{
+                height: '100%',
+                width: `${(item.count / getStatsMax(getMemberTypeStats())) * 100}%`,
+                background: colors.black,
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  <div style={cardStyle}>
+    <strong style={dashboardLabelStyle}>Beitragsstatus</strong>
+
+    <div style={{ marginTop: 14 }}>
+      {getFeeStats().map((item) => (
+        <div key={item.label} style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ color: colors.black }}>{item.label}</span>
+            <strong style={{ color: colors.black }}>{item.count}</strong>
+          </div>
+          <div style={{ height: 10, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
+            <div
+              style={{
+                height: '100%',
+                width: `${(item.count / getStatsMax(getFeeStats())) * 100}%`,
+                background: item.color,
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
 </div>
 
 <br />
