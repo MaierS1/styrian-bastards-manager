@@ -715,12 +715,13 @@ export default function App() {
   function getCashbookDetailedSummary() {
     const grouped = {}
 
-    cashEntries.forEach((entry) => {
+    getCashEntriesForSelectedYear().forEach((entry) => {
       const monthKey = getCashMonthKey(entry.entry_date)
 
       if (!grouped[monthKey]) {
         grouped[monthKey] = {
           monthKey,
+          year: String(entry.entry_year || String(entry.entry_date || '').slice(0, 4)),
           openingBankIncome: 0,
           openingBankExpense: 0,
           openingCashIncome: 0,
@@ -777,10 +778,18 @@ export default function App() {
     })
 
     let runningBalance = 0
+    let currentYear = null
 
     return Object.values(grouped)
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
       .map((month) => {
+        const monthYear = String(month.year || month.monthKey.slice(0, 4))
+
+        if (selectedCashYear === 'alle' && currentYear !== monthYear) {
+          runningBalance = 0
+          currentYear = monthYear
+        }
+
         const openingTotal = month.openingBank + month.openingCash
         month.monthMovement = month.totalIncome - month.totalExpense
         month.totalIncomeWithOpening =
