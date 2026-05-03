@@ -1438,6 +1438,285 @@ export default function App() {
     downloadTextFile(`styrian-bastards-kassabuch-${selectedCashYear}.csv`, rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
   }
 
+  function exportTaxAdvisorCsv() {
+    const rows = getFilteredCashEntries()
+      .filter((entry) => !entry.is_opening)
+      .map((entry) => ({
+        Datum: entry.entry_date || '',
+        Jahr: getEntryYear(entry),
+        Belegnummer: '',
+        Einnahme: entry.type === 'einnahme' ? Number(entry.amount || 0).toFixed(2) : '',
+        Ausgabe: entry.type === 'ausgabe' ? Number(entry.amount || 0).toFixed(2) : '',
+        Zahlungsart: getPaymentMethodLabel(getPaymentMethod(entry)),
+        Kategorie: entry.category || '',
+        Event: getEventNameById(entry.event_id) || '',
+        Beschreibung: entry.description || '',
+        Belegpfad: entry.receipt_url || '',
+      }))
+
+    const headers = [
+      'Datum',
+      'Jahr',
+      'Belegnummer',
+      'Einnahme',
+      'Ausgabe',
+      'Zahlungsart',
+      'Kategorie',
+      'Event',
+      'Beschreibung',
+      'Belegpfad',
+    ]
+
+    downloadTextFile(
+      `styrian-bastards-steuerberater-${selectedCashYear}.csv`,
+      rowsToCsv(headers, rows),
+      'text/csv;charset=utf-8'
+    )
+  }
+
+  function exportExcelStyleCashbookCsv() {
+    const summary = getCashbookDetailedSummary()
+    const rows = []
+
+    summary.forEach((month) => {
+      rows.push({
+        Monat: getCashMonthLabel(month.monthKey),
+        Nummer: '',
+        Datum: '',
+        Bezeichnung: '',
+        Kuerzel: '',
+        EinnahmeEBanking: '',
+        AusgabeEBanking: '',
+        EinnahmeBar: '',
+        AusgabeBar: '',
+        Anmerkung: '',
+      })
+
+      month.entries
+        .sort((a, b) => String(a.entry_date || '').localeCompare(String(b.entry_date || '')))
+        .forEach((entry) => {
+          const paymentMethod = getPaymentMethod(entry)
+          const amount = Number(entry.amount || 0).toFixed(2)
+
+          rows.push({
+            Monat: '',
+            Nummer: '',
+            Datum: entry.entry_date || '',
+            Bezeichnung: entry.description || '',
+            Kuerzel: entry.is_opening ? 'Übertrag' : entry.category || '',
+            EinnahmeEBanking: entry.type === 'einnahme' && paymentMethod === 'ebanking' ? amount : '',
+            AusgabeEBanking: entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? amount : '',
+            EinnahmeBar: entry.type === 'einnahme' && paymentMethod === 'bar' ? amount : '',
+            AusgabeBar: entry.type === 'ausgabe' && paymentMethod === 'bar' ? amount : '',
+            Anmerkung: getEventNameById(entry.event_id) || '',
+          })
+        })
+
+      rows.push({
+        Monat: 'Summen einzeln',
+        Nummer: '',
+        Datum: '',
+        Bezeichnung: '',
+        Kuerzel: '',
+        EinnahmeEBanking: (month.openingBankIncome + month.incomeBank).toFixed(2),
+        AusgabeEBanking: (month.openingBankExpense + month.expenseBank).toFixed(2),
+        EinnahmeBar: (month.openingCashIncome + month.incomeCash).toFixed(2),
+        AusgabeBar: (month.openingCashExpense + month.expenseCash).toFixed(2),
+        Anmerkung: '',
+      })
+
+      rows.push({
+        Monat: 'Einnahmen gesamt',
+        Nummer: month.totalIncomeWithOpening.toFixed(2),
+        Datum: '',
+        Bezeichnung: '',
+        Kuerzel: '',
+        EinnahmeEBanking: 'Summe E-Banking',
+        AusgabeEBanking: '',
+        EinnahmeBar: 'Summe Bar',
+        AusgabeBar: '',
+        Anmerkung: '',
+      })
+
+      rows.push({
+        Monat: 'Ausgaben gesamt',
+        Nummer: month.totalExpenseWithOpening.toFixed(2),
+        Datum: '',
+        Bezeichnung: '',
+        Kuerzel: '',
+        EinnahmeEBanking: month.openingBank.toFixed(2),
+        AusgabeEBanking: '',
+        EinnahmeBar: month.openingCash.toFixed(2),
+        AusgabeBar: '',
+        Anmerkung: '',
+      })
+
+      rows.push({
+        Monat: 'Differenz',
+        Nummer: month.differenceWithOpening.toFixed(2),
+        Datum: '',
+        Bezeichnung: '',
+        Kuerzel: '',
+        EinnahmeEBanking: '',
+        AusgabeEBanking: '',
+        EinnahmeBar: '',
+        AusgabeBar: '',
+        Anmerkung: '',
+      })
+
+      rows.push({
+        Monat: '',
+        Nummer: '',
+        Datum: '',
+        Bezeichnung: '',
+        Kuerzel: '',
+        EinnahmeEBanking: '',
+        AusgabeEBanking: '',
+        EinnahmeBar: '',
+        AusgabeBar: '',
+        Anmerkung: '',
+      })
+    })
+
+    const headers = [
+      'Monat',
+      'Nummer',
+      'Datum',
+      'Bezeichnung',
+      'Kuerzel',
+      'EinnahmeEBanking',
+      'AusgabeEBanking',
+      'EinnahmeBar',
+      'AusgabeBar',
+      'Anmerkung',
+    ]
+
+    downloadTextFile(
+      `styrian-bastards-kassabuch-excel-style-${selectedCashYear}.csv`,
+      rowsToCsv(headers, rows),
+      'text/csv;charset=utf-8'
+    )
+  }
+
+  function exportExcelStyleCashbookPdf() {
+    const doc = new jsPDF('landscape')
+    const summary = getCashbookDetailedSummary()
+
+    doc.text('Styrian Bastards - Kassabuch wie Excel', 14, 15)
+    doc.text(`Jahr/Filter: ${selectedCashYear}`, 14, 23)
+    doc.text(`Kassastand: ${getCashBalance().toFixed(2)} EUR`, 14, 31)
+
+    const rows = []
+
+    summary.forEach((month) => {
+      rows.push([
+        getCashMonthLabel(month.monthKey),
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ])
+
+      month.entries
+        .sort((a, b) => String(a.entry_date || '').localeCompare(String(b.entry_date || '')))
+        .forEach((entry) => {
+          const paymentMethod = getPaymentMethod(entry)
+          const amount = Number(entry.amount || 0).toFixed(2)
+
+          rows.push([
+            '',
+            '',
+            entry.entry_date || '',
+            entry.description || '',
+            entry.is_opening ? 'Übertrag' : entry.category || '',
+            entry.type === 'einnahme' && paymentMethod === 'ebanking' ? `${amount} EUR` : '',
+            entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? `${amount} EUR` : '',
+            entry.type === 'einnahme' && paymentMethod === 'bar' ? `${amount} EUR` : '',
+            entry.type === 'ausgabe' && paymentMethod === 'bar' ? `${amount} EUR` : '',
+            getEventNameById(entry.event_id) || '',
+          ])
+        })
+
+      rows.push([
+        'Summen einzeln',
+        '',
+        '',
+        '',
+        '',
+        `${(month.openingBankIncome + month.incomeBank).toFixed(2)} EUR`,
+        `${(month.openingBankExpense + month.expenseBank).toFixed(2)} EUR`,
+        `${(month.openingCashIncome + month.incomeCash).toFixed(2)} EUR`,
+        `${(month.openingCashExpense + month.expenseCash).toFixed(2)} EUR`,
+        '',
+      ])
+
+      rows.push([
+        'Einnahmen gesamt',
+        `${month.totalIncomeWithOpening.toFixed(2)} EUR`,
+        '',
+        '',
+        '',
+        'Summe E-Banking',
+        '',
+        'Summe Bar',
+        '',
+        '',
+      ])
+
+      rows.push([
+        'Ausgaben gesamt',
+        `${month.totalExpenseWithOpening.toFixed(2)} EUR`,
+        '',
+        '',
+        '',
+        `${month.openingBank.toFixed(2)} EUR`,
+        '',
+        `${month.openingCash.toFixed(2)} EUR`,
+        '',
+        '',
+      ])
+
+      rows.push([
+        'Differenz',
+        `${month.differenceWithOpening.toFixed(2)} EUR`,
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+      ])
+    })
+
+    autoTable(doc, {
+      startY: 40,
+      head: [[
+        'Monat',
+        'Nummer/Summe',
+        'Datum',
+        'Bezeichnung',
+        'Kürzel',
+        'Einnahme E-Banking',
+        'Ausgabe E-Banking',
+        'Einnahme Bar',
+        'Ausgabe Bar',
+        'Anmerkung',
+      ]],
+      body: rows,
+      styles: { fontSize: 7 },
+      headStyles: { fillColor: [5, 5, 5] },
+    })
+
+    doc.save(`styrian-bastards-kassabuch-excel-style-${selectedCashYear}.pdf`)
+  }
+
   function exportEventsCsv() {
     const rows = events.map((event) => ({
       Name: event.name || '',
@@ -2829,6 +3108,18 @@ export default function App() {
         <button onClick={exportDetailedCashbookPdf} style={secondaryButtonStyle}>
           Kassabuch Detail PDF
         </button>
+
+        <button onClick={exportTaxAdvisorCsv} style={secondaryButtonStyle}>
+          Steuerberater CSV
+        </button>
+
+        <button onClick={exportExcelStyleCashbookCsv} style={secondaryButtonStyle}>
+          Kassabuch wie Excel CSV
+        </button>
+
+        <button onClick={exportExcelStyleCashbookPdf} style={secondaryButtonStyle}>
+          Kassabuch wie Excel PDF
+        </button>
         <button onClick={exportOpenFeesPdf} style={secondaryButtonStyle}>
           Offene Beiträge PDF
         </button>
@@ -2852,6 +3143,18 @@ export default function App() {
 
           <button onClick={exportCashCsv} style={secondaryButtonStyle}>
             Kassabuch CSV
+          </button>
+
+          <button onClick={exportTaxAdvisorCsv} style={secondaryButtonStyle}>
+            Steuerberater CSV
+          </button>
+
+          <button onClick={exportExcelStyleCashbookCsv} style={secondaryButtonStyle}>
+            Kassabuch wie Excel CSV
+          </button>
+
+          <button onClick={exportExcelStyleCashbookPdf} style={secondaryButtonStyle}>
+            Kassabuch wie Excel PDF
           </button>
 
           <button onClick={exportEventsCsv} style={secondaryButtonStyle}>
@@ -3535,6 +3838,18 @@ export default function App() {
 
         <button onClick={exportDetailedCashbookPdf} style={secondaryButtonStyle}>
           Kassabuch Detail PDF
+        </button>
+
+        <button onClick={exportTaxAdvisorCsv} style={secondaryButtonStyle}>
+          Steuerberater CSV
+        </button>
+
+        <button onClick={exportExcelStyleCashbookCsv} style={secondaryButtonStyle}>
+          Kassabuch wie Excel CSV
+        </button>
+
+        <button onClick={exportExcelStyleCashbookPdf} style={secondaryButtonStyle}>
+          Kassabuch wie Excel PDF
         </button>
 
         <h3 style={headingStyle}>Kassabuch CSV importieren</h3>
