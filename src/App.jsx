@@ -346,7 +346,6 @@ export default function App() {
 
     if (!selectedEventId && loadedEvents.length > 0) {
       setSelectedEventId(loadedEvents[0].id)
-      setCashEventId(loadedEvents[0].id)
       setEventName(loadedEvents[0].name)
     }
   }
@@ -1327,7 +1326,6 @@ export default function App() {
 
     if (data) {
       setSelectedEventId(data.id)
-      setCashEventId(data.id)
       setEventName(data.name)
     }
 
@@ -1957,7 +1955,7 @@ export default function App() {
       entry_date: new Date().toISOString().slice(0, 10),
       type: cashType,
       category: cashCategory,
-      event_id: cashEventId || selectedEventId || null,
+      event_id: cashEventId || null,
       payment_method: cashPaymentMethod,
       is_opening: false,
       amount: Number(cashAmount),
@@ -2272,7 +2270,6 @@ export default function App() {
           onChange={(e) => {
             const eventId = e.target.value
             setSelectedEventId(eventId)
-            setCashEventId(eventId)
             const selectedEvent = events.find((event) => event.id === eventId)
             setEventName(selectedEvent?.name || '')
           }}
