@@ -2394,96 +2394,86 @@ export default function App() {
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Dashboard</h2>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: 12,
-            marginBottom: 30,
-          }}
-        >
-          {[
-            ['Kassastand', `${getCashBalance().toFixed(2)} €`],
-            ['Mitglieder aktiv', getActiveMembersCount()],
-            ['Offene Beiträge', `${getOpenFeesCount()} offen`],
-            ['Offene Summe', `${getOpenFeesTotal().toFixed(2)} €`],
-            ['Einnahmen', `${income.toFixed(2)} €`],
-            ['Ausgaben', `${expense.toFixed(2)} €`],
-            ['Offline-Kassa', `${offlineCashEntries.length} Einträge`],
-            ['Events', events.length],
-            ['Check-ins heute', getTodayCheckins().length],
-            ['Event Einnahmen', `${getSelectedEventIncomeTotal().toFixed(2)} €`],
-            ['Event Ausgaben', `${getSelectedEventExpenseTotal().toFixed(2)} €`],
-            ['Event Ergebnis', `${getSelectedEventBalance().toFixed(2)} €`],
-          ].map(([label, value]) => (
-            <div key={label} style={cardStyle}>
-              <strong>{label}</strong>
-              <br />
-              {value}
-            </div>
-          ))}
-        </div>
+<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
 
-        <h3 style={headingStyle}>Einnahmen vs. Ausgaben</h3>
+  <div style={{ ...cardStyle, background: '#ecfdf5' }}>
+    <strong>Kassastand</strong>
+    <h2>{getCashBalance().toFixed(2)} €</h2>
+  </div>
 
-        <div style={{ ...cardStyle, overflowX: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 40, height: 220, minWidth: 260 }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ height: getBarHeight(income), width: 80, background: '#2e7d32' }} />
-              <strong>Einnahmen</strong>
-              <br />
-              {income.toFixed(2)} €
-            </div>
+  <div style={{ ...cardStyle, background: '#eff6ff' }}>
+    <strong>Einnahmen</strong>
+    <h2>{getIncomeTotal().toFixed(2)} €</h2>
+  </div>
 
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ height: getBarHeight(expense), width: 80, background: '#c62828' }} />
-              <strong>Ausgaben</strong>
-              <br />
-              {expense.toFixed(2)} €
-            </div>
-          </div>
-        </div>
+  <div style={{ ...cardStyle, background: '#fef2f2' }}>
+    <strong>Ausgaben</strong>
+    <h2>{getExpenseTotal().toFixed(2)} €</h2>
+  </div>
 
-        <h3 style={headingStyle}>Monatsdiagramm Einnahmen / Ausgaben</h3>
+  <div style={{ ...cardStyle, background: '#f0fdf4' }}>
+    <strong>Ergebnis</strong>
+    <h2>{(getIncomeTotal() - getExpenseTotal()).toFixed(2)} €</h2>
+  </div>
 
-        <div style={{ ...cardStyle, overflowX: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, minWidth: 850, height: 220 }}>
-            {monthlyData.map((item) => (
-              <div key={item.month} style={{ textAlign: 'center', width: 60 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 4, height: 150 }}>
-                  <div
-                    title={`Einnahmen ${item.month}: ${item.income.toFixed(2)} €`}
-                    style={{
-                      width: 22,
-                      height: getMonthlyBarHeight(item.income),
-                      background: '#2e7d32',
-                    }}
-                  />
-                  <div
-                    title={`Ausgaben ${item.month}: ${item.expense.toFixed(2)} €`}
-                    style={{
-                      width: 22,
-                      height: getMonthlyBarHeight(item.expense),
-                      background: '#c62828',
-                    }}
-                  />
-                </div>
-                <strong>{item.month}</strong>
-                <br />
-                <span style={{ fontSize: 11, color: '#2e7d32' }}>{item.income.toFixed(0)}€</span>
-                /
-                <span style={{ fontSize: 11, color: '#c62828' }}>{item.expense.toFixed(0)}€</span>
-              </div>
-            ))}
-          </div>
+</div>
 
-          <p>
-            <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>Grün = Einnahmen</span>
-            {' | '}
-            <span style={{ color: '#c62828', fontWeight: 'bold' }}>Rot = Ausgaben</span>
-          </p>
-        </div>
-      </section>
+<br />
+
+<div style={cardStyle}>
+  <strong>Offene Mitgliedsbeiträge</strong>
+  <br />
+  Anzahl offen: {members.filter(m => getFee(m.id)?.status !== 'bezahlt').length}
+  <br />
+  Summe offen: {
+    members
+      .filter(m => getFee(m.id)?.status !== 'bezahlt')
+      .reduce((sum, m) => sum + (getFee(m.id)?.amount || 0), 0)
+      .toFixed(2)
+  } €
+</div>
+
+<br />
+
+<div style={cardStyle}>
+  <strong>Nächstes Event</strong>
+  <br />
+  {events.length > 0 ? (
+    <>
+      {events[0].name}
+      <br />
+      {events[0].event_date}
+      <br />
+      Status: {events[0].status}
+    </>
+  ) : (
+    'Kein Event vorhanden'
+  )}
+</div>
+
+<br />
+
+<div style={cardStyle}>
+  <strong>Letzte Aktivitäten</strong>
+  <br />
+
+  <u>Kassa:</u>
+  {cashEntries.slice(0, 3).map(e => (
+    <div key={e.id}>
+      {e.entry_date} · {e.amount} €
+    </div>
+  ))}
+
+  <br />
+
+  <u>Dokumente:</u>
+  {documents.slice(0, 3).map(d => (
+    <div key={d.id}>
+      {d.title}
+    </div>
+  ))}
+</div>
+</section>
 
 {canManageCash() && (
       <section style={sectionStyle}>
