@@ -533,6 +533,133 @@ export default function App() {
     alert('Übertrag wurde erstellt.')
   }
 
+  function getUpcomingEvents(days = 14) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const maxDate = new Date(today)
+    maxDate.setDate(today.getDate() + days)
+
+    return events
+      .filter((event) => {
+        if (!event.event_date) return false
+        if (event.status === 'abgeschlossen') return false
+
+        const eventDate = new Date(event.event_date)
+        eventDate.setHours(0, 0, 0, 0)
+
+        return eventDate >= today && eventDate <= maxDate
+      })
+      .sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
+  }
+
+  function getOpenFeeMembers() {
+    return members.filter((member) => {
+      const fee = getFee(member.id)
+      return fee && !fee.paid && Number(fee.amount || 0) > 0
+    })
+  }
+
+  function getDashboardAlerts() {
+    const alerts = []
+    const openFeeMembers = getOpenFeeMembers()
+    const openFeeTotal = getOpenFeesTotal()
+    const currentBalance = getCashBalance()
+    const upcomingEvents = getUpcomingEvents(14)
+    const missingRequiredDocuments = []
+
+    if (!documents.some((document) => document.category === 'statuten')) {
+      missingRequiredDocuments.push('Statuten')
+    }
+
+    if (openFeeMembers.length > 0) {
+      alerts.push({
+        type: 'warning',
+        title: 'Offene Mitgliedsbeiträge',
+        message: `${openFeeMembers.length} Mitglieder haben offene Beiträge. Offene Summe: ${openFeeTotal.toFixed(2)} €.`,
+      })
+    }
+
+    if (currentBalance < 200) {
+      alerts.push({
+        type: 'danger',
+        title: 'Niedriger Kassastand',
+        message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} €. Bitte prüfen.`,
+      })
+    }
+
+    if (upcomingEvents.length > 0) {
+      alerts.push({
+        type: 'info',
+        title: 'Anstehende Events',
+        message: `${upcomingEvents.length} Event(s) in den nächsten 14 Tagen. Nächstes Event: ${upcomingEvents[0].name} am ${upcomingEvents[0].event_date}.`,
+      })
+    }
+
+    if (missingRequiredDocuments.length > 0) {
+      alerts.push({
+        type: 'warning',
+        title: 'Wichtige Dokumente fehlen',
+        message: `${missingRequiredDocuments.join(', ')} noch nicht im Dokumentenbereich hochgeladen.`,
+      })
+    }
+
+    if (!hasOpeningForYear(selectedCashYear) && selectedCashYear !== 'alle') {
+      const previousYear = Number(selectedCashYear) - 1
+      const hasPreviousYearEntries = cashEntries.some((entry) => getEntryYear(entry) === String(previousYear))
+
+      if (hasPreviousYearEntries) {
+        alerts.push({
+          type: 'info',
+          title: 'Jahresübertrag prüfen',
+          message: `Für ${selectedCashYear} ist noch kein Übertrag Vorjahr vorhanden. Du kannst ihn aus ${previousYear} automatisch erstellen.`,
+        })
+      }
+    }
+
+    if (alerts.length === 0) {
+      alerts.push({
+        type: 'success',
+        title: 'Alles im grünen Bereich',
+        message: 'Keine dringenden Hinweise vorhanden.',
+      })
+    }
+
+    return alerts
+  }
+
+  function getAlertStyle(type) {
+    if (type === 'danger') {
+      return {
+        background: colors.dangerBg,
+        borderColor: colors.red,
+        color: colors.dangerText,
+      }
+    }
+
+    if (type === 'warning') {
+      return {
+        background: '#fffbeb',
+        borderColor: '#f59e0b',
+        color: '#92400e',
+      }
+    }
+
+    if (type === 'info') {
+      return {
+        background: colors.infoBg,
+        borderColor: colors.blue,
+        color: colors.infoText,
+      }
+    }
+
+    return {
+      background: colors.successBg,
+      borderColor: colors.successText,
+      color: colors.successText,
+    }
+  }
+
 
   function getAmountByType(type) {
     if (type === 'vollmitglied') return 70
@@ -2578,6 +2705,28 @@ export default function App() {
 
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Dashboard</h2>
+
+<div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
+  <strong style={dashboardLabelStyle}>Smart Alerts</strong>
+
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 14 }}>
+    {getDashboardAlerts().map((alert, index) => (
+      <div
+        key={`${alert.title}-${index}`}
+        style={{
+          border: '2px solid',
+          borderRadius: 12,
+          padding: 14,
+          ...getAlertStyle(alert.type),
+        }}
+      >
+        <strong style={{ color: 'inherit' }}>{alert.title}</strong>
+        <br />
+        <span style={{ color: 'inherit' }}>{alert.message}</span>
+      </div>
+    ))}
+  </div>
+</div>
 
 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
 
