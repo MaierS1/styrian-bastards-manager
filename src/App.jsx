@@ -215,6 +215,10 @@ export default function App() {
   const [documentDescription, setDocumentDescription] = useState('')
   const [documentFile, setDocumentFile] = useState(null)
 
+  const [restoreData, setRestoreData] = useState(null)
+  const [restoreFileName, setRestoreFileName] = useState('')
+  const [restoreImporting, setRestoreImporting] = useState(false)
+
   useEffect(() => {
     checkUser()
 
@@ -1499,6 +1503,142 @@ export default function App() {
     )
   }
 
+  function handleRestoreFile(event) {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      setRestoreData(null)
+      setRestoreFileName('')
+      return
+    }
+
+    setRestoreFileName(file.name)
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result || '{}'))
+
+        if (!parsed || typeof parsed !== 'object') {
+          alert('Backup-Datei ist ungültig.')
+          return
+        }
+
+        setRestoreData(parsed)
+      } catch (error) {
+        alert(`Backup konnte nicht gelesen werden: ${error.message}`)
+      }
+    }
+
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  function getRestoreCount(key) {
+    return Array.isArray(restoreData?.[key]) ? restoreData[key].length : 0
+  }
+
+  function stripSystemFields(row) {
+    const { created_at, updated_at, ...cleaned } = row || {}
+    return cleaned
+  }
+
+  function deduplicateById(rows, existingRows) {
+    const existingIds = new Set((existingRows || []).map((row) => row.id).filter(Boolean))
+
+    return (rows || [])
+      .filter((row) => row && row.id && !existingIds.has(row.id))
+      .map(stripSystemFields)
+  }
+
+  async function restoreFullBackup() {
+    if (!isAdmin()) return alert('Nur Admins dürfen Backups wiederherstellen.')
+
+    if (!restoreData) {
+      alert('Bitte zuerst eine Backup-JSON-Datei auswählen.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Backup wiederherstellen?\n\n` +
+        `Mitglieder: ${getRestoreCount('members')}\n` +
+        `Beiträge: ${getRestoreCount('membership_fees')}\n` +
+        `Kassa: ${getRestoreCount('cash_entries')}\n` +
+        `Events: ${getRestoreCount('events')}\n` +
+        `Check-ins: ${getRestoreCount('event_checkins')}\n` +
+        `Dokumente: ${getRestoreCount('documents')}\n\n` +
+        `Es werden nur Datensätze mit noch nicht vorhandener ID importiert. Bestehende Daten werden nicht überschrieben.`
+    )
+
+    if (!confirmed) return
+
+    setRestoreImporting(true)
+
+    try {
+      const restoreSteps = [
+        {
+          table: 'members',
+          backupKey: 'members',
+          existing: members,
+        },
+        {
+          table: 'membership_fees',
+          backupKey: 'membership_fees',
+          existing: fees,
+        },
+        {
+          table: 'events',
+          backupKey: 'events',
+          existing: events,
+        },
+        {
+          table: 'cash_entries',
+          backupKey: 'cash_entries',
+          existing: cashEntries,
+        },
+        {
+          table: 'event_checkins',
+          backupKey: 'event_checkins',
+          existing: eventCheckins,
+        },
+        {
+          table: 'documents',
+          backupKey: 'documents',
+          existing: documents,
+        },
+      ]
+
+      const importedSummary = []
+
+      for (const step of restoreSteps) {
+        const rows = Array.isArray(restoreData[step.backupKey]) ? restoreData[step.backupKey] : []
+        const rowsToInsert = deduplicateById(rows, step.existing)
+
+        if (rowsToInsert.length === 0) {
+          importedSummary.push(`${step.table}: 0`)
+          continue
+        }
+
+        const { error } = await supabase.from(step.table).insert(rowsToInsert)
+
+        if (error) {
+          alert(`Fehler beim Restore in ${step.table}: ${error.message}`)
+          return
+        }
+
+        importedSummary.push(`${step.table}: ${rowsToInsert.length}`)
+      }
+
+      setRestoreData(null)
+      setRestoreFileName('')
+      await loadAll()
+
+      alert(`Backup wurde wiederhergestellt.\n\nImportiert:\n${importedSummary.join('\n')}`)
+    } finally {
+      setRestoreImporting(false)
+    }
+  }
+
   function exportMembersPdf() {
     const doc = new jsPDF()
     const filteredMembers = getFilteredMembers()
@@ -2735,6 +2875,65 @@ export default function App() {
           Hinweis: Das JSON-Backup enthält die Dokumenten-Metadaten, aber nicht die eigentlichen hochgeladenen Dateien.
           Diese liegen weiterhin im Supabase Storage.
         </p>
+
+        {isAdmin() && (
+          <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
+            <h3 style={headingStyle}>Backup wiederherstellen</h3>
+
+            <p style={mutedTextStyle}>
+              Wähle eine zuvor exportierte JSON-Backup-Datei aus. Die App importiert nur Datensätze,
+              deren ID noch nicht vorhanden ist. Bestehende Daten werden nicht überschrieben.
+            </p>
+
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={handleRestoreFile}
+              style={inputStyle}
+            />
+
+            {restoreFileName && (
+              <p style={mutedTextStyle}>
+                Datei: <strong>{restoreFileName}</strong>
+              </p>
+            )}
+
+            {restoreData && (
+              <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
+                <strong style={{ color: colors.infoText }}>Restore-Vorschau</strong>
+                <br />
+                Exportiert am: {restoreData.exported_at || '-'}
+                <br />
+                Mitglieder: {getRestoreCount('members')}
+                <br />
+                Beiträge: {getRestoreCount('membership_fees')}
+                <br />
+                Kassa-Einträge: {getRestoreCount('cash_entries')}
+                <br />
+                Events: {getRestoreCount('events')}
+                <br />
+                Check-ins: {getRestoreCount('event_checkins')}
+                <br />
+                Dokumente: {getRestoreCount('documents')}
+              </div>
+            )}
+
+            <button onClick={restoreFullBackup} style={buttonStyle} disabled={restoreImporting || !restoreData}>
+              {restoreImporting ? 'Restore läuft...' : 'Backup wiederherstellen'}
+            </button>
+
+            <button
+              onClick={() => {
+                setRestoreData(null)
+                setRestoreFileName('')
+              }}
+              style={secondaryButtonStyle}
+              disabled={restoreImporting}
+            >
+              Restore abbrechen
+            </button>
+          </div>
+        )}
       </section>
 
       <section style={sectionStyle}>
