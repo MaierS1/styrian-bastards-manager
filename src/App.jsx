@@ -93,6 +93,9 @@ export default function App() {
   const [cashEntries, setCashEntries] = useState([])
   const [eventCheckins, setEventCheckins] = useState([])
   const [events, setEvents] = useState([])
+  const [documents, setDocuments] = useState([])
+
+  const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
 
   const [eventName, setEventName] = useState('Heimspiel')
   const [selectedEventId, setSelectedEventId] = useState('')
@@ -147,6 +150,12 @@ export default function App() {
   const [cashbookRows, setCashbookRows] = useState([])
   const [cashbookFileName, setCashbookFileName] = useState('')
   const [cashbookImporting, setCashbookImporting] = useState(false)
+
+  const [documentTitle, setDocumentTitle] = useState('')
+  const [documentCategory, setDocumentCategory] = useState('sonstiges')
+  const [documentDate, setDocumentDate] = useState('')
+  const [documentDescription, setDocumentDescription] = useState('')
+  const [documentFile, setDocumentFile] = useState(null)
 
   useEffect(() => {
     checkUser()
@@ -223,7 +232,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadEventCheckins(), loadEvents()])
+    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadEventCheckins(), loadEvents(), loadDocuments()])
   }
 
   function getAppRole() {
@@ -277,6 +286,7 @@ export default function App() {
     setCashEntries([])
     setEventCheckins([])
     setEvents([])
+    setDocuments([])
     resetForm()
   }
 
@@ -340,9 +350,45 @@ export default function App() {
     }
   }
 
+  async function loadDocuments() {
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .order('document_date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (error) return alert(error.message)
+    setDocuments(data || [])
+  }
+
   function getFee(memberId) {
     return fees.find((fee) => fee.member_id === memberId)
   }
+
+  function getAvailableCashYears() {
+    const years = new Set()
+
+    getCashEntriesForSelectedYear().forEach((entry) => {
+      if (entry.entry_year) years.add(String(entry.entry_year))
+      else if (entry.entry_date) years.add(String(entry.entry_date).slice(0, 4))
+    })
+
+    if (years.size === 0) {
+      years.add(String(new Date().getFullYear()))
+    }
+
+    return Array.from(years).sort((a, b) => Number(b) - Number(a))
+  }
+
+  function getEntryYear(entry) {
+    return String(entry.entry_year || String(entry.entry_date || '').slice(0, 4))
+  }
+
+  function getCashEntriesForSelectedYear() {
+    if (selectedCashYear === 'alle') return cashEntries
+    return cashEntries.filter((entry) => getEntryYear(entry) === selectedCashYear)
+  }
+
 
   function getAmountByType(type) {
     if (type === 'vollmitglied') return 70
@@ -611,7 +657,7 @@ export default function App() {
 
 
   function getCashBalance() {
-    return cashEntries.reduce((sum, entry) => {
+    return getCashEntriesForSelectedYear().reduce((sum, entry) => {
       const amount = Number(entry.amount || 0)
 
       if (entry.is_opening) {
@@ -765,13 +811,13 @@ export default function App() {
   }
 
   function getIncomeTotal() {
-    return cashEntries
+    return getCashEntriesForSelectedYear()
       .filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
   function getExpenseTotal() {
-    return cashEntries
+    return getCashEntriesForSelectedYear()
       .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
@@ -881,7 +927,7 @@ export default function App() {
     return months.map((month, index) => {
       const monthNumber = index + 1
 
-      const income = cashEntries
+      const income = getCashEntriesForSelectedYear()
         .filter((entry) => {
           if (!entry.entry_date) return false
           const date = new Date(entry.entry_date)
@@ -889,7 +935,7 @@ export default function App() {
         })
         .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
 
-      const expense = cashEntries
+      const expense = getCashEntriesForSelectedYear()
         .filter((entry) => {
           if (!entry.entry_date) return false
           const date = new Date(entry.entry_date)
@@ -942,7 +988,7 @@ export default function App() {
   }
 
   function getFilteredCashEntries() {
-    return cashEntries.filter((entry) => {
+    return getCashEntriesForSelectedYear().filter((entry) => {
       const search = cashSearch.toLowerCase()
 
       const matchesSearch =
@@ -1599,6 +1645,7 @@ export default function App() {
         receipt_url: null,
         event_id: cashEventId || null,
         payment_method: option.payment_method || 'bar',
+        entry_year: Number(String(date).slice(0, 4)),
         is_opening: isOpening,
       })
     })
@@ -1873,6 +1920,87 @@ export default function App() {
 
     await loadCashEntries()
     alert('Kassa-Eintrag wurde gelöscht.')
+  }
+
+  function resetDocumentForm() {
+    setDocumentTitle('')
+    setDocumentCategory('sonstiges')
+    setDocumentDate('')
+    setDocumentDescription('')
+    setDocumentFile(null)
+  }
+
+  async function uploadDocument() {
+    if (!canManageMembers() && !isAdmin()) {
+      alert('Keine Berechtigung für Dokumenten-Upload.')
+      return
+    }
+
+    if (!documentTitle || !documentFile) {
+      alert('Titel und Datei sind Pflicht.')
+      return
+    }
+
+    const fileExt = documentFile.name.split('.').pop()
+    const safeName = documentFile.name.replace(/[^a-zA-Z0-9_.-]/g, '-')
+    const filePath = `${Date.now()}-${Math.random().toString(36).substring(2)}-${safeName}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(filePath, documentFile)
+
+    if (uploadError) return alert(uploadError.message)
+
+    const { error } = await supabase.from('documents').insert({
+      title: documentTitle,
+      category: documentCategory,
+      document_date: documentDate || null,
+      description: documentDescription || null,
+      file_path: filePath,
+      file_name: documentFile.name,
+      mime_type: documentFile.type || null,
+    })
+
+    if (error) return alert(error.message)
+
+    resetDocumentForm()
+    await loadDocuments()
+    alert('Dokument wurde hochgeladen.')
+  }
+
+  async function openDocument(path) {
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(path, 120)
+
+    if (error) return alert(error.message)
+    window.open(data.signedUrl, '_blank')
+  }
+
+  async function deleteDocument(document) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Dokumente löschen.')
+
+    const confirmed = window.confirm(
+      `Dokument wirklich löschen?\n\n${document.title || ''}\n\nDas kann nicht rückgängig gemacht werden.`
+    )
+
+    if (!confirmed) return
+
+    const { error: storageError } = await supabase.storage
+      .from('documents')
+      .remove([document.file_path])
+
+    if (storageError) return alert(storageError.message)
+
+    const { error } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', document.id)
+
+    if (error) return alert(error.message)
+
+    await loadDocuments()
+    alert('Dokument wurde gelöscht.')
   }
 
   async function openReceipt(path) {
@@ -2234,6 +2362,17 @@ export default function App() {
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Kassa</h2>
 
+        <h3 style={headingStyle}>Kassajahr</h3>
+
+        <select value={selectedCashYear} onChange={(e) => setSelectedCashYear(e.target.value)} style={inputStyle}>
+          <option value="alle">Alle Jahre</option>
+          {getAvailableCashYears().map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
+
         <p>
           Verbindung:{' '}
           <strong style={{ color: isOnline ? '#2e7d32' : '#c62828' }}>
@@ -2480,7 +2619,7 @@ export default function App() {
         </button>
 
         <p>
-          Angezeigt: <strong>{filteredCashEntries.length}</strong> von {cashEntries.length} Kassa-Einträgen
+          Angezeigt: <strong>{filteredCashEntries.length}</strong> von {getCashEntriesForSelectedYear().length} Kassa-Einträgen
         </p>
 
         <h3 style={{ marginTop: 25 }}>Kassa-Einträge</h3>
@@ -2525,6 +2664,93 @@ export default function App() {
         ))}
       </section>
       )}
+
+      <section style={sectionStyle}>
+        <h2 style={headingStyle}>Dokumente</h2>
+
+        {(canManageMembers() || isAdmin()) && (
+          <>
+            <h3 style={headingStyle}>Dokument hochladen</h3>
+
+            <input
+              placeholder="Titel, z.B. Statuten 2026"
+              value={documentTitle}
+              onChange={(e) => setDocumentTitle(e.target.value)}
+              style={inputStyle}
+            />
+
+            <select value={documentCategory} onChange={(e) => setDocumentCategory(e.target.value)} style={inputStyle}>
+              <option value="statuten">Statuten</option>
+              <option value="sitzung">Sitzung / Protokoll</option>
+              <option value="bescheid">Bescheid</option>
+              <option value="rechnung">Rechnung</option>
+              <option value="vertrag">Vertrag</option>
+              <option value="sonstiges">Sonstiges</option>
+            </select>
+
+            <input
+              type="date"
+              value={documentDate}
+              onChange={(e) => setDocumentDate(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              placeholder="Beschreibung"
+              value={documentDescription}
+              onChange={(e) => setDocumentDescription(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              type="file"
+              accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.csv"
+              onChange={(e) => setDocumentFile(e.target.files[0])}
+              style={inputStyle}
+            />
+
+            <button onClick={uploadDocument} style={buttonStyle}>
+              Dokument hochladen
+            </button>
+
+            <button onClick={resetDocumentForm} style={secondaryButtonStyle}>
+              Formular leeren
+            </button>
+          </>
+        )}
+
+        <h3 style={headingStyle}>Dokumentenliste</h3>
+
+        {documents.length === 0 && <p style={mutedTextStyle}>Noch keine Dokumente vorhanden.</p>}
+
+        {documents.map((document) => (
+          <div key={document.id} style={cardStyle}>
+            <strong>{document.title}</strong>
+            <br />
+            Kategorie: {document.category}
+            <br />
+            Datum: {document.document_date || '-'}
+            <br />
+            Datei: {document.file_name || document.file_path}
+            <br />
+            Beschreibung: {document.description || '-'}
+            <br />
+
+            <button onClick={() => openDocument(document.file_path)} style={buttonStyle}>
+              Öffnen / Download
+            </button>
+
+            {isAdmin() && (
+              <button
+                onClick={() => deleteDocument(document)}
+                style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
+              >
+                Dokument löschen
+              </button>
+            )}
+          </div>
+        ))}
+      </section>
 
       {canManageMembers() && (
       <section style={sectionStyle}>
