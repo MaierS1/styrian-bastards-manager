@@ -1329,6 +1329,176 @@ export default function App() {
     })
   }
 
+  function downloadTextFile(filename, content, mimeType = 'text/plain;charset=utf-8') {
+    const blob = new Blob([content], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  function csvEscape(value) {
+    const text = String(value ?? '')
+    return `"${text.replace(/"/g, '""')}"`
+  }
+
+  function rowsToCsv(headers, rows) {
+    const headerLine = headers.map(csvEscape).join(';')
+    const bodyLines = rows.map((row) => headers.map((header) => csvEscape(row[header])).join(';'))
+
+    return [headerLine, ...bodyLines].join('\n')
+  }
+
+  function exportMembersCsv() {
+    const rows = members.map((member) => {
+      const fee = getFee(member.id)
+
+      return {
+        Mitgliedsnummer: member.member_number || '',
+        Vorname: member.first_name || '',
+        Nachname: member.last_name || '',
+        Email: member.email || '',
+        Telefon: member.phone || '',
+        Mitgliedsart: member.member_type || '',
+        Vereinsfunktion: getRoleLabel(member.role || 'mitglied'),
+        AppRecht: getAppRoleLabel(member.app_role || 'readonly'),
+        Status: member.status || '',
+        Strasse: member.street || '',
+        PLZ: member.postal_code || '',
+        Ort: member.city || '',
+        Geburtsdatum: member.birthdate || '',
+        Kleidergroesse: member.clothing_size || '',
+        Beitrag2026: fee ? Number(fee.amount || 0).toFixed(2) : '',
+        BeitragBezahlt: fee ? (fee.paid ? 'ja' : 'nein') : '',
+        Zahlungsdatum: fee?.paid_at || '',
+        Zahlungsart: fee?.payment_method || '',
+      }
+    })
+
+    const headers = [
+      'Mitgliedsnummer',
+      'Vorname',
+      'Nachname',
+      'Email',
+      'Telefon',
+      'Mitgliedsart',
+      'Vereinsfunktion',
+      'AppRecht',
+      'Status',
+      'Strasse',
+      'PLZ',
+      'Ort',
+      'Geburtsdatum',
+      'Kleidergroesse',
+      'Beitrag2026',
+      'BeitragBezahlt',
+      'Zahlungsdatum',
+      'Zahlungsart',
+    ]
+
+    downloadTextFile('styrian-bastards-mitglieder.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+  }
+
+  function exportCashCsv() {
+    const rows = getFilteredCashEntries().map((entry) => ({
+      Datum: entry.entry_date || '',
+      Jahr: getEntryYear(entry),
+      Typ: entry.type || '',
+      Zahlungsart: getPaymentMethodLabel(getPaymentMethod(entry)),
+      Kategorie: entry.is_opening ? 'Übertrag' : entry.category || '',
+      Event: getEventNameById(entry.event_id) || '',
+      Betrag: Number(entry.amount || 0).toFixed(2),
+      Beschreibung: entry.description || '',
+      Beleg: entry.receipt_url || '',
+      Uebertrag: entry.is_opening ? 'ja' : 'nein',
+    }))
+
+    const headers = [
+      'Datum',
+      'Jahr',
+      'Typ',
+      'Zahlungsart',
+      'Kategorie',
+      'Event',
+      'Betrag',
+      'Beschreibung',
+      'Beleg',
+      'Uebertrag',
+    ]
+
+    downloadTextFile(`styrian-bastards-kassabuch-${selectedCashYear}.csv`, rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+  }
+
+  function exportEventsCsv() {
+    const rows = events.map((event) => ({
+      Name: event.name || '',
+      Datum: event.event_date || '',
+      Ort: event.location || '',
+      Status: event.status || '',
+      Notizen: event.notes || '',
+      Einnahmen: getEventIncomeTotal(event.id).toFixed(2),
+      Ausgaben: getEventExpenseTotal(event.id).toFixed(2),
+      Ergebnis: getEventBalance(event.id).toFixed(2),
+    }))
+
+    const headers = ['Name', 'Datum', 'Ort', 'Status', 'Notizen', 'Einnahmen', 'Ausgaben', 'Ergebnis']
+
+    downloadTextFile('styrian-bastards-events.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+  }
+
+  function exportCheckinsCsv() {
+    const rows = eventCheckins.map((checkin) => ({
+      Event: checkin.event_name || '',
+      Mitglied: getMemberName(checkin.member_id),
+      Datum: checkin.checkin_date || '',
+      Uhrzeit: checkin.checkin_time ? new Date(checkin.checkin_time).toLocaleTimeString('de-AT') : '',
+    }))
+
+    const headers = ['Event', 'Mitglied', 'Datum', 'Uhrzeit']
+
+    downloadTextFile('styrian-bastards-checkins.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+  }
+
+  function exportDocumentsCsv() {
+    const rows = documents.map((document) => ({
+      Titel: document.title || '',
+      Kategorie: document.category || '',
+      Datum: document.document_date || '',
+      Beschreibung: document.description || '',
+      Datei: document.file_name || document.file_path || '',
+      Pfad: document.file_path || '',
+      MimeType: document.mime_type || '',
+    }))
+
+    const headers = ['Titel', 'Kategorie', 'Datum', 'Beschreibung', 'Datei', 'Pfad', 'MimeType']
+
+    downloadTextFile('styrian-bastards-dokumente.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+  }
+
+  function exportFullBackupJson() {
+    const backup = {
+      exported_at: new Date().toISOString(),
+      selected_cash_year: selectedCashYear,
+      members,
+      membership_fees: fees,
+      cash_entries: cashEntries,
+      events,
+      event_checkins: eventCheckins,
+      documents,
+    }
+
+    downloadTextFile(
+      `styrian-bastards-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      JSON.stringify(backup, null, 2),
+      'application/json;charset=utf-8'
+    )
+  }
+
   function exportMembersPdf() {
     const doc = new jsPDF()
     const filteredMembers = getFilteredMembers()
