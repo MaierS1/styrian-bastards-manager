@@ -425,7 +425,7 @@ export default function App() {
   function getAvailableCashYears() {
     const years = new Set()
 
-    getCashEntriesForSelectedYear().forEach((entry) => {
+    cashEntries.forEach((entry) => {
       if (entry.entry_year) years.add(String(entry.entry_year))
       else if (entry.entry_date) years.add(String(entry.entry_date).slice(0, 4))
     })
@@ -2696,6 +2696,46 @@ export default function App() {
           Anwesenheitsliste PDF
         </button>
       </div>
+
+      <section style={sectionStyle}>
+        <h2 style={headingStyle}>Export & Backup</h2>
+
+        <p style={mutedTextStyle}>
+          Hier kannst du deine Vereinsdaten lokal sichern. CSV-Dateien eignen sich für Excel/LibreOffice,
+          das JSON-Backup enthält alle Hauptdaten als Sicherheitskopie.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+          <button onClick={exportMembersCsv} style={secondaryButtonStyle}>
+            Mitglieder CSV
+          </button>
+
+          <button onClick={exportCashCsv} style={secondaryButtonStyle}>
+            Kassabuch CSV
+          </button>
+
+          <button onClick={exportEventsCsv} style={secondaryButtonStyle}>
+            Events CSV
+          </button>
+
+          <button onClick={exportCheckinsCsv} style={secondaryButtonStyle}>
+            Check-ins CSV
+          </button>
+
+          <button onClick={exportDocumentsCsv} style={secondaryButtonStyle}>
+            Dokumentenliste CSV
+          </button>
+
+          <button onClick={exportFullBackupJson} style={buttonStyle}>
+            Komplett-Backup JSON
+          </button>
+        </div>
+
+        <p style={mutedTextStyle}>
+          Hinweis: Das JSON-Backup enthält die Dokumenten-Metadaten, aber nicht die eigentlichen hochgeladenen Dateien.
+          Diese liegen weiterhin im Supabase Storage.
+        </p>
+      </section>
 
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Event-Verwaltung</h2>
