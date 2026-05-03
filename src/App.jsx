@@ -2179,7 +2179,7 @@ export default function App() {
       </p>
 
       {!currentMember && (
-        <div style={{ ...cardStyle, background: '#fef2f2', borderColor: '#b91c1c' }}>
+        <div style={{ ...cardStyle, background: '#fef2f2', color: '#991b1b', borderColor: '#b91c1c' }}>
           <strong>Kein Mitglied mit diesem Login verknüpft.</strong>
           <br />
           Bitte in Supabase beim passenden Mitglied die Spalte auth_user_id mit deiner Supabase User ID befüllen und app_role setzen.
@@ -2289,7 +2289,7 @@ export default function App() {
         </p>
 
         {selectedEventId && (
-          <div style={{ ...cardStyle, background: '#ecfdf5' }}>
+          <div style={{ ...cardStyle, background: '#ecfdf5', color: '#065f46' }}>
             <strong>Finanzen für aktives Event</strong>
             <br />
             Einnahmen: {getSelectedEventIncomeTotal().toFixed(2)} €
@@ -2396,24 +2396,24 @@ export default function App() {
 
 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
 
-  <div style={{ ...cardStyle, background: '#ecfdf5' }}>
+  <div style={{ ...cardStyle, background: '#ecfdf5', color: '#065f46' }}>
     <strong>Kassastand</strong>
-    <h2>{getCashBalance().toFixed(2)} €</h2>
+    <h2 style={{ fontSize: '28px', marginTop: 10 }}>{getCashBalance().toFixed(2)} €</h2>
   </div>
 
-  <div style={{ ...cardStyle, background: '#eff6ff' }}>
+  <div style={{ ...cardStyle, background: '#eff6ff', color: '#1e3a8a' }}>
     <strong>Einnahmen</strong>
-    <h2>{getIncomeTotal().toFixed(2)} €</h2>
+    <h2 style={{ fontSize: '28px', marginTop: 10 }}>{getIncomeTotal().toFixed(2)} €</h2>
   </div>
 
-  <div style={{ ...cardStyle, background: '#fef2f2' }}>
+  <div style={{ ...cardStyle, background: '#fef2f2', color: '#991b1b' }}>
     <strong>Ausgaben</strong>
-    <h2>{getExpenseTotal().toFixed(2)} €</h2>
+    <h2 style={{ fontSize: '28px', marginTop: 10 }}>{getExpenseTotal().toFixed(2)} €</h2>
   </div>
 
-  <div style={{ ...cardStyle, background: '#f0fdf4' }}>
+  <div style={{ ...cardStyle, background: '#f0fdf4', color: '#14532d' }}>
     <strong>Ergebnis</strong>
-    <h2>{(getIncomeTotal() - getExpenseTotal()).toFixed(2)} €</h2>
+    <h2 style={{ fontSize: '28px', marginTop: 10 }}>{(getIncomeTotal() - getExpenseTotal()).toFixed(2)} €</h2>
   </div>
 
 </div>
