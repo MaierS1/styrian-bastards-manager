@@ -99,6 +99,7 @@ export default function App() {
 
   const [eventName, setEventName] = useState('Heimspiel')
   const [selectedEventId, setSelectedEventId] = useState('')
+  const [editingEventId, setEditingEventId] = useState(null)
   const [newEventName, setNewEventName] = useState('')
   const [newEventDate, setNewEventDate] = useState(new Date().toISOString().slice(0, 10))
   const [newEventLocation, setNewEventLocation] = useState('')
@@ -1279,6 +1280,26 @@ export default function App() {
     alert('Offline-Einträge wurden synchronisiert.')
   }
 
+  function resetEventForm() {
+    setEditingEventId(null)
+    setNewEventName('')
+    setNewEventDate(getTodayDate())
+    setNewEventLocation('')
+    setNewEventNotes('')
+  }
+
+  function editEvent(event) {
+    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
+
+    setEditingEventId(event.id)
+    setNewEventName(event.name || '')
+    setNewEventDate(event.event_date || getTodayDate())
+    setNewEventLocation(event.location || '')
+    setNewEventNotes(event.notes || '')
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   async function createEvent() {
     if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
 
@@ -1301,11 +1322,7 @@ export default function App() {
 
     if (error) return alert(error.message)
 
-    setNewEventName('')
-    setNewEventDate(getTodayDate())
-    setNewEventLocation('')
-    setNewEventNotes('')
-
+    resetEventForm()
     await loadEvents()
 
     if (data) {
@@ -1315,6 +1332,40 @@ export default function App() {
     }
 
     alert('Event wurde angelegt.')
+  }
+
+  async function updateEvent() {
+    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
+
+    if (!editingEventId) {
+      alert('Kein Event zum Bearbeiten ausgewählt.')
+      return
+    }
+
+    if (!newEventName.trim()) {
+      alert('Bitte einen Eventnamen eingeben.')
+      return
+    }
+
+    const { error } = await supabase
+      .from('events')
+      .update({
+        name: newEventName.trim(),
+        event_date: newEventDate || getTodayDate(),
+        location: newEventLocation.trim() || null,
+        notes: newEventNotes.trim() || null,
+      })
+      .eq('id', editingEventId)
+
+    if (error) return alert(error.message)
+
+    if (selectedEventId === editingEventId) {
+      setEventName(newEventName.trim())
+    }
+
+    resetEventForm()
+    await loadEvents()
+    alert('Event wurde aktualisiert.')
   }
 
   async function updateEventStatus(eventId, status) {
@@ -1328,6 +1379,52 @@ export default function App() {
     if (error) return alert(error.message)
 
     loadEvents()
+  }
+
+  async function deleteEvent(event) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Events löschen.')
+
+    const hasCashEntries = cashEntries.some((entry) => entry.event_id === event.id)
+    const hasCheckins = eventCheckins.some((checkin) => checkin.event_name === event.name)
+
+    const warning = [
+      `Event wirklich löschen?`,
+      ``,
+      event.name || '',
+      ``,
+      hasCashEntries ? 'Achtung: Es gibt Kassa-Einträge zu diesem Event. Diese bleiben bestehen, verlieren aber die Event-Zuordnung.' : '',
+      hasCheckins ? 'Achtung: Es gibt Check-ins zu diesem Event. Diese bleiben in der Datenbank, sind aber nicht mehr in der Eventliste sichtbar.' : '',
+      ``,
+      'Das kann nicht rückgängig gemacht werden.',
+    ]
+      .filter((line) => line !== '')
+      .join('\n')
+
+    const confirmed = window.confirm(warning)
+
+    if (!confirmed) return
+
+    const { error } = await supabase
+      .from('events')
+      .delete()
+      .eq('id', event.id)
+
+    if (error) return alert(error.message)
+
+    if (selectedEventId === event.id) {
+      setSelectedEventId('')
+      setCashEventId('')
+      setEventName('')
+    }
+
+    if (editingEventId === event.id) {
+      resetEventForm()
+    }
+
+    await loadEvents()
+    await loadCashEntries()
+
+    alert('Event wurde gelöscht.')
   }
 
   async function checkInMember(member) {
@@ -2123,7 +2220,7 @@ export default function App() {
       <section style={sectionStyle}>
         <h2 style={headingStyle}>Event-Verwaltung</h2>
 
-        <h3 style={headingStyle}>Neues Event anlegen</h3>
+        <h3 style={headingStyle}>{editingEventId ? 'Event bearbeiten' : 'Neues Event anlegen'}</h3>
 
         <input
           placeholder="Eventname, z.B. Cornhole Turnier 2026"
@@ -2153,9 +2250,20 @@ export default function App() {
           style={inputStyle}
         />
 
-        <button onClick={createEvent} style={buttonStyle}>
-          Event anlegen
-        </button>
+        {editingEventId ? (
+          <>
+            <button onClick={updateEvent} style={buttonStyle}>
+              Änderungen speichern
+            </button>
+            <button onClick={resetEventForm} style={secondaryButtonStyle}>
+              Bearbeiten abbrechen
+            </button>
+          </>
+        ) : (
+          <button onClick={createEvent} style={buttonStyle}>
+            Event anlegen
+          </button>
+        )}
 
         <h3 style={headingStyle}>Event auswählen</h3>
 
@@ -2225,6 +2333,19 @@ export default function App() {
             <button onClick={() => exportEventFinancePdf(event)} style={buttonStyle}>
               Finanzbericht PDF
             </button>
+
+            <button onClick={() => editEvent(event)} style={secondaryButtonStyle}>
+              Event bearbeiten
+            </button>
+
+            {isAdmin() && (
+              <button
+                onClick={() => deleteEvent(event)}
+                style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
+              >
+                Event löschen
+              </button>
+            )}
           </div>
         ))}
       </section>
