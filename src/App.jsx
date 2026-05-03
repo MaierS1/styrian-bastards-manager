@@ -146,6 +146,7 @@ export default function App() {
   const [members, setMembers] = useState([])
   const [fees, setFees] = useState([])
   const [cashEntries, setCashEntries] = useState([])
+  const [cashMonthClosings, setCashMonthClosings] = useState([])
   const [eventCheckins, setEventCheckins] = useState([])
   const [events, setEvents] = useState([])
   const [documents, setDocuments] = useState([])
@@ -294,7 +295,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadEventCheckins(), loadEvents(), loadDocuments()])
+    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadEventCheckins(), loadEvents(), loadDocuments()])
   }
 
   function getAppRole() {
@@ -346,6 +347,7 @@ export default function App() {
     setMembers([])
     setFees([])
     setCashEntries([])
+    setCashMonthClosings([])
     setEventCheckins([])
     setEvents([])
     setDocuments([])
@@ -381,6 +383,17 @@ export default function App() {
 
     if (error) return alert(error.message)
     setCashEntries(data || [])
+  }
+
+  async function loadCashMonthClosings() {
+    const { data, error } = await supabase
+      .from('cash_month_closings')
+      .select('*')
+      .order('year', { ascending: false })
+      .order('month', { ascending: false })
+
+    if (error) return alert(error.message)
+    setCashMonthClosings(data || [])
   }
 
   async function loadEventCheckins() {
@@ -986,6 +999,81 @@ export default function App() {
 
     return `${names[Number(month) - 1] || month} ${year}`
   }
+
+  function getEntryMonth(entry) {
+    return Number(String(entry.entry_date || '').slice(5, 7))
+  }
+
+  function isCashMonthClosed(year, month) {
+    return cashMonthClosings.some(
+      (closing) => Number(closing.year) === Number(year) && Number(closing.month) === Number(month)
+    )
+  }
+
+  function isCashEntryMonthClosed(entry) {
+    const year = Number(getEntryYear(entry))
+    const month = getEntryMonth(entry)
+
+    if (!year || !month) return false
+
+    return isCashMonthClosed(year, month)
+  }
+
+  async function closeCashMonth(year, month) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Monate abschließen.')
+
+    if (!year || !month) {
+      alert('Jahr und Monat fehlen.')
+      return
+    }
+
+    if (isCashMonthClosed(year, month)) {
+      alert('Dieser Monat ist bereits abgeschlossen.')
+      return
+    }
+
+    const note = window.prompt(`Notiz zum Monatsabschluss ${String(month).padStart(2, '0')}/${year}:`, '')
+
+    const confirmed = window.confirm(
+      `Monat wirklich abschließen?\n\n${String(month).padStart(2, '0')}/${year}\n\nDanach können Einträge in diesem Monat nicht mehr bearbeitet oder storniert werden.`
+    )
+
+    if (!confirmed) return
+
+    const { error } = await supabase.from('cash_month_closings').insert({
+      year: Number(year),
+      month: Number(month),
+      closed_by: user?.id || null,
+      note: note || null,
+    })
+
+    if (error) return alert(error.message)
+
+    await loadCashMonthClosings()
+    alert('Monat wurde abgeschlossen.')
+  }
+
+  async function reopenCashMonth(year, month) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Monatsabschlüsse aufheben.')
+
+    const confirmed = window.confirm(
+      `Monatsabschluss wirklich aufheben?\n\n${String(month).padStart(2, '0')}/${year}`
+    )
+
+    if (!confirmed) return
+
+    const { error } = await supabase
+      .from('cash_month_closings')
+      .delete()
+      .eq('year', Number(year))
+      .eq('month', Number(month))
+
+    if (error) return alert(error.message)
+
+    await loadCashMonthClosings()
+    alert('Monatsabschluss wurde aufgehoben.')
+  }
+
 
   function getCashbookDetailedSummary() {
     const grouped = {}
@@ -2783,6 +2871,17 @@ export default function App() {
     setCashbookImporting(true)
 
     try {
+      const blockedRows = cashbookRows.filter((row) => {
+        const year = Number(row.entry_year || String(row.entry_date || '').slice(0, 4))
+        const month = Number(String(row.entry_date || '').slice(5, 7))
+        return isCashMonthClosed(year, month)
+      })
+
+      if (blockedRows.length > 0) {
+        alert('Import abgebrochen: Mindestens ein Eintrag liegt in einem bereits abgeschlossenen Monat.')
+        return
+      }
+
       const yearCounters = {}
 
       cashEntries.forEach((entry) => {
@@ -2828,6 +2927,7 @@ export default function App() {
   function editCashEntry(entry) {
     if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
     if (entry.is_cancelled) return alert('Stornierte Einträge können nicht bearbeitet werden.')
+    if (isCashEntryMonthClosed(entry)) return alert('Dieser Monat ist abgeschlossen. Der Eintrag kann nicht bearbeitet werden.')
 
     setEditingCashId(entry.id)
     setCashType(entry.type || 'einnahme')
@@ -2874,8 +2974,23 @@ export default function App() {
   async function updateCashEntry() {
     if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
+    const editingEntry = cashEntries.find((entry) => entry.id === editingCashId)
+
+    if (editingEntry && isCashEntryMonthClosed(editingEntry)) {
+      alert('Dieser Monat ist abgeschlossen. Der Eintrag kann nicht bearbeitet werden.')
+      return
+    }
+
     if (!editingCashId) {
       alert('Kein Kassa-Eintrag zum Bearbeiten ausgewählt.')
+      return
+    }
+
+    const todayYear = Number(new Date().getFullYear())
+    const todayMonth = Number(new Date().toISOString().slice(5, 7))
+
+    if (isCashMonthClosed(todayYear, todayMonth)) {
+      alert('Der aktuelle Monat ist abgeschlossen. Es können keine neuen Kassa-Einträge angelegt werden.')
       return
     }
 
@@ -2971,6 +3086,11 @@ export default function App() {
 
   async function deleteCashEntry(entry) {
     if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+
+    if (isCashEntryMonthClosed(entry)) {
+      alert('Dieser Monat ist abgeschlossen. Der Eintrag kann nicht storniert werden.')
+      return
+    }
 
     if (entry.is_cancelled) {
       alert('Dieser Kassa-Eintrag ist bereits storniert.')
@@ -3762,6 +3882,28 @@ export default function App() {
           </button>
         </div>
 
+        <h3 style={headingStyle}>Monatsabschlüsse</h3>
+
+        <div style={cardStyle}>
+          {cashMonthClosings.length === 0 && <p style={mutedTextStyle}>Noch keine Monate abgeschlossen.</p>}
+
+          {cashMonthClosings.map((closing) => (
+            <div key={closing.id} style={{ marginBottom: 10 }}>
+              <strong>
+                {String(closing.month).padStart(2, '0')}/{closing.year}
+              </strong>
+              {' '}abgeschlossen am{' '}
+              {closing.closed_at ? new Date(closing.closed_at).toLocaleString('de-AT') : '-'}
+              {closing.note && (
+                <>
+                  <br />
+                  Notiz: {closing.note}
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
         <p>
           Verbindung:{' '}
           <strong style={{ color: isOnline ? '#2e7d32' : '#c62828' }}>
@@ -3887,6 +4029,7 @@ export default function App() {
                   'Ausgaben ges. inkl. Übertrag',
                   'Differenz wie Excel',
                   'Saldo laufend',
+                  'Abschluss',
                 ].map((header) => (
                   <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
                     {header}
@@ -3910,6 +4053,39 @@ export default function App() {
                     <strong>{month.differenceWithOpening.toFixed(2)} €</strong>
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.runningBalance.toFixed(2)} €</strong></td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                    {isCashMonthClosed(Number(month.monthKey.slice(0, 4)), Number(month.monthKey.slice(5, 7))) ? (
+                      <>
+                        <strong style={{ color: colors.successText }}>Abgeschlossen</strong>
+                        {isAdmin() && (
+                          <>
+                            <br />
+                            <button
+                              onClick={() => reopenCashMonth(Number(month.monthKey.slice(0, 4)), Number(month.monthKey.slice(5, 7)))}
+                              style={secondaryButtonStyle}
+                            >
+                              Öffnen
+                            </button>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <strong style={{ color: colors.red }}>Offen</strong>
+                        {isAdmin() && (
+                          <>
+                            <br />
+                            <button
+                              onClick={() => closeCashMonth(Number(month.monthKey.slice(0, 4)), Number(month.monthKey.slice(5, 7)))}
+                              style={buttonStyle}
+                            >
+                              Abschließen
+                            </button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -4039,6 +4215,11 @@ export default function App() {
             </strong>
             <br />
             Belegnr.: {entry.receipt_number || '-'} · {entry.is_opening ? 'Übertrag' : entry.category} · {entry.entry_date} · {getPaymentMethodLabel(getPaymentMethod(entry))}
+            {isCashEntryMonthClosed(entry) && (
+              <>
+                {' '}· <strong style={{ color: colors.successText }}>Monat abgeschlossen</strong>
+              </>
+            )}
             <br />
             {entry.description}
             {entry.is_cancelled && (
@@ -4060,16 +4241,20 @@ export default function App() {
             )}
 
             <br />
-            <button onClick={() => editCashEntry(entry)} style={secondaryButtonStyle}>
-              Kassa-Eintrag bearbeiten
-            </button>
+            {!isCashEntryMonthClosed(entry) && (
+              <>
+                <button onClick={() => editCashEntry(entry)} style={secondaryButtonStyle}>
+                  Kassa-Eintrag bearbeiten
+                </button>
 
-            <button
-              onClick={() => deleteCashEntry(entry)}
-              style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
-            >
-              Kassa-Eintrag stornieren
-            </button>
+                <button
+                  onClick={() => deleteCashEntry(entry)}
+                  style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
+                >
+                  Kassa-Eintrag stornieren
+                </button>
+              </>
+            )}
           </div>
         ))}
       </section>
