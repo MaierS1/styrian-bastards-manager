@@ -248,6 +248,7 @@ export default function App() {
   const [restoreImporting, setRestoreImporting] = useState(false)
 
   const [activePage, setActivePage] = useState('dashboard')
+  const [invitingMemberId, setInvitingMemberId] = useState(null)
 
   useEffect(() => {
     checkUser()
@@ -2199,6 +2200,72 @@ export default function App() {
     const headers = ['Datum', 'Benutzer', 'Aktion', 'Tabelle', 'Datensatz', 'Vorher', 'Nachher']
 
     downloadTextFile('styrian-bastards-audit-log.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+  }
+
+  async function inviteMemberUser(member) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Benutzer einladen.')
+
+    if (!member?.id) {
+      alert('Mitglied fehlt.')
+      return
+    }
+
+    const email = String(member.email || '').trim()
+
+    if (!email) {
+      alert('Dieses Mitglied hat keine E-Mail-Adresse.')
+      return
+    }
+
+    const selectedRole = window.prompt(
+      `App-Recht für ${member.first_name || ''} ${member.last_name || ''}:\n\nadmin\ncashier\nmembers\ncheckin\nreadonly`,
+      member.app_role || 'readonly'
+    )
+
+    if (!selectedRole) return
+
+    const allowedRoles = ['admin', 'cashier', 'members', 'checkin', 'readonly']
+
+    if (!allowedRoles.includes(selectedRole)) {
+      alert('Ungültige Rolle.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Benutzer einladen?\n\n${member.first_name || ''} ${member.last_name || ''}\n${email}\nRolle: ${getAppRoleLabel(selectedRole)}`
+    )
+
+    if (!confirmed) return
+
+    setInvitingMemberId(member.id)
+
+    try {
+      const { data, error } = await supabase.functions.invoke('invite-member-user', {
+        body: {
+          member_id: member.id,
+          email,
+          app_role: selectedRole,
+          redirect_to: window.location.origin,
+        },
+      })
+
+      if (error) {
+        alert(error.message)
+        return
+      }
+
+      if (data?.error) {
+        alert(data.error)
+        return
+      }
+
+      await loadMembers()
+      await loadAuditLogs()
+
+      alert('Einladung wurde versendet und das Mitglied wurde mit dem Auth-User verknüpft.')
+    } finally {
+      setInvitingMemberId(null)
+    }
   }
 
   function exportMembersPdf() {
@@ -4685,6 +4752,64 @@ export default function App() {
           </div>
         ))}
       </section>
+      )}
+
+      {activePage === 'admin' && isAdmin() && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Benutzerverwaltung</h2>
+
+          <p style={mutedTextStyle}>
+            Hier kannst du für Mitglieder einen App-Zugang per E-Mail-Einladung erstellen.
+            Der Benutzer wird automatisch mit dem Mitglied verknüpft.
+          </p>
+
+          <h3 style={headingStyle}>Mitglieder ohne Login</h3>
+
+          {members.filter((member) => !member.auth_user_id).length === 0 && (
+            <p style={mutedTextStyle}>Alle Mitglieder sind bereits mit einem Login verknüpft.</p>
+          )}
+
+          {members
+            .filter((member) => !member.auth_user_id)
+            .map((member) => (
+              <div key={member.id} style={cardStyle}>
+                <strong>
+                  {member.first_name || ''} {member.last_name || ''}
+                </strong>
+                <br />
+                E-Mail: {member.email || '-'}
+                <br />
+                Aktuelles App-Recht: {getAppRoleLabel(member.app_role || 'readonly')}
+                <br />
+
+                <button
+                  onClick={() => inviteMemberUser(member)}
+                  style={buttonStyle}
+                  disabled={invitingMemberId === member.id || !member.email}
+                >
+                  {invitingMemberId === member.id ? 'Einladung läuft...' : 'Einladung senden'}
+                </button>
+              </div>
+            ))}
+
+          <h3 style={headingStyle}>Verknüpfte Benutzer</h3>
+
+          {members
+            .filter((member) => member.auth_user_id)
+            .map((member) => (
+              <div key={member.id} style={cardStyle}>
+                <strong>
+                  {member.first_name || ''} {member.last_name || ''}
+                </strong>
+                <br />
+                E-Mail: {member.email || '-'}
+                <br />
+                App-Recht: {getAppRoleLabel(member.app_role || 'readonly')}
+                <br />
+                Auth User ID: {member.auth_user_id}
+              </div>
+            ))}
+        </section>
       )}
 
       {activePage === 'admin' && isAdmin() && (
