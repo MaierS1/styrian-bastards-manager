@@ -177,6 +177,7 @@ export default function App() {
   const [eventCheckins, setEventCheckins] = useState([])
   const [events, setEvents] = useState([])
   const [documents, setDocuments] = useState([])
+  const [inventoryItems, setInventoryItems] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
   const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
@@ -242,6 +243,28 @@ export default function App() {
   const [documentDate, setDocumentDate] = useState('')
   const [documentDescription, setDocumentDescription] = useState('')
   const [documentFile, setDocumentFile] = useState(null)
+
+  const [inventorySearch, setInventorySearch] = useState('')
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('alle')
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState('alle')
+  const [inventoryEditingId, setInventoryEditingId] = useState(null)
+  const [inventoryNumber, setInventoryNumber] = useState('')
+  const [inventoryName, setInventoryName] = useState('')
+  const [inventoryCategory, setInventoryCategory] = useState('sonstiges')
+  const [inventoryResponsible, setInventoryResponsible] = useState('')
+  const [inventoryLocation, setInventoryLocation] = useState('')
+  const [inventoryPurchaseDate, setInventoryPurchaseDate] = useState('')
+  const [inventoryCondition, setInventoryCondition] = useState('gut')
+  const [inventoryStatus, setInventoryStatus] = useState('aktiv')
+  const [inventoryLastCheckDate, setInventoryLastCheckDate] = useState('')
+  const [inventoryCheckStatus, setInventoryCheckStatus] = useState('OK')
+  const [inventorySerialNumber, setInventorySerialNumber] = useState('')
+  const [inventoryValue, setInventoryValue] = useState('')
+  const [inventoryNotes, setInventoryNotes] = useState('')
+  const [inventoryCsvRows, setInventoryCsvRows] = useState([])
+  const [inventoryCsvFileName, setInventoryCsvFileName] = useState('')
+  const [inventoryImporting, setInventoryImporting] = useState(false)
+  const [showInventoryQr, setShowInventoryQr] = useState(null)
 
   const [restoreData, setRestoreData] = useState(null)
   const [restoreFileName, setRestoreFileName] = useState('')
@@ -325,7 +348,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadAuditLogs(), loadEventCheckins(), loadEvents(), loadDocuments()])
+    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadAuditLogs(), loadEventCheckins(), loadEvents(), loadDocuments(), loadInventoryItems()])
   }
 
   function getAppRole() {
@@ -382,6 +405,7 @@ export default function App() {
     setEventCheckins([])
     setEvents([])
     setDocuments([])
+    setInventoryItems([])
     resetForm()
   }
 
@@ -495,6 +519,20 @@ export default function App() {
 
     if (error) return alert(error.message)
     setDocuments(data || [])
+  }
+
+  async function loadInventoryItems() {
+    const { data, error } = await supabase
+      .from('inventory_items')
+      .select('*')
+      .order('inventory_number', { ascending: true })
+
+    if (error) {
+      console.warn(error.message)
+      return
+    }
+
+    setInventoryItems(data || [])
   }
 
   function getFee(memberId) {
@@ -2044,6 +2082,7 @@ export default function App() {
       event_checkins: eventCheckins,
       documents,
       audit_logs: auditLogs,
+      inventory_items: inventoryItems,
     }
 
     downloadTextFile(
@@ -2269,6 +2308,504 @@ export default function App() {
     } finally {
       setInvitingMemberId(null)
     }
+  }
+
+  function normalizeInventoryDate(value) {
+    const text = String(value || '').trim()
+
+    if (!text) return null
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text
+
+    const parts = text.split('.')
+    if (parts.length === 3) {
+      const day = parts[0].padStart(2, '0')
+      const month = parts[1].padStart(2, '0')
+      const year = parts[2]
+      return `${year}-${month}-${day}`
+    }
+
+    return null
+  }
+
+  function getInventoryCsvValue(row, keys) {
+    const normalizedRow = {}
+
+    Object.keys(row || {}).forEach((key) => {
+      const normalizedKey = key
+        .trim()
+        .toLowerCase()
+        .replace('ä', 'ae')
+        .replace('ö', 'oe')
+        .replace('ü', 'ue')
+        .replace('ß', 'ss')
+        .replace(/[^a-z0-9]/g, '')
+
+      normalizedRow[normalizedKey] = row[key]
+    })
+
+    for (const key of keys) {
+      const normalizedKey = key
+        .trim()
+        .toLowerCase()
+        .replace('ä', 'ae')
+        .replace('ö', 'oe')
+        .replace('ü', 'ue')
+        .replace('ß', 'ss')
+        .replace(/[^a-z0-9]/g, '')
+
+      if (normalizedRow[normalizedKey] !== undefined) {
+        return String(normalizedRow[normalizedKey] || '').trim()
+      }
+    }
+
+    return ''
+  }
+
+  function normalizeInventoryCondition(value) {
+    const text = String(value || '').trim().toLowerCase()
+
+    if (text.includes('neu')) return 'neu'
+    if (text.includes('defekt')) return 'defekt'
+    if (text.includes('repar')) return 'reparatur'
+    if (text.includes('schlecht')) return 'schlecht'
+    if (text.includes('gebraucht')) return 'gebraucht'
+    if (text.includes('gut')) return 'gut'
+
+    return 'gut'
+  }
+
+  function normalizeInventoryStatus(value) {
+    const text = String(value || '').trim().toLowerCase()
+
+    if (text.includes('ausgemustert')) return 'ausgemustert'
+    if (text.includes('verliehen')) return 'verliehen'
+    if (text.includes('defekt')) return 'defekt'
+    if (text.includes('aktiv')) return 'aktiv'
+
+    return 'aktiv'
+  }
+
+  function getNextInventoryNumber() {
+    const maxNumber = inventoryItems.reduce((max, item) => {
+      const match = String(item.inventory_number || '').match(/^SB-(\d+)$/)
+      if (!match) return max
+
+      return Math.max(max, Number(match[1]))
+    }, 0)
+
+    return `SB-${String(maxNumber + 1).padStart(3, '0')}`
+  }
+
+  function resetInventoryForm() {
+    setInventoryEditingId(null)
+    setInventoryNumber('')
+    setInventoryName('')
+    setInventoryCategory('sonstiges')
+    setInventoryResponsible('')
+    setInventoryLocation('')
+    setInventoryPurchaseDate('')
+    setInventoryCondition('gut')
+    setInventoryStatus('aktiv')
+    setInventoryLastCheckDate('')
+    setInventoryCheckStatus('OK')
+    setInventorySerialNumber('')
+    setInventoryValue('')
+    setInventoryNotes('')
+  }
+
+  function inventoryRowToItem(row) {
+    const inventoryNumber = getInventoryCsvValue(row, ['Inventar-Nr.', 'Inventar Nr', 'Inventarnummer'])
+    const name = getInventoryCsvValue(row, ['Bezeichnung', 'Name'])
+    const category = getInventoryCsvValue(row, ['Kategorie'])
+    const responsible = getInventoryCsvValue(row, ['Verantwortlich'])
+    const location = getInventoryCsvValue(row, ['Standort'])
+    const purchaseDate = normalizeInventoryDate(getInventoryCsvValue(row, ['Anschaffungsdatum', 'Kaufdatum']))
+    const condition = normalizeInventoryCondition(getInventoryCsvValue(row, ['Zustand']))
+    const status = normalizeInventoryStatus(getInventoryCsvValue(row, ['Status']))
+    const lastCheckDate = normalizeInventoryDate(getInventoryCsvValue(row, ['Letzte Pruefung', 'Letzte Prüfung']))
+    const checkStatus = getInventoryCsvValue(row, ['Pruefstatus', 'Prüfstatus']) || 'OK'
+    const qrUrl = getInventoryCsvValue(row, ['QR-URL', 'QR URL']) || getInventoryCsvValue(row, [''])
+    const labelLine1 = getInventoryCsvValue(row, ['Etikett Zeile 1']) || 'STYRIAN BASTARDS'
+    const labelLine2 = getInventoryCsvValue(row, ['Etikett Zeile 2']) || 'VEREINSEIGENTUM'
+    const labelLine3 = getInventoryCsvValue(row, ['Etikett Zeile 3']) || (inventoryNumber ? `Inv.-Nr.: ${inventoryNumber}` : '')
+    const labelLine4 = getInventoryCsvValue(row, ['Etikett Zeile 4'])
+    const notes = getInventoryCsvValue(row, ['Notizen', 'Notiz'])
+
+    if (!inventoryNumber || !name) return null
+
+    return {
+      inventory_number: inventoryNumber,
+      name,
+      category: category || 'sonstiges',
+      responsible: responsible || null,
+      location: location || null,
+      purchase_date: purchaseDate,
+      condition,
+      status,
+      last_check_date: lastCheckDate,
+      check_status: checkStatus,
+      qr_url: qrUrl || null,
+      label_line_1: labelLine1,
+      label_line_2: labelLine2,
+      label_line_3: labelLine3,
+      label_line_4: labelLine4 || null,
+      notes: notes || null,
+    }
+  }
+
+  function handleInventoryCsvFile(event) {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      setInventoryCsvRows([])
+      setInventoryCsvFileName('')
+      return
+    }
+
+    setInventoryCsvFileName(file.name)
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      try {
+        const rows = parseCsvText(String(reader.result || ''))
+        const items = rows.map(inventoryRowToItem).filter(Boolean)
+        setInventoryCsvRows(items)
+
+        if (items.length === 0) {
+          alert('Keine gültigen Inventar-Einträge gefunden. Inventar-Nr. und Bezeichnung sind Pflicht.')
+        }
+      } catch (error) {
+        alert(`Inventar-CSV konnte nicht gelesen werden: ${error.message}`)
+      }
+    }
+
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  async function importInventoryRows() {
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventar-Import.')
+
+    if (inventoryCsvRows.length === 0) {
+      alert('Bitte zuerst eine Inventar-CSV auswählen.')
+      return
+    }
+
+    setInventoryImporting(true)
+
+    try {
+      const existingNumbers = new Set(inventoryItems.map((item) => item.inventory_number))
+      const rowsToInsert = inventoryCsvRows.filter((item) => !existingNumbers.has(item.inventory_number))
+
+      if (rowsToInsert.length === 0) {
+        alert('Keine neuen Inventar-Einträge gefunden. Möglicherweise sind alle bereits vorhanden.')
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .insert(rowsToInsert)
+        .select()
+
+      if (error) return alert(error.message)
+
+      await createAuditLog('bulk_import', 'inventory_items', null, null, {
+        count: rowsToInsert.length,
+        file: inventoryCsvFileName,
+      })
+
+      setInventoryCsvRows([])
+      setInventoryCsvFileName('')
+      await loadInventoryItems()
+
+      alert(`${rowsToInsert.length} Inventar-Einträge wurden importiert.`)
+    } finally {
+      setInventoryImporting(false)
+    }
+  }
+
+  function editInventoryItem(item) {
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventarverwaltung.')
+
+    setInventoryEditingId(item.id)
+    setInventoryNumber(item.inventory_number || '')
+    setInventoryName(item.name || '')
+    setInventoryCategory(item.category || 'sonstiges')
+    setInventoryResponsible(item.responsible || '')
+    setInventoryLocation(item.location || '')
+    setInventoryPurchaseDate(item.purchase_date || '')
+    setInventoryCondition(item.condition || 'gut')
+    setInventoryStatus(item.status || 'aktiv')
+    setInventoryLastCheckDate(item.last_check_date || '')
+    setInventoryCheckStatus(item.check_status || 'OK')
+    setInventorySerialNumber(item.serial_number || '')
+    setInventoryValue(item.value ? String(item.value) : '')
+    setInventoryNotes(item.notes || '')
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveInventoryItem() {
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventarverwaltung.')
+
+    if (!inventoryName.trim()) {
+      alert('Bezeichnung ist Pflicht.')
+      return
+    }
+
+    const number = inventoryNumber.trim() || getNextInventoryNumber()
+    const payload = {
+      inventory_number: number,
+      name: inventoryName.trim(),
+      category: inventoryCategory || 'sonstiges',
+      responsible: inventoryResponsible.trim() || null,
+      location: inventoryLocation.trim() || null,
+      purchase_date: inventoryPurchaseDate || null,
+      condition: inventoryCondition || 'gut',
+      status: inventoryStatus || 'aktiv',
+      last_check_date: inventoryLastCheckDate || null,
+      check_status: inventoryCheckStatus || null,
+      serial_number: inventorySerialNumber.trim() || null,
+      value: inventoryValue ? Number(inventoryValue) : null,
+      notes: inventoryNotes.trim() || null,
+      label_line_1: 'STYRIAN BASTARDS',
+      label_line_2: 'VEREINSEIGENTUM',
+      label_line_3: `Inv.-Nr.: ${number}`,
+      label_line_4: inventoryName.trim(),
+    }
+
+    if (inventoryEditingId) {
+      const oldItem = inventoryItems.find((item) => item.id === inventoryEditingId)
+
+      const { error } = await supabase
+        .from('inventory_items')
+        .update(payload)
+        .eq('id', inventoryEditingId)
+
+      if (error) return alert(error.message)
+
+      await createAuditLog('update', 'inventory_items', inventoryEditingId, oldItem, payload)
+      alert('Inventar-Eintrag wurde aktualisiert.')
+    } else {
+      const { data, error } = await supabase
+        .from('inventory_items')
+        .insert(payload)
+        .select()
+        .single()
+
+      if (error) return alert(error.message)
+
+      await createAuditLog('insert', 'inventory_items', data?.id, null, data)
+      alert('Inventar-Eintrag wurde angelegt.')
+    }
+
+    resetInventoryForm()
+    await loadInventoryItems()
+  }
+
+  async function retireInventoryItem(item) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Inventar ausmustern.')
+
+    const reason = window.prompt(`Grund für Ausmustern von ${item.inventory_number} eingeben:`)
+
+    if (!reason || !reason.trim()) return
+
+    const { error } = await supabase
+      .from('inventory_items')
+      .update({
+        status: 'ausgemustert',
+        notes: `${item.notes || ''}\nAusgemustert: ${reason.trim()}`.trim(),
+      })
+      .eq('id', item.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('retire', 'inventory_items', item.id, item, {
+      status: 'ausgemustert',
+      reason: reason.trim(),
+    })
+
+    await loadInventoryItems()
+    alert('Inventar wurde ausgemustert.')
+  }
+
+  function getFilteredInventoryItems() {
+    const search = inventorySearch.toLowerCase()
+
+    return inventoryItems.filter((item) => {
+      const matchesSearch =
+        !search ||
+        (item.inventory_number || '').toLowerCase().includes(search) ||
+        (item.name || '').toLowerCase().includes(search) ||
+        (item.category || '').toLowerCase().includes(search) ||
+        (item.location || '').toLowerCase().includes(search) ||
+        (item.responsible || '').toLowerCase().includes(search)
+
+      const matchesCategory = inventoryCategoryFilter === 'alle' || item.category === inventoryCategoryFilter
+      const matchesStatus = inventoryStatusFilter === 'alle' || item.status === inventoryStatusFilter
+
+      return matchesSearch && matchesCategory && matchesStatus
+    })
+  }
+
+  function getInventoryCategories() {
+    const categories = new Set(inventoryItems.map((item) => item.category).filter(Boolean))
+    return Array.from(categories).sort((a, b) => a.localeCompare(b))
+  }
+
+  function getInventoryQrValue(item) {
+    return item.qr_url || `${window.location.origin}?inventory=${encodeURIComponent(item.inventory_number || item.id)}`
+  }
+
+  function exportInventoryCsv() {
+    const rows = getFilteredInventoryItems().map((item) => ({
+      InventarNr: item.inventory_number || '',
+      Bezeichnung: item.name || '',
+      Kategorie: item.category || '',
+      Verantwortlich: item.responsible || '',
+      Standort: item.location || '',
+      Anschaffungsdatum: item.purchase_date || '',
+      Zustand: item.condition || '',
+      Status: item.status || '',
+      LetztePruefung: item.last_check_date || '',
+      Pruefstatus: item.check_status || '',
+      QRURL: getInventoryQrValue(item),
+      EtikettZeile1: item.label_line_1 || 'STYRIAN BASTARDS',
+      EtikettZeile2: item.label_line_2 || 'VEREINSEIGENTUM',
+      EtikettZeile3: item.label_line_3 || `Inv.-Nr.: ${item.inventory_number || ''}`,
+      EtikettZeile4: item.label_line_4 || item.name || '',
+      Notizen: item.notes || '',
+    }))
+
+    const headers = [
+      'InventarNr',
+      'Bezeichnung',
+      'Kategorie',
+      'Verantwortlich',
+      'Standort',
+      'Anschaffungsdatum',
+      'Zustand',
+      'Status',
+      'LetztePruefung',
+      'Pruefstatus',
+      'QRURL',
+      'EtikettZeile1',
+      'EtikettZeile2',
+      'EtikettZeile3',
+      'EtikettZeile4',
+      'Notizen',
+    ]
+
+    downloadTextFile('styrian-bastards-inventar.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+  }
+
+  function exportInventoryPdf() {
+    const doc = new jsPDF('landscape')
+    const items = getFilteredInventoryItems()
+
+    doc.text('Styrian Bastards - Inventarliste', 14, 15)
+
+    autoTable(doc, {
+      startY: 25,
+      head: [['Inventar-Nr.', 'Bezeichnung', 'Kategorie', 'Verantwortlich', 'Standort', 'Zustand', 'Status', 'Prüfung']],
+      body: items.map((item) => [
+        item.inventory_number || '',
+        item.name || '',
+        item.category || '',
+        item.responsible || '',
+        item.location || '',
+        item.condition || '',
+        item.status || '',
+        `${item.last_check_date || '-'} / ${item.check_status || '-'}`,
+      ]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [5, 5, 5] },
+    })
+
+    doc.save('styrian-bastards-inventarliste.pdf')
+  }
+
+  async function exportInventoryLabelPdf(item) {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: [70, 36],
+    })
+
+    const qrDataUrl = await QRCode.toDataURL(getInventoryQrValue(item), {
+      width: 220,
+      margin: 1,
+    })
+
+    doc.setFillColor(255, 255, 255)
+    doc.rect(0, 0, 70, 36, 'F')
+
+    doc.setTextColor(0, 0, 0)
+    doc.setFontSize(8)
+    doc.text(item.label_line_1 || 'STYRIAN BASTARDS', 4, 6)
+    doc.setFontSize(7)
+    doc.text(item.label_line_2 || 'VEREINSEIGENTUM', 4, 11)
+    doc.text(item.label_line_3 || `Inv.-Nr.: ${item.inventory_number || ''}`, 4, 16)
+    doc.text(item.label_line_4 || item.name || '', 4, 21, { maxWidth: 42 })
+
+    doc.addImage(qrDataUrl, 'PNG', 48, 5, 17, 17)
+
+    doc.setFontSize(6)
+    doc.text(item.inventory_number || '', 50, 27)
+
+    doc.save(`etikett-${item.inventory_number || 'inventar'}.pdf`)
+  }
+
+  async function exportInventoryLabelsPdf() {
+    const doc = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: 'a4',
+    })
+
+    const items = getFilteredInventoryItems()
+    const labelWidth = 70
+    const labelHeight = 36
+    const marginX = 8
+    const marginY = 10
+    const gapX = 4
+    const gapY = 4
+    let x = marginX
+    let y = marginY
+
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index]
+      const qrDataUrl = await QRCode.toDataURL(getInventoryQrValue(item), {
+        width: 180,
+        margin: 1,
+      })
+
+      doc.rect(x, y, labelWidth, labelHeight)
+      doc.setFontSize(8)
+      doc.text(item.label_line_1 || 'STYRIAN BASTARDS', x + 4, y + 6)
+      doc.setFontSize(7)
+      doc.text(item.label_line_2 || 'VEREINSEIGENTUM', x + 4, y + 11)
+      doc.text(item.label_line_3 || `Inv.-Nr.: ${item.inventory_number || ''}`, x + 4, y + 16)
+      doc.text(item.label_line_4 || item.name || '', x + 4, y + 21, { maxWidth: 42 })
+      doc.addImage(qrDataUrl, 'PNG', x + 49, y + 5, 16, 16)
+      doc.setFontSize(6)
+      doc.text(item.inventory_number || '', x + 50, y + 27)
+
+      x += labelWidth + gapX
+
+      if (x + labelWidth > 290) {
+        x = marginX
+        y += labelHeight + gapY
+      }
+
+      if (y + labelHeight > 200 && index < items.length - 1) {
+        doc.addPage()
+        x = marginX
+        y = marginY
+      }
+    }
+
+    doc.save('styrian-bastards-inventar-etiketten.pdf')
   }
 
   function exportMembersPdf() {
@@ -3626,6 +4163,7 @@ export default function App() {
           ['cash', 'Kassa'],
           ['events', 'Events'],
           ['documents', 'Dokumente'],
+          ['inventory', 'Inventar'],
           ['admin', 'Admin / Export'],
         ].map(([pageKey, label]) => (
           <button
@@ -3744,6 +4282,18 @@ export default function App() {
 
           <button onClick={exportDocumentsCsv} style={secondaryButtonStyle}>
             Dokumentenliste CSV
+          </button>
+
+          <button onClick={exportInventoryCsv} style={secondaryButtonStyle}>
+            Inventar CSV
+          </button>
+
+          <button onClick={exportInventoryPdf} style={secondaryButtonStyle}>
+            Inventarliste PDF
+          </button>
+
+          <button onClick={exportInventoryLabelsPdf} style={secondaryButtonStyle}>
+            Inventar Etiketten PDF
           </button>
 
           <button onClick={exportFullBackupJson} style={buttonStyle}>
@@ -4766,6 +5316,291 @@ export default function App() {
           </div>
         ))}
       </section>
+      )}
+
+      {activePage === 'inventory' && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Inventar PRO</h2>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
+            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.black}` }}>
+              <strong style={dashboardLabelStyle}>Inventar gesamt</strong>
+              <h2 style={dashboardNumberStyle}>{inventoryItems.length}</h2>
+            </div>
+
+            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
+              <strong style={dashboardLabelStyle}>Aktiv</strong>
+              <h2 style={dashboardNumberStyle}>{inventoryItems.filter((item) => item.status === 'aktiv').length}</h2>
+            </div>
+
+            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
+              <strong style={dashboardLabelStyle}>Defekt / Reparatur</strong>
+              <h2 style={dashboardNumberStyle}>
+                {inventoryItems.filter((item) => ['defekt', 'reparatur'].includes(item.condition) || item.status === 'defekt').length}
+              </h2>
+            </div>
+          </div>
+
+          {(canManageMembers() || isAdmin()) && (
+            <>
+              <h3 style={headingStyle}>{inventoryEditingId ? 'Inventar bearbeiten' : 'Inventar anlegen'}</h3>
+
+              <input
+                placeholder={`Inventar-Nr. leer lassen für ${getNextInventoryNumber()}`}
+                value={inventoryNumber}
+                onChange={(e) => setInventoryNumber(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Bezeichnung"
+                value={inventoryName}
+                onChange={(e) => setInventoryName(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Kategorie, z.B. Event, Technik, Gastro"
+                value={inventoryCategory}
+                onChange={(e) => setInventoryCategory(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Verantwortlich"
+                value={inventoryResponsible}
+                onChange={(e) => setInventoryResponsible(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Standort"
+                value={inventoryLocation}
+                onChange={(e) => setInventoryLocation(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                type="date"
+                value={inventoryPurchaseDate}
+                onChange={(e) => setInventoryPurchaseDate(e.target.value)}
+                style={inputStyle}
+              />
+
+              <select value={inventoryCondition} onChange={(e) => setInventoryCondition(e.target.value)} style={inputStyle}>
+                <option value="neu">Neu</option>
+                <option value="gut">Gut</option>
+                <option value="gebraucht">Gebraucht</option>
+                <option value="schlecht">Schlecht</option>
+                <option value="reparatur">Reparatur</option>
+                <option value="defekt">Defekt</option>
+              </select>
+
+              <select value={inventoryStatus} onChange={(e) => setInventoryStatus(e.target.value)} style={inputStyle}>
+                <option value="aktiv">Aktiv</option>
+                <option value="verliehen">Verliehen</option>
+                <option value="defekt">Defekt</option>
+                <option value="ausgemustert">Ausgemustert</option>
+              </select>
+
+              <input
+                type="date"
+                value={inventoryLastCheckDate}
+                onChange={(e) => setInventoryLastCheckDate(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Prüfstatus, z.B. OK"
+                value={inventoryCheckStatus}
+                onChange={(e) => setInventoryCheckStatus(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Seriennummer"
+                value={inventorySerialNumber}
+                onChange={(e) => setInventorySerialNumber(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                type="number"
+                placeholder="Wert"
+                value={inventoryValue}
+                onChange={(e) => setInventoryValue(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Notizen"
+                value={inventoryNotes}
+                onChange={(e) => setInventoryNotes(e.target.value)}
+                style={inputStyle}
+              />
+
+              <button onClick={saveInventoryItem} style={buttonStyle}>
+                {inventoryEditingId ? 'Änderungen speichern' : 'Inventar speichern'}
+              </button>
+
+              {inventoryEditingId && (
+                <button onClick={resetInventoryForm} style={secondaryButtonStyle}>
+                  Bearbeiten abbrechen
+                </button>
+              )}
+
+              <h3 style={headingStyle}>Inventar CSV Import</h3>
+
+              <p style={mutedTextStyle}>
+                Unterstützt deine bestehende Google-Sheets-Struktur mit Inventar-Nr., Bezeichnung,
+                Kategorie, Verantwortlich, Standort, Prüfstatus und Etikett-Zeilen.
+              </p>
+
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleInventoryCsvFile}
+                style={inputStyle}
+              />
+
+              {inventoryCsvFileName && (
+                <p style={mutedTextStyle}>
+                  Datei: <strong>{inventoryCsvFileName}</strong>
+                </p>
+              )}
+
+              {inventoryCsvRows.length > 0 && (
+                <>
+                  <h3 style={headingStyle}>Vorschau: {inventoryCsvRows.length} Inventar-Einträge</h3>
+
+                  {inventoryCsvRows.slice(0, 5).map((item) => (
+                    <div key={item.inventory_number} style={cardStyle}>
+                      <strong>{item.inventory_number}</strong> · {item.name}
+                      <br />
+                      {item.category} · {item.location || '-'} · {item.status}
+                    </div>
+                  ))}
+
+                  <button onClick={importInventoryRows} style={buttonStyle} disabled={inventoryImporting}>
+                    {inventoryImporting ? 'Import läuft...' : 'Inventar importieren'}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setInventoryCsvRows([])
+                      setInventoryCsvFileName('')
+                    }}
+                    style={secondaryButtonStyle}
+                    disabled={inventoryImporting}
+                  >
+                    Import abbrechen
+                  </button>
+                </>
+              )}
+            </>
+          )}
+
+          <h3 style={headingStyle}>Inventar Suche & Filter</h3>
+
+          <input
+            placeholder="Inventar suchen..."
+            value={inventorySearch}
+            onChange={(e) => setInventorySearch(e.target.value)}
+            style={inputStyle}
+          />
+
+          <select value={inventoryCategoryFilter} onChange={(e) => setInventoryCategoryFilter(e.target.value)} style={inputStyle}>
+            <option value="alle">Alle Kategorien</option>
+            {getInventoryCategories().map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+
+          <select value={inventoryStatusFilter} onChange={(e) => setInventoryStatusFilter(e.target.value)} style={inputStyle}>
+            <option value="alle">Alle Status</option>
+            <option value="aktiv">Aktiv</option>
+            <option value="verliehen">Verliehen</option>
+            <option value="defekt">Defekt</option>
+            <option value="ausgemustert">Ausgemustert</option>
+          </select>
+
+          <button onClick={exportInventoryCsv} style={secondaryButtonStyle}>
+            Inventar CSV
+          </button>
+
+          <button onClick={exportInventoryPdf} style={secondaryButtonStyle}>
+            Inventarliste PDF
+          </button>
+
+          <button onClick={exportInventoryLabelsPdf} style={buttonStyle}>
+            Etiketten PDF
+          </button>
+
+          <p>
+            Angezeigt: <strong>{getFilteredInventoryItems().length}</strong> von {inventoryItems.length} Inventar-Einträgen
+          </p>
+
+          {getFilteredInventoryItems().map((item) => (
+            <div
+              key={item.id}
+              style={{
+                ...cardStyle,
+                borderLeft: `6px solid ${item.status === 'aktiv' ? colors.blue : item.status === 'ausgemustert' ? colors.muted : colors.red}`,
+                opacity: item.status === 'ausgemustert' ? 0.72 : 1,
+              }}
+            >
+              <strong>
+                {item.inventory_number} · {item.name}
+              </strong>
+              <br />
+              Kategorie: {item.category || '-'} · Standort: {item.location || '-'}
+              <br />
+              Verantwortlich: {item.responsible || '-'}
+              <br />
+              Zustand: {item.condition || '-'} · Status: {item.status || '-'}
+              <br />
+              Letzte Prüfung: {item.last_check_date || '-'} · Prüfstatus: {item.check_status || '-'}
+              <br />
+              Seriennummer: {item.serial_number || '-'} · Wert: {item.value ? `${Number(item.value).toFixed(2)} €` : '-'}
+              <br />
+              Notizen: {item.notes || '-'}
+
+              <br />
+
+              <button onClick={() => setShowInventoryQr(showInventoryQr === item.id ? null : item.id)} style={secondaryButtonStyle}>
+                QR-Code
+              </button>
+
+              <button onClick={() => exportInventoryLabelPdf(item)} style={secondaryButtonStyle}>
+                Etikett PDF
+              </button>
+
+              {(canManageMembers() || isAdmin()) && (
+                <button onClick={() => editInventoryItem(item)} style={buttonStyle}>
+                  Bearbeiten
+                </button>
+              )}
+
+              {isAdmin() && item.status !== 'ausgemustert' && (
+                <button
+                  onClick={() => retireInventoryItem(item)}
+                  style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
+                >
+                  Ausmustern
+                </button>
+              )}
+
+              {showInventoryQr === item.id && (
+                <div style={{ marginTop: 12 }}>
+                  <QRCodeCanvas value={getInventoryQrValue(item)} size={170} />
+                  <p style={mutedTextStyle}>{getInventoryQrValue(item)}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </section>
       )}
 
       {activePage === 'admin' && isAdmin() && (
