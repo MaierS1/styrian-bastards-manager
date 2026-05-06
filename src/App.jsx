@@ -3570,18 +3570,29 @@ export default function App() {
         lineHeight: 1.55,
       }}
     >
-      <h1 style={headingStyle}>Styrian Bastards Vereinsmanager</h1>
+      <h1 style={{ ...headingStyle, color: colors.white }}>
+        Styrian Bastards Vereinsmanager
+      </h1>
 
-      <p>
-        Eingeloggt als: <strong>{user.email}</strong>
+      <p style={{ color: colors.white }}>
+        Eingeloggt als:{' '}
+        <strong style={{ color: colors.white }}>
+          {user.email}
+        </strong>
       </p>
 
-      <p>
+      <p style={{ color: colors.white }}>
         App-Recht:{' '}
-        <strong>{getAppRoleLabel(getAppRole())}</strong>
+        <strong style={{ color: colors.white }}>
+          {getAppRoleLabel(getAppRole())}
+        </strong>
+
         {currentMember && (
           <>
-            {' '}· Mitglied: <strong>{currentMember.first_name} {currentMember.last_name}</strong>
+            {' '}· Mitglied:{' '}
+            <strong style={{ color: colors.white }}>
+              {currentMember.first_name} {currentMember.last_name}
+            </strong>
           </>
         )}
       </p>
@@ -3594,9 +3605,9 @@ export default function App() {
         </div>
       )}
 
-      <p>
+      <p style={{ color: isOnline ? '#4ade80' : '#f87171' }}>
         Verbindung:{' '}
-        <strong style={{ color: isOnline ? '#2e7d32' : '#c62828' }}>
+        <strong>
           {isOnline ? 'Online' : 'Offline'}
         </strong>
       </p>
