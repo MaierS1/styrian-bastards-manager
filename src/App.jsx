@@ -748,6 +748,9 @@ export default function App() {
   function getAmountByType(type) {
     if (type === 'vollmitglied') return 70
     if (type === 'foerdermitglied') return 40
+    if (type === 'probejahr') return 40
+    if (type === 'ehrenmitglied') return 0
+
     return 0
   }
 
