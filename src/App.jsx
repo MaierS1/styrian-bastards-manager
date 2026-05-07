@@ -247,6 +247,8 @@ export default function App() {
   const [inventorySearch, setInventorySearch] = useState('')
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('alle')
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState('alle')
+  const [inventorySortBy, setInventorySortBy] = useState('inventory_number')
+  const [inventorySortDirection, setInventorySortDirection] = useState('asc')
   const [inventoryEditingId, setInventoryEditingId] = useState(null)
   const [inventoryNumber, setInventoryNumber] = useState('')
   const [inventoryName, setInventoryName] = useState('')
@@ -2629,28 +2631,96 @@ export default function App() {
     alert('Inventar wurde ausgemustert.')
   }
 
+  function getInventorySortValue(item, key) {
+    if (key === 'inventory_number') {
+      const match = String(item.inventory_number || '').match(/(\d+)/)
+      return match ? Number(match[1]) : 0
+    }
+
+    if (key === 'purchase_date' || key === 'last_check_date') {
+      return item[key] ? new Date(item[key]).getTime() : 0
+    }
+
+    if (key === 'value') {
+      return Number(item.value || 0)
+    }
+
+    return String(item[key] || '').toLowerCase()
+  }
+
   function getFilteredInventoryItems() {
     const search = inventorySearch.toLowerCase()
 
-    return inventoryItems.filter((item) => {
-      const matchesSearch =
-        !search ||
-        (item.inventory_number || '').toLowerCase().includes(search) ||
-        (item.name || '').toLowerCase().includes(search) ||
-        (item.category || '').toLowerCase().includes(search) ||
-        (item.location || '').toLowerCase().includes(search) ||
-        (item.responsible || '').toLowerCase().includes(search)
+    return inventoryItems
+      .filter((item) => {
+        const matchesSearch =
+          !search ||
+          (item.inventory_number || '').toLowerCase().includes(search) ||
+          (item.name || '').toLowerCase().includes(search) ||
+          (item.category || '').toLowerCase().includes(search) ||
+          (item.location || '').toLowerCase().includes(search) ||
+          (item.responsible || '').toLowerCase().includes(search)
 
-      const matchesCategory = inventoryCategoryFilter === 'alle' || item.category === inventoryCategoryFilter
-      const matchesStatus = inventoryStatusFilter === 'alle' || item.status === inventoryStatusFilter
+        const matchesCategory = inventoryCategoryFilter === 'alle' || item.category === inventoryCategoryFilter
+        const matchesStatus = inventoryStatusFilter === 'alle' || item.status === inventoryStatusFilter
 
-      return matchesSearch && matchesCategory && matchesStatus
-    })
+        return matchesSearch && matchesCategory && matchesStatus
+      })
+      .sort((a, b) => {
+        const valueA = getInventorySortValue(a, inventorySortBy)
+        const valueB = getInventorySortValue(b, inventorySortBy)
+
+        if (typeof valueA === 'number' && typeof valueB === 'number') {
+          return inventorySortDirection === 'asc' ? valueA - valueB : valueB - valueA
+        }
+
+        return inventorySortDirection === 'asc'
+          ? String(valueA).localeCompare(String(valueB), 'de-AT')
+          : String(valueB).localeCompare(String(valueA), 'de-AT')
+      })
   }
 
   function getInventoryCategories() {
     const categories = new Set(inventoryItems.map((item) => item.category).filter(Boolean))
     return Array.from(categories).sort((a, b) => a.localeCompare(b))
+  }
+
+  function getInventoryTotalValue(items = inventoryItems) {
+    return items
+      .filter((item) => item.status !== 'ausgemustert')
+      .reduce((sum, item) => sum + Number(item.value || 0), 0)
+  }
+
+  function getInventoryActiveValue() {
+    return getInventoryTotalValue(inventoryItems.filter((item) => item.status === 'aktiv'))
+  }
+
+  async function deleteInventoryItem(item) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Inventar löschen.')
+
+    const confirmed = window.confirm(
+      `Inventar-Eintrag wirklich endgültig löschen?\n\n${item.inventory_number || ''} · ${item.name || ''}\n\nEmpfohlen ist normalerweise „Ausmustern“. Löschen entfernt den Eintrag dauerhaft.`
+    )
+
+    if (!confirmed) return
+
+    const secondConfirm = window.confirm(
+      'Bitte nochmals bestätigen: Dieser Inventar-Eintrag wird endgültig gelöscht.'
+    )
+
+    if (!secondConfirm) return
+
+    const { error } = await supabase
+      .from('inventory_items')
+      .delete()
+      .eq('id', item.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('delete', 'inventory_items', item.id, item, null)
+    await loadInventoryItems()
+
+    alert('Inventar-Eintrag wurde gelöscht.')
   }
 
   function getInventoryQrValue(item) {
@@ -4595,6 +4665,11 @@ export default function App() {
     <h2 style={dashboardNumberStyle}>{(getIncomeTotal() - getExpenseTotal()).toFixed(2)} €</h2>
   </div>
 
+  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.black}` }}>
+    <strong style={dashboardLabelStyle}>Inventarwert</strong>
+    <h2 style={dashboardNumberStyle}>{getInventoryTotalValue().toFixed(2)} €</h2>
+  </div>
+
 </div>
 
 <br />
@@ -5328,6 +5403,11 @@ export default function App() {
               <h2 style={dashboardNumberStyle}>{inventoryItems.length}</h2>
             </div>
 
+            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.navy}` }}>
+              <strong style={dashboardLabelStyle}>Gesamtwert</strong>
+              <h2 style={dashboardNumberStyle}>{getInventoryTotalValue().toFixed(2)} €</h2>
+            </div>
+
             <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
               <strong style={dashboardLabelStyle}>Aktiv</strong>
               <h2 style={dashboardNumberStyle}>{inventoryItems.filter((item) => item.status === 'aktiv').length}</h2>
@@ -5526,6 +5606,26 @@ export default function App() {
             <option value="ausgemustert">Ausgemustert</option>
           </select>
 
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(220px, 1fr))', gap: 12 }}>
+            <select value={inventorySortBy} onChange={(e) => setInventorySortBy(e.target.value)} style={inputStyle}>
+              <option value="inventory_number">Sortieren nach Inventar-Nr.</option>
+              <option value="name">Sortieren nach Bezeichnung</option>
+              <option value="category">Sortieren nach Kategorie</option>
+              <option value="location">Sortieren nach Standort</option>
+              <option value="responsible">Sortieren nach Verantwortlich</option>
+              <option value="condition">Sortieren nach Zustand</option>
+              <option value="status">Sortieren nach Status</option>
+              <option value="purchase_date">Sortieren nach Anschaffungsdatum</option>
+              <option value="last_check_date">Sortieren nach letzter Prüfung</option>
+              <option value="value">Sortieren nach Wert</option>
+            </select>
+
+            <select value={inventorySortDirection} onChange={(e) => setInventorySortDirection(e.target.value)} style={inputStyle}>
+              <option value="asc">Aufsteigend</option>
+              <option value="desc">Absteigend</option>
+            </select>
+          </div>
+
           <button onClick={exportInventoryCsv} style={secondaryButtonStyle}>
             Inventar CSV
           </button>
@@ -5540,6 +5640,9 @@ export default function App() {
 
           <p>
             Angezeigt: <strong>{getFilteredInventoryItems().length}</strong> von {inventoryItems.length} Inventar-Einträgen
+            <br />
+            Wert der angezeigten aktiven Einträge:{' '}
+            <strong>{getInventoryTotalValue(getFilteredInventoryItems()).toFixed(2)} €</strong>
           </p>
 
           {getFilteredInventoryItems().map((item) => (
@@ -5589,6 +5692,15 @@ export default function App() {
                   style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
                 >
                   Ausmustern
+                </button>
+              )}
+
+              {isAdmin() && (
+                <button
+                  onClick={() => deleteInventoryItem(item)}
+                  style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
+                >
+                  Inventar löschen
                 </button>
               )}
 
