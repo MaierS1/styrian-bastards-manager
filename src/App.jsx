@@ -3080,6 +3080,85 @@ export default function App() {
     doc.save(`event-finanzbericht-${event.name || 'event'}.pdf`)
   }
 
+  async function exportAllMemberCardsPdf() {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+    })
+
+    const membersToPrint = getFilteredMembers()
+
+    // A4 Hochformat: 2 Spalten x 5 Reihen = 10 Visitenkarten pro Seite
+    // Visitenkartenformat ca. 85 x 54 mm
+    const cardWidth = 85
+    const cardHeight = 54
+    const marginX = 15
+    const marginY = 12
+    const gapX = 10
+    const gapY = 3
+    const columns = 2
+    const rowsPerPage = 5
+    const cardsPerPage = columns * rowsPerPage
+
+    for (let index = 0; index < membersToPrint.length; index += 1) {
+      if (index > 0 && index % cardsPerPage === 0) {
+        doc.addPage()
+      }
+
+      const member = membersToPrint[index]
+      const indexOnPage = index % cardsPerPage
+      const column = indexOnPage % columns
+      const row = Math.floor(indexOnPage / columns)
+
+      const x = marginX + column * (cardWidth + gapX)
+      const y = marginY + row * (cardHeight + gapY)
+
+      const qrDataUrl = await QRCode.toDataURL(member.member_number || member.id, {
+        width: 300,
+        margin: 1,
+      })
+
+      // Karte Hintergrund
+      doc.setFillColor(5, 5, 5)
+      doc.roundedRect(x, y, cardWidth, cardHeight, 3, 3, 'F')
+
+      // Vereins-Akzent
+      doc.setFillColor(193, 18, 31)
+      doc.rect(x, y, 4, cardHeight, 'F')
+
+      // Titel
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(13)
+      doc.text('STYRIAN BASTARDS', x + 8, y + 9)
+
+      doc.setFontSize(8)
+      doc.text('Mitgliedsausweis', x + 8, y + 15)
+
+      // Mitgliedsdaten
+      doc.setFontSize(12)
+      doc.text(`${member.first_name || ''} ${member.last_name || ''}`, x + 8, y + 27, {
+        maxWidth: 48,
+      })
+
+      doc.setFontSize(7)
+      doc.text(`Art: ${member.member_type || '-'}`, x + 8, y + 35)
+      doc.text(`Status: ${member.status || '-'}`, x + 8, y + 40)
+      doc.text(`Nr.: ${member.member_number || member.id.slice(0, 8)}`, x + 8, y + 45)
+
+      // QR-Code
+      doc.setFillColor(255, 255, 255)
+      doc.roundedRect(x + 58, y + 15, 22, 22, 1.5, 1.5, 'F')
+      doc.addImage(qrDataUrl, 'PNG', x + 59, y + 16, 20, 20)
+
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(6)
+      doc.text('QR-Code zur Prüfung', x + 57, y + 43)
+    }
+
+    doc.save('styrian-bastards-mitgliedsausweise-visitenkarten.pdf')
+  }
+
   async function exportMemberCardPdf(member) {
     const doc = new jsPDF({
       orientation: 'landscape',
@@ -4274,6 +4353,10 @@ export default function App() {
       <div style={{ marginTop: 15 }}>
         <button onClick={exportMembersPdf} style={secondaryButtonStyle}>
           Mitgliederliste PDF
+        </button>
+
+        <button onClick={exportAllMemberCardsPdf} style={secondaryButtonStyle}>
+          Mitgliedsausweise Druckbogen
         </button>
         <button onClick={exportCashPdf} style={secondaryButtonStyle}>
           Kassabuch PDF
@@ -6000,6 +6083,15 @@ export default function App() {
 
         <p>
           Angezeigt: <strong>{filteredMembers.length}</strong> von {members.length} Mitgliedern
+        </p>
+
+        <button onClick={exportAllMemberCardsPdf} style={buttonStyle}>
+          Mitgliedsausweise als Druckbogen PDF
+        </button>
+
+        <p style={mutedTextStyle}>
+          Druckformat: A4 Hochformat mit 10 Karten pro Seite im Visitenkartenformat.
+          Es werden die aktuell gefilterten Mitglieder gedruckt.
         </p>
 
         {filteredMembers.map((member) => {
