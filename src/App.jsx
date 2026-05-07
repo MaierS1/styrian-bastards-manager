@@ -2828,54 +2828,64 @@ export default function App() {
 
   async function exportInventoryLabelsPdf() {
     const doc = new jsPDF({
-      orientation: 'landscape',
+      orientation: 'portrait',
       unit: 'mm',
       format: 'a4',
     })
 
     const items = getFilteredInventoryItems()
-    const labelWidth = 70
-    const labelHeight = 36
-    const marginX = 8
+
+    // A4 Hochformat: 210 x 297 mm
+    // 2 Spalten x 8 Reihen = 16 Etiketten pro Seite
+    const pageWidth = 210
+    const pageHeight = 297
+    const marginX = 10
     const marginY = 10
-    const gapX = 4
+    const gapX = 6
     const gapY = 4
-    let x = marginX
-    let y = marginY
+    const columns = 2
+    const rowsPerPage = 8
+    const labelsPerPage = columns * rowsPerPage
+
+    const labelWidth = (pageWidth - marginX * 2 - gapX) / 2
+    const labelHeight = (pageHeight - marginY * 2 - gapY * (rowsPerPage - 1)) / rowsPerPage
 
     for (let index = 0; index < items.length; index += 1) {
+      if (index > 0 && index % labelsPerPage === 0) {
+        doc.addPage()
+      }
+
       const item = items[index]
+      const indexOnPage = index % labelsPerPage
+      const column = indexOnPage % columns
+      const row = Math.floor(indexOnPage / columns)
+
+      const x = marginX + column * (labelWidth + gapX)
+      const y = marginY + row * (labelHeight + gapY)
+
       const qrDataUrl = await QRCode.toDataURL(getInventoryQrValue(item), {
         width: 180,
         margin: 1,
       })
 
       doc.rect(x, y, labelWidth, labelHeight)
+
+      doc.setTextColor(0, 0, 0)
       doc.setFontSize(8)
       doc.text(item.label_line_1 || 'STYRIAN BASTARDS', x + 4, y + 6)
+
       doc.setFontSize(7)
       doc.text(item.label_line_2 || 'VEREINSEIGENTUM', x + 4, y + 11)
       doc.text(item.label_line_3 || `Inv.-Nr.: ${item.inventory_number || ''}`, x + 4, y + 16)
-      doc.text(item.label_line_4 || item.name || '', x + 4, y + 21, { maxWidth: 42 })
-      doc.addImage(qrDataUrl, 'PNG', x + 49, y + 5, 16, 16)
+      doc.text(item.label_line_4 || item.name || '', x + 4, y + 21, { maxWidth: labelWidth - 30 })
+
+      doc.addImage(qrDataUrl, 'PNG', x + labelWidth - 23, y + 5, 18, 18)
+
       doc.setFontSize(6)
-      doc.text(item.inventory_number || '', x + 50, y + 27)
-
-      x += labelWidth + gapX
-
-      if (x + labelWidth > 290) {
-        x = marginX
-        y += labelHeight + gapY
-      }
-
-      if (y + labelHeight > 200 && index < items.length - 1) {
-        doc.addPage()
-        x = marginX
-        y = marginY
-      }
+      doc.text(item.inventory_number || '', x + labelWidth - 22, y + 27)
     }
 
-    doc.save('styrian-bastards-inventar-etiketten.pdf')
+    doc.save('styrian-bastards-inventar-etiketten-a4-16.pdf')
   }
 
   function exportMembersPdf() {
