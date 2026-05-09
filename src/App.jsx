@@ -842,6 +842,8 @@ export default function App() {
 
   function getOpenFeeMembers() {
     return members.filter((member) => {
+      if (member.is_test) return false
+
       const fee = getFee(member.id)
       return fee && !fee.paid && Number(fee.amount || 0) > 0
     })
@@ -1460,12 +1462,18 @@ export default function App() {
   }
 
   function getOpenFeesCount() {
-    return fees.filter((fee) => !fee.paid && Number(fee.amount) > 0).length
+    return fees.filter((fee) => {
+      const member = getMemberById(fee.member_id)
+      return !member?.is_test && !fee.paid && Number(fee.amount) > 0
+    }).length
   }
 
   function getOpenFeesTotal() {
     return fees
-      .filter((fee) => !fee.paid)
+      .filter((fee) => {
+        const member = getMemberById(fee.member_id)
+        return !member?.is_test && !fee.paid
+      })
       .reduce((sum, fee) => sum + Number(fee.amount || 0), 0)
   }
 
@@ -1693,9 +1701,14 @@ export default function App() {
   }
 
   function getFeeStats() {
-    const paid = fees.filter((fee) => fee.paid).length
-    const open = fees.filter((fee) => !fee.paid && Number(fee.amount || 0) > 0).length
-    const free = fees.filter((fee) => Number(fee.amount || 0) === 0).length
+    const realFees = fees.filter((fee) => {
+      const member = getMemberById(fee.member_id)
+      return !member?.is_test
+    })
+
+    const paid = realFees.filter((fee) => fee.paid).length
+    const open = realFees.filter((fee) => !fee.paid && Number(fee.amount || 0) > 0).length
+    const free = realFees.filter((fee) => Number(fee.amount || 0) === 0).length
 
     return [
       { label: 'Bezahlt', count: paid, color: colors.blue },
@@ -3398,7 +3411,10 @@ export default function App() {
     const expenseTotal = expenseEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
     const balance = incomeTotal - expenseTotal
 
-    const openFees = fees.filter((fee) => !fee.paid && Number(fee.amount || 0) > 0)
+    const openFees = fees.filter((fee) => {
+      const member = getMemberById(fee.member_id)
+      return !member?.is_test && !fee.paid && Number(fee.amount || 0) > 0
+    })
     const openFeesTotal = openFees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0)
 
     const eventSummaries = events
@@ -6103,14 +6119,9 @@ export default function App() {
 <div style={cardStyle}>
   <strong>Offene Mitgliedsbeiträge</strong>
   <br />
-  Anzahl offen: {members.filter(m => getFee(m.id)?.status !== 'bezahlt').length}
+  Anzahl offen: {getOpenFeesCount()}
   <br />
-  Summe offen: {
-    members
-      .filter(m => getFee(m.id)?.status !== 'bezahlt')
-      .reduce((sum, m) => sum + (getFee(m.id)?.amount || 0), 0)
-      .toFixed(2)
-  } €
+  Summe offen: {getOpenFeesTotal().toFixed(2)} €
 </div>
 
 <br />
@@ -6344,6 +6355,16 @@ export default function App() {
 
         <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
           <strong style={dashboardLabelStyle}>Testdaten im Kassasystem</strong>
+          <br />
+          Testmitglieder: {getTestMembers().length}
+          <br />
+          Offene Test-Mitgliedsbeiträge:{' '}
+          <strong>
+            {fees
+              .filter((fee) => getMemberById(fee.member_id)?.is_test && !fee.paid && Number(fee.amount || 0) > 0)
+              .reduce((sum, fee) => sum + Number(fee.amount || 0), 0)
+              .toFixed(2)} €
+          </strong>
           <br />
           Test-Kassa-Einträge: {getTestCashEntries().length}
           <br />
