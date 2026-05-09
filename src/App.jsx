@@ -35,7 +35,7 @@ const pageStyle = {
 const inputStyle = {
   display: 'block',
   width: '100%',
-  maxWidth: 520,
+  maxWidth: '100%',
   marginBottom: 12,
   padding: isMobile ? 15 : 12,
   fontSize: isMobile ? 17 : 16,
@@ -78,6 +78,8 @@ const dangerButtonStyle = {
 }
 
 const cardStyle = {
+  width: '100%',
+  boxSizing: 'border-box',
   border: `1px solid ${colors.border}`,
   padding: isMobile ? 16 : 16,
   marginBottom: 12,
@@ -90,6 +92,8 @@ const cardStyle = {
 }
 
 const sectionStyle = {
+  width: '100%',
+  boxSizing: 'border-box',
   border: `1px solid ${colors.border}`,
   borderRadius: 16,
   padding: isMobile ? 16 : 24,
@@ -138,6 +142,8 @@ const dashboardLabelStyle = {
 }
 
 const navStyle = {
+  width: '100%',
+  boxSizing: 'border-box',
   position: 'sticky',
   top: 0,
   zIndex: 50,
@@ -162,6 +168,13 @@ const navButtonStyle = (active) => ({
   cursor: 'pointer',
   flex: isMobile ? '1 1 45%' : '0 0 auto',
 })
+
+const pageWrapperStyle = {
+  width: '100%',
+  maxWidth: 1240,
+  margin: '0 auto',
+  boxSizing: 'border-box',
+}
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -4260,15 +4273,15 @@ export default function App() {
     <main
       style={{
         ...pageStyle,
+        width: '100%',
         padding: isMobile ? 16 : 32,
         fontFamily: 'Arial, Helvetica, sans-serif',
-        maxWidth: 1240,
-        margin: '0 auto',
         boxSizing: 'border-box',
         fontSize: isMobile ? 16 : 15,
         lineHeight: 1.55,
       }}
     >
+      <div style={pageWrapperStyle}>
       <h1 style={{ ...headingStyle, color: colors.white }}>
         Styrian Bastards Vereinsmanager
       </h1>
@@ -4350,7 +4363,9 @@ export default function App() {
       )}
 
       {activePage === 'admin' && (
-      <div style={{ marginTop: 15 }}>
+      <section style={sectionStyle}>
+        <h2 style={headingStyle}>Schnellexporte</h2>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <button onClick={exportMembersPdf} style={secondaryButtonStyle}>
           Mitgliederliste PDF
         </button>
@@ -4390,7 +4405,8 @@ export default function App() {
         <button onClick={exportCheckinsPdf} style={secondaryButtonStyle}>
           Anwesenheitsliste PDF
         </button>
-      </div>
+        </div>
+      </section>
       )}
 
       {activePage === 'admin' && (
@@ -4402,7 +4418,7 @@ export default function App() {
           das JSON-Backup enthält alle Hauptdaten als Sicherheitskopie.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
           <button onClick={exportMembersCsv} style={secondaryButtonStyle}>
             Mitglieder CSV
           </button>
@@ -4717,7 +4733,7 @@ export default function App() {
 <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
   <strong style={dashboardLabelStyle}>Smart Alerts</strong>
 
-  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 14 }}>
+  <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 14 }}>
     {getDashboardAlerts().map((alert, index) => (
       <div
         key={`${alert.title}-${index}`}
@@ -4736,7 +4752,7 @@ export default function App() {
   </div>
 </div>
 
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
+<div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
 
   <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.black}` }}>
     <strong style={dashboardLabelStyle}>Kassastand</strong>
@@ -4844,7 +4860,7 @@ export default function App() {
   </p>
 </div>
 
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 15 }}>
+<div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 15 }}>
   <div style={cardStyle}>
     <strong style={dashboardLabelStyle}>Mitglieder nach Art</strong>
 
@@ -4942,7 +4958,7 @@ export default function App() {
             als „Übertrag Vorjahr“ an. Die App prüft vorher, ob im Zieljahr bereits ein Übertrag existiert.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(180px, 260px))', gap: 12 }}>
+          <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(180px, 260px))', gap: 12 }}>
             <div>
               <label style={{ fontWeight: 800, color: colors.black }}>Von Jahr</label>
               <select value={carryoverFromYear} onChange={(e) => setCarryoverFromYear(e.target.value)} style={inputStyle}>
@@ -5490,7 +5506,7 @@ export default function App() {
         <section style={sectionStyle}>
           <h2 style={headingStyle}>Inventar PRO</h2>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
+          <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
             <div style={{ ...cardStyle, borderTop: `6px solid ${colors.black}` }}>
               <strong style={dashboardLabelStyle}>Inventar gesamt</strong>
               <h2 style={dashboardNumberStyle}>{inventoryItems.length}</h2>
@@ -5699,7 +5715,7 @@ export default function App() {
             <option value="ausgemustert">Ausgemustert</option>
           </select>
 
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(220px, 1fr))', gap: 12 }}>
+          <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(220px, 1fr))', gap: 12 }}>
             <select value={inventorySortBy} onChange={(e) => setInventorySortBy(e.target.value)} style={inputStyle}>
               <option value="inventory_number">Sortieren nach Inventar-Nr.</option>
               <option value="name">Sortieren nach Bezeichnung</option>
@@ -6212,6 +6228,7 @@ export default function App() {
       </section>
       </>
       )}
+      </div>
     </main>
   )
 }
