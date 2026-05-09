@@ -1727,6 +1727,7 @@ export default function App() {
       Zahlungsart: getPaymentMethodLabel(getPaymentMethod(entry)),
       Kategorie: entry.is_opening ? 'Übertrag' : entry.category || '',
       Event: getEventNameById(entry.event_id) || '',
+      Rechnung: entry.invoice_id ? getInvoiceById(entry.invoice_id)?.invoice_number || entry.invoice_id : '',
       Betrag: Number(entry.amount || 0).toFixed(2),
       Beschreibung: entry.description || '',
       Beleg: entry.receipt_url || '',
@@ -1743,6 +1744,7 @@ export default function App() {
       'Zahlungsart',
       'Kategorie',
       'Event',
+      'Rechnung',
       'Betrag',
       'Beschreibung',
       'Beleg',
@@ -3070,6 +3072,14 @@ export default function App() {
     return invoiceItems.filter((item) => item.invoice_id === invoiceId)
   }
 
+  function getInvoiceById(invoiceId) {
+    return invoices.find((invoice) => invoice.id === invoiceId)
+  }
+
+  function getMemberById(memberId) {
+    return members.find((member) => member.id === memberId)
+  }
+
   function getInvoiceTotal(invoice) {
     const items = getItemsForInvoice(invoice.id)
 
@@ -3124,6 +3134,93 @@ export default function App() {
 
       return matchesSearch && matchesStatus && matchesTest
     })
+  }
+
+  async function createMembershipFeeInvoice(member, fee) {
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungen.')
+
+    if (!member || !fee) {
+      alert('Mitglied oder Beitrag fehlt.')
+      return
+    }
+
+    if (fee.paid) {
+      alert('Dieser Mitgliedsbeitrag ist bereits bezahlt.')
+      return
+    }
+
+    const existingInvoice = invoices.find(
+      (invoice) =>
+        invoice.membership_fee_id === fee.id &&
+        invoice.status !== 'storniert'
+    )
+
+    if (existingInvoice) {
+      const openExisting = window.confirm(
+        `Für diesen Beitrag gibt es bereits eine Rechnung:\n\n${existingInvoice.invoice_number}\n\nPDF jetzt öffnen?`
+      )
+
+      if (openExisting) {
+        await exportInvoicePdf(existingInvoice)
+      }
+
+      return
+    }
+
+    const year = Number(fee.year || new Date().getFullYear())
+    const invoiceNumber = getNextInvoiceNumber(year, false)
+    const amount = Number(fee.amount || 0)
+
+    const confirmed = window.confirm(
+      `Mitgliedsbeitrag-Rechnung erstellen?\n\n${member.first_name || ''} ${member.last_name || ''}\nBetrag: ${amount.toFixed(2)} €\nRechnungsnummer: ${invoiceNumber}`
+    )
+
+    if (!confirmed) return
+
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .insert({
+        invoice_number: invoiceNumber,
+        customer_name: `${member.first_name || ''} ${member.last_name || ''}`.trim(),
+        customer_email: member.email || null,
+        customer_address: [member.street, `${member.postal_code || ''} ${member.city || ''}`.trim()]
+          .filter(Boolean)
+          .join(', ') || null,
+        issue_date: new Date().toISOString().slice(0, 10),
+        due_date: null,
+        total_amount: amount,
+        status: 'offen',
+        is_test: false,
+        notes: `Mitgliedsbeitrag ${year}`,
+        created_by: user?.id || null,
+        member_id: member.id,
+        membership_fee_id: fee.id,
+      })
+      .select()
+      .single()
+
+    if (error) return alert(error.message)
+
+    const { error: itemError } = await supabase.from('invoice_items').insert({
+      invoice_id: invoice.id,
+      description: `Mitgliedsbeitrag ${year} - ${member.first_name || ''} ${member.last_name || ''}`,
+      quantity: 1,
+      unit_price: amount,
+      total_price: amount,
+    })
+
+    if (itemError) return alert(itemError.message)
+
+    await createAuditLog('insert_membership_fee_invoice', 'invoices', invoice.id, null, {
+      invoice,
+      member_id: member.id,
+      membership_fee_id: fee.id,
+    })
+
+    await loadInvoices()
+    await loadInvoiceItems()
+
+    alert(`Mitgliedsbeitrag-Rechnung ${invoiceNumber} wurde erstellt.`)
   }
 
   async function createInvoice() {
@@ -3227,6 +3324,9 @@ export default function App() {
         amount: Number(invoice.total_amount || 0),
         description: `Rechnung bezahlt: ${invoice.invoice_number} - ${invoice.customer_name}`,
         receipt_url: null,
+        invoice_id: invoice.id,
+        membership_fee_id: invoice.membership_fee_id || null,
+        member_id: invoice.member_id || null,
       })
 
       if (cashError) return alert(cashError.message)
@@ -3242,6 +3342,19 @@ export default function App() {
 
     if (error) return alert(error.message)
 
+    if (invoice.membership_fee_id) {
+      const { error: feeError } = await supabase
+        .from('membership_fees')
+        .update({
+          paid: true,
+          paid_at: today,
+          payment_method: 'ueberweisung',
+        })
+        .eq('id', invoice.membership_fee_id)
+
+      if (feeError) return alert(feeError.message)
+    }
+
     await createAuditLog('mark_paid', 'invoices', invoice.id, invoice, {
       status: 'bezahlt',
       paid_at: today,
@@ -3249,6 +3362,7 @@ export default function App() {
 
     await loadInvoices()
     await loadCashEntries()
+    await loadFees()
 
     alert('Rechnung wurde als bezahlt markiert und in die Kassa übernommen.')
   }
@@ -3336,6 +3450,10 @@ export default function App() {
     doc.text(`Fällig bis: ${invoice.due_date || '-'}`, 14, 52)
     doc.text(`Status: ${invoice.status || '-'}${invoice.is_test ? ' · TEST' : ''}`, 14, 59)
 
+    if (invoice.membership_fee_id) {
+      doc.text('Art: Mitgliedsbeitrag-Rechnung', 14, 66)
+    }
+
     doc.text('Rechnung an:', 14, 72)
     doc.text(invoice.customer_name || '-', 14, 79)
 
@@ -3395,6 +3513,8 @@ export default function App() {
       BezahltAm: invoice.paid_at || '',
       StorniertAm: invoice.cancelled_at || '',
       StornoGrund: invoice.cancellation_reason || '',
+      MitgliedID: invoice.member_id || '',
+      MitgliedsbeitragID: invoice.membership_fee_id || '',
       Notizen: invoice.notes || '',
     }))
 
@@ -3411,6 +3531,8 @@ export default function App() {
       'BezahltAm',
       'StorniertAm',
       'StornoGrund',
+      'MitgliedID',
+      'MitgliedsbeitragID',
       'Notizen',
     ]
 
@@ -3454,13 +3576,14 @@ export default function App() {
 
     autoTable(doc, {
       startY: 48,
-      head: [['Belegnr.', 'Datum', 'Typ', 'Zahlungsart', 'Event', 'Kategorie', 'Beschreibung', 'Betrag', 'Status']],
+      head: [['Belegnr.', 'Datum', 'Typ', 'Zahlungsart', 'Event', 'Rechnung', 'Kategorie', 'Beschreibung', 'Betrag', 'Status']],
       body: filteredCash.map((e) => [
         e.receipt_number || '',
         e.entry_date || '',
         e.type || '',
         getPaymentMethodLabel(getPaymentMethod(e)),
         getEventNameById(e.event_id) || '-',
+        e.invoice_id ? getInvoiceById(e.invoice_id)?.invoice_number || '-' : '-',
         e.category || '',
         e.description || '',
         `${Number(e.amount || 0).toFixed(2)} EUR`,
@@ -5284,6 +5407,12 @@ export default function App() {
               Adresse: {invoice.customer_address || '-'}
               <br />
               Notizen: {invoice.notes || '-'}
+              {invoice.membership_fee_id && (
+                <>
+                  <br />
+                  <strong>Mitgliedsbeitrag-Rechnung</strong>
+                </>
+              )}
 
               {getItemsForInvoice(invoice.id).length > 0 && (
                 <>
@@ -6242,6 +6371,18 @@ export default function App() {
               </>
             )}
 
+            {entry.invoice_id && getInvoiceById(entry.invoice_id) && (
+              <>
+                <br />
+                Rechnung:{' '}
+                <strong>{getInvoiceById(entry.invoice_id).invoice_number}</strong>
+                <br />
+                <button onClick={() => exportInvoicePdf(getInvoiceById(entry.invoice_id))} style={secondaryButtonStyle}>
+                  Rechnung PDF öffnen
+                </button>
+              </>
+            )}
+
             {entry.receipt_url && (
               <>
                 <br />
@@ -7183,6 +7324,10 @@ export default function App() {
 
               {fee && !fee.paid && (
                 <>
+                  <button onClick={() => createMembershipFeeInvoice(member, fee)} style={secondaryButtonStyle}>
+                    Mitgliedsbeitrag Rechnung erstellen
+                  </button>
+
                   <button onClick={() => markFeePaid(fee, 'bar')} style={buttonStyle}>
                     Beitrag bar bezahlt
                   </button>
