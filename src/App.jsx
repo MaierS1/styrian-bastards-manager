@@ -219,6 +219,7 @@ export default function App() {
   const [memberTypeFilter, setMemberTypeFilter] = useState('alle')
   const [roleFilter, setRoleFilter] = useState('alle')
   const [feeFilter, setFeeFilter] = useState('alle')
+  const [memberTestFilter, setMemberTestFilter] = useState('alle')
   const [linkedMemberNotice, setLinkedMemberNotice] = useState('')
 
   const [cashSearch, setCashSearch] = useState('')
@@ -232,6 +233,7 @@ export default function App() {
   const [memberType, setMemberType] = useState('vollmitglied')
   const [role, setRole] = useState('mitglied')
   const [appRole, setAppRole] = useState('readonly')
+  const [isTestMember, setIsTestMember] = useState(false)
   const [street, setStreet] = useState('')
   const [postalCode, setPostalCode] = useState('')
   const [city, setCity] = useState('')
@@ -889,6 +891,14 @@ export default function App() {
       })
     }
 
+    if (getTestMembers().length > 0 || getTestInvoices().length > 0 || getTestCashEntries().length > 0) {
+      alerts.push({
+        type: 'warning',
+        title: 'Testdaten vorhanden',
+        message: `${getTestMembers().length} Testmitglied(er), ${getTestInvoices().length} Testrechnung(en) und ${getTestCashEntries().length} Test-Kassa-Eintrag/Einträge vorhanden.`,
+      })
+    }
+
     if (!hasOpeningForYear(selectedCashYear) && selectedCashYear !== 'alle') {
       const previousYear = Number(selectedCashYear) - 1
       const hasPreviousYearEntries = cashEntries.some((entry) => getEntryYear(entry) === String(previousYear))
@@ -1114,6 +1124,8 @@ export default function App() {
       member_type: memberType,
       role,
       app_role: appRole,
+      is_test: false,
+      is_test: isTestMember,
       street,
       postal_code: postalCode,
       city,
@@ -1724,7 +1736,12 @@ export default function App() {
         (feeFilter === 'bezahlt' && fee && fee.paid) ||
         (feeFilter === 'gratis' && fee && Number(fee.amount) === 0)
 
-      return matchesSearch && matchesStatus && matchesType && matchesRole && matchesFee
+      const matchesTest =
+        memberTestFilter === 'alle' ||
+        (memberTestFilter === 'test' && member.is_test) ||
+        (memberTestFilter === 'echt' && !member.is_test)
+
+      return matchesSearch && matchesStatus && matchesType && matchesRole && matchesFee && matchesTest
     })
   }
 
@@ -3106,6 +3123,155 @@ export default function App() {
     doc.save('styrian-bastards-inventar-etiketten-a4-16.pdf')
   }
 
+  function getTestMembers() {
+    return members.filter((member) => member.is_test)
+  }
+
+  function getTestInvoices() {
+    return invoices.filter((invoice) => invoice.is_test || getMemberById(invoice.member_id)?.is_test)
+  }
+
+  function getTestCashEntries() {
+    return cashEntries.filter((entry) => {
+      if (entry.is_test) return true
+      if (entry.invoice_id && getInvoiceById(entry.invoice_id)?.is_test) return true
+      if (entry.member_id && getMemberById(entry.member_id)?.is_test) return true
+      return false
+    })
+  }
+
+  function getRealCashEntriesForSelectedYear() {
+    return getCashEntriesForSelectedYear().filter((entry) => !getTestCashEntries().some((testEntry) => testEntry.id === entry.id))
+  }
+
+  async function markMemberAsTest(member) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Testmitglieder markieren.')
+
+    const confirmed = window.confirm(
+      `Mitglied als Testmitglied markieren?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nTestmitglieder werden im Dashboard und Kassasystem getrennt angezeigt.`
+    )
+
+    if (!confirmed) return
+
+    const { error } = await supabase
+      .from('members')
+      .update({ is_test: true })
+      .eq('id', member.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('mark_test_member', 'members', member.id, member, { is_test: true })
+    await loadMembers()
+    alert('Mitglied wurde als Testmitglied markiert.')
+  }
+
+  async function deleteAllTestDataForMember(member) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Testdaten löschen.')
+
+    if (!member?.is_test) {
+      alert('Dieses Mitglied ist kein Testmitglied. Aus Sicherheitsgründen wird nichts gelöscht.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Alle Testdaten endgültig löschen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nGelöscht werden:\n- Test-Rechnungen\n- Test-Kassa-Einträge\n- Mitgliedsbeiträge\n- Änderungsanträge\n- das Testmitglied\n\nEchte Daten werden nicht gelöscht.`
+    )
+
+    if (!confirmed) return
+
+    const secondConfirm = window.confirm('Bitte nochmals bestätigen: Die Testdaten werden endgültig gelöscht.')
+
+    if (!secondConfirm) return
+
+    const memberInvoices = invoices.filter((invoice) => invoice.member_id === member.id || invoice.is_test)
+    const memberInvoiceIds = memberInvoices.map((invoice) => invoice.id)
+
+    if (memberInvoiceIds.length > 0) {
+      const { error: cashError } = await supabase
+        .from('cash_entries')
+        .delete()
+        .in('invoice_id', memberInvoiceIds)
+
+      if (cashError) return alert(cashError.message)
+    }
+
+    const { error: memberCashError } = await supabase
+      .from('cash_entries')
+      .delete()
+      .eq('member_id', member.id)
+
+    if (memberCashError) return alert(memberCashError.message)
+
+    if (memberInvoiceIds.length > 0) {
+      const { error: invoiceError } = await supabase
+        .from('invoices')
+        .delete()
+        .in('id', memberInvoiceIds)
+
+      if (invoiceError) return alert(invoiceError.message)
+    }
+
+    const { error: feesError } = await supabase
+      .from('membership_fees')
+      .delete()
+      .eq('member_id', member.id)
+
+    if (feesError) return alert(feesError.message)
+
+    const { error: requestsError } = await supabase
+      .from('member_change_requests')
+      .delete()
+      .eq('member_id', member.id)
+
+    if (requestsError) return alert(requestsError.message)
+
+    const { error: memberError } = await supabase
+      .from('members')
+      .delete()
+      .eq('id', member.id)
+
+    if (memberError) return alert(memberError.message)
+
+    await createAuditLog('delete_test_member_data', 'members', member.id, member, {
+      deleted_invoices: memberInvoiceIds.length,
+    })
+
+    await loadAll()
+    alert('Testmitglied und zugehörige Testdaten wurden gelöscht.')
+  }
+
+  async function deleteAllTestData() {
+    if (!isAdmin()) return alert('Nur Admins dürfen Testdaten löschen.')
+
+    const testMembers = getTestMembers()
+
+    if (testMembers.length === 0 && getTestInvoices().length === 0 && getTestCashEntries().length === 0) {
+      alert('Keine Testdaten vorhanden.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Alle Testdaten löschen?\n\nTestmitglieder: ${testMembers.length}\nTest-Rechnungen: ${getTestInvoices().length}\nTest-Kassa-Einträge: ${getTestCashEntries().length}\n\nDieser Vorgang ist endgültig.`
+    )
+
+    if (!confirmed) return
+
+    for (const member of testMembers) {
+      await deleteAllTestDataForMember(member)
+    }
+
+    const remainingTestInvoices = getTestInvoices().filter((invoice) => !invoice.member_id)
+    const remainingTestInvoiceIds = remainingTestInvoices.map((invoice) => invoice.id)
+
+    if (remainingTestInvoiceIds.length > 0) {
+      await supabase.from('cash_entries').delete().in('invoice_id', remainingTestInvoiceIds)
+      await supabase.from('invoices').delete().in('id', remainingTestInvoiceIds)
+    }
+
+    await loadAll()
+    alert('Alle Testdaten wurden gelöscht.')
+  }
+
   function getPendingMemberChangeRequests() {
     return memberChangeRequests.filter((request) => request.status === 'offen')
   }
@@ -3408,7 +3574,7 @@ export default function App() {
         due_date: null,
         total_amount: amount,
         status: 'offen',
-        is_test: false,
+        is_test: Boolean(member.is_test),
         notes: `Mitgliedsbeitrag ${year}`,
         created_by: user?.id || null,
         member_id: member.id,
@@ -4326,6 +4492,7 @@ export default function App() {
     setMemberType('vollmitglied')
     setRole('mitglied')
     setAppRole('readonly')
+    setIsTestMember(false)
     setStreet('')
     setPostalCode('')
     setCity('')
@@ -4356,6 +4523,7 @@ export default function App() {
     setMemberType(member.member_type || 'vollmitglied')
     setRole(member.role || 'mitglied')
     setAppRole(member.app_role || 'readonly')
+    setIsTestMember(Boolean(member.is_test))
     setStreet(member.street || '')
     setPostalCode(member.postal_code || '')
     setCity(member.city || '')
@@ -4447,6 +4615,7 @@ export default function App() {
       description: `Mitgliedsbeitrag 2026 - ${
         member ? `${member.first_name} ${member.last_name}` : 'Mitglied'
       }`,
+      is_test: Boolean(member?.is_test),
       member_id: fee.member_id,
       membership_fee_id: fee.id,
     })
@@ -5622,7 +5791,7 @@ export default function App() {
               }}
             >
               <strong>{invoice.invoice_number}</strong> · {invoice.customer_name}
-              {invoice.is_test && (
+              {(invoice.is_test || getMemberById(invoice.member_id)?.is_test) && (
                 <>
                   {' '}<strong style={{ color: colors.red }}>TEST</strong>
                 </>
@@ -5921,6 +6090,12 @@ export default function App() {
     <h2 style={dashboardNumberStyle}>{getInventoryTotalValue().toFixed(2)} €</h2>
   </div>
 
+  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.red}` }}>
+    <strong style={dashboardLabelStyle}>Testdaten</strong>
+    <h2 style={dashboardNumberStyle}>{getTestMembers().length}</h2>
+    <p style={mutedTextStyle}>Testmitglieder vorhanden</p>
+  </div>
+
 </div>
 
 <br />
@@ -6166,6 +6341,21 @@ export default function App() {
             </option>
           ))}
         </select>
+
+        <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
+          <strong style={dashboardLabelStyle}>Testdaten im Kassasystem</strong>
+          <br />
+          Test-Kassa-Einträge: {getTestCashEntries().length}
+          <br />
+          Summe Test-Kassa:{' '}
+          <strong>
+            {getTestCashEntries().reduce((sum, entry) => sum + getCashEntrySignedAmount(entry), 0).toFixed(2)} €
+          </strong>
+          <br />
+          <span style={mutedTextStyle}>
+            Testdaten sind getrennt sichtbar und können im Adminbereich gelöscht werden.
+          </span>
+        </div>
 
         <h3 style={headingStyle}>Automatischer Jahresübertrag</h3>
 
@@ -6585,6 +6775,11 @@ export default function App() {
             </strong>
             <br />
             Belegnr.: {entry.receipt_number || '-'} · {entry.is_opening ? 'Übertrag' : entry.category} · {entry.entry_date} · {getPaymentMethodLabel(getPaymentMethod(entry))}
+            {getTestCashEntries().some((testEntry) => testEntry.id === entry.id) && (
+              <>
+                {' '}· <strong style={{ color: colors.red }}>TEST</strong>
+              </>
+            )}
             {isCashEntryMonthClosed(entry) && (
               <>
                 {' '}· <strong style={{ color: colors.successText }}>Monat abgeschlossen</strong>
@@ -7383,6 +7578,51 @@ export default function App() {
 
       {activePage === 'admin' && isAdmin() && (
         <section style={sectionStyle}>
+          <h2 style={headingStyle}>Testdaten / Papierkorb</h2>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+            <div style={cardStyle}>
+              <strong>Testmitglieder</strong>
+              <h2 style={dashboardNumberStyle}>{getTestMembers().length}</h2>
+            </div>
+
+            <div style={cardStyle}>
+              <strong>Testrechnungen</strong>
+              <h2 style={dashboardNumberStyle}>{getTestInvoices().length}</h2>
+            </div>
+
+            <div style={cardStyle}>
+              <strong>Test-Kassa</strong>
+              <h2 style={dashboardNumberStyle}>{getTestCashEntries().length}</h2>
+            </div>
+          </div>
+
+          <button
+            onClick={deleteAllTestData}
+            style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
+          >
+            Alle Testdaten löschen
+          </button>
+
+          {getTestMembers().map((member) => (
+            <div key={member.id} style={cardStyle}>
+              <strong>{member.first_name} {member.last_name}</strong>
+              <br />
+              {member.email || '-'}
+              <br />
+              <button
+                onClick={() => deleteAllTestDataForMember(member)}
+                style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
+              >
+                Testdaten dieses Mitglieds löschen
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {activePage === 'admin' && isAdmin() && (
+        <section style={sectionStyle}>
           <h2 style={headingStyle}>Audit Log</h2>
 
           <p style={mutedTextStyle}>
@@ -7505,13 +7745,25 @@ export default function App() {
         </select>
 
         {isAdmin() && (
-          <select value={appRole} onChange={(e) => setAppRole(e.target.value)} style={inputStyle}>
-            <option value="readonly">App-Recht: Nur Lesen</option>
-            <option value="checkin">App-Recht: Check-in</option>
-            <option value="cashier">App-Recht: Kassa</option>
-            <option value="members">App-Recht: Mitgliederverwaltung</option>
-            <option value="admin">App-Recht: Admin</option>
-          </select>
+          <>
+            <select value={appRole} onChange={(e) => setAppRole(e.target.value)} style={inputStyle}>
+              <option value="readonly">App-Recht: Nur Lesen</option>
+              <option value="checkin">App-Recht: Check-in</option>
+              <option value="cashier">App-Recht: Kassa</option>
+              <option value="members">App-Recht: Mitgliederverwaltung</option>
+              <option value="admin">App-Recht: Admin</option>
+            </select>
+
+            <label style={{ display: 'block', marginBottom: 12, fontWeight: 800, color: colors.black }}>
+              <input
+                type="checkbox"
+                checked={isTestMember}
+                onChange={(e) => setIsTestMember(e.target.checked)}
+                style={{ marginRight: 8 }}
+              />
+              Testmitglied
+            </label>
+          </>
         )}
 
         <input placeholder="Straße" value={street} onChange={(e) => setStreet(e.target.value)} style={inputStyle} />
@@ -7592,6 +7844,12 @@ export default function App() {
           <option value="gratis">Kein Beitrag</option>
         </select>
 
+        <select value={memberTestFilter} onChange={(e) => setMemberTestFilter(e.target.value)} style={inputStyle}>
+          <option value="alle">Alle Mitglieder</option>
+          <option value="echt">Nur echte Mitglieder</option>
+          <option value="test">Nur Testmitglieder</option>
+        </select>
+
         <button onClick={resetMemberFilters} style={buttonStyle}>
           Filter zurücksetzen
         </button>
@@ -7629,6 +7887,12 @@ export default function App() {
               Vereinsfunktion: {getRoleLabel(member.role || 'mitglied')}
               <br />
               App-Recht: {getAppRoleLabel(member.app_role || 'readonly')}
+              {member.is_test && (
+                <>
+                  <br />
+                  <strong style={{ color: colors.red }}>TESTMITGLIED</strong>
+                </>
+              )}
               <br />
               Adresse: {member.street}, {member.postal_code} {member.city}
               <br />
@@ -7669,12 +7933,30 @@ export default function App() {
                 Ausgetreten
               </button>
 
-              {isAdmin() && (
+              {isAdmin() && !member.is_test && (
                 <button
                   onClick={() => deleteMember(member)}
                   style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
                 >
                   Mitglied löschen
+                </button>
+              )}
+
+              {isAdmin() && !member.is_test && (
+                <button
+                  onClick={() => markMemberAsTest(member)}
+                  style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
+                >
+                  Als Testmitglied markieren
+                </button>
+              )}
+
+              {isAdmin() && member.is_test && (
+                <button
+                  onClick={() => deleteAllTestDataForMember(member)}
+                  style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
+                >
+                  Testdaten dieses Mitglieds löschen
                 </button>
               )}
 
