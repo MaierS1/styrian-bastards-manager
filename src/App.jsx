@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
+import { generateInvoicePdf } from './lib/invoiceGenerator'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { QRCodeCanvas } from 'qrcode.react'
@@ -3829,74 +3830,16 @@ export default function App() {
   }
 
   async function exportInvoicePdf(invoice) {
-    const doc = new jsPDF()
     const items = getItemsForInvoice(invoice.id)
-    const total = getInvoiceTotal(invoice)
+    const member = invoice.member_id ? getMemberById(invoice.member_id) : null
 
-    doc.setFontSize(18)
-    doc.text('Styrian Bastards', 14, 18)
-
-    if (invoice.is_test) {
-      doc.setTextColor(193, 18, 31)
-      doc.setFontSize(22)
-      doc.text('TESTRECHNUNG', 120, 18)
-      doc.setTextColor(0, 0, 0)
-    }
-
-    doc.setFontSize(11)
-    doc.text('Vereinsrechnung', 14, 27)
-    doc.text(`Rechnungsnummer: ${invoice.invoice_number}`, 14, 38)
-    doc.text(`Rechnungsdatum: ${invoice.issue_date || '-'}`, 14, 45)
-    doc.text(`Fällig bis: ${invoice.due_date || '-'}`, 14, 52)
-    doc.text(`Status: ${invoice.status || '-'}${invoice.is_test ? ' · TEST' : ''}`, 14, 59)
-
-    if (invoice.membership_fee_id) {
-      doc.text('Art: Mitgliedsbeitrag-Rechnung', 14, 66)
-    }
-
-    doc.text('Rechnung an:', 14, 72)
-    doc.text(invoice.customer_name || '-', 14, 79)
-
-    if (invoice.customer_address) {
-      doc.text(String(invoice.customer_address), 14, 86, { maxWidth: 85 })
-    }
-
-    if (invoice.customer_email) {
-      doc.text(`E-Mail: ${invoice.customer_email}`, 14, 104)
-    }
-
-    autoTable(doc, {
-      startY: 118,
-      head: [['Beschreibung', 'Menge', 'Einzelpreis', 'Summe']],
-      body: items.map((item) => [
-        item.description || '',
-        Number(item.quantity || 0).toString(),
-        `${Number(item.unit_price || 0).toFixed(2)} EUR`,
-        `${Number(item.total_price || 0).toFixed(2)} EUR`,
-      ]),
-      foot: [['', '', 'Gesamt', `${total.toFixed(2)} EUR`]],
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [5, 5, 5] },
+    await generateInvoicePdf({
+      invoice,
+      member,
+      items,
+      isTest: Boolean(invoice.is_test || getMemberById(invoice.member_id)?.is_test),
+      isCancelled: invoice.status === 'storniert',
     })
-
-    const finalY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 12 : 170
-
-    doc.setFontSize(10)
-    doc.text('Zahlungsinformationen:', 14, finalY)
-    doc.text('Bitte den Rechnungsbetrag unter Angabe der Rechnungsnummer als Verwendungszweck überweisen.', 14, finalY + 7, {
-      maxWidth: 180,
-    })
-    doc.text(`Verwendungszweck: ${invoice.invoice_number}`, 14, finalY + 18)
-
-    doc.text('Hinweis: Diese Rechnung wurde vom Verein Styrian Bastards erstellt.', 14, finalY + 35, {
-      maxWidth: 180,
-    })
-
-    if (invoice.notes) {
-      doc.text(`Notiz: ${invoice.notes}`, 14, finalY + 48, { maxWidth: 180 })
-    }
-
-    doc.save(`rechnung-${invoice.invoice_number}.pdf`)
   }
 
   function exportInvoicesCsv() {
