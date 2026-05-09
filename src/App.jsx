@@ -294,6 +294,8 @@ export default function App() {
   const [invoiceRows, setInvoiceRows] = useState([{ description: '', quantity: 1, unit_price: '' }])
   const [invoiceSearch, setInvoiceSearch] = useState('')
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('alle')
+  const [invoiceIsTest, setInvoiceIsTest] = useState(false)
+  const [invoiceTestFilter, setInvoiceTestFilter] = useState('alle')
 
   const [restoreData, setRestoreData] = useState(null)
   const [restoreFileName, setRestoreFileName] = useState('')
@@ -3043,8 +3045,8 @@ export default function App() {
     return { label: 'Finanzen wirken stabil', color: colors.successText }
   }
 
-  function getNextInvoiceNumber(year = new Date().getFullYear()) {
-    const prefix = `SB-${year}-`
+  function getNextInvoiceNumber(year = new Date().getFullYear(), isTest = false) {
+    const prefix = isTest ? `TEST-SB-${year}-` : `SB-${year}-`
 
     const maxNumber = invoices.reduce((max, invoice) => {
       const invoiceNumber = String(invoice.invoice_number || '')
@@ -3083,6 +3085,7 @@ export default function App() {
     setInvoiceIssueDate(new Date().toISOString().slice(0, 10))
     setInvoiceDueDate('')
     setInvoiceNotes('')
+    setInvoiceIsTest(false)
     setInvoiceRows([{ description: '', quantity: 1, unit_price: '' }])
   }
 
@@ -3114,8 +3117,12 @@ export default function App() {
         (invoice.notes || '').toLowerCase().includes(search)
 
       const matchesStatus = invoiceStatusFilter === 'alle' || invoice.status === invoiceStatusFilter
+      const matchesTest =
+        invoiceTestFilter === 'alle' ||
+        (invoiceTestFilter === 'test' && invoice.is_test) ||
+        (invoiceTestFilter === 'echt' && !invoice.is_test)
 
-      return matchesSearch && matchesStatus
+      return matchesSearch && matchesStatus && matchesTest
     })
   }
 
@@ -3141,7 +3148,7 @@ export default function App() {
     }
 
     const issueYear = Number(String(invoiceIssueDate || new Date().toISOString().slice(0, 10)).slice(0, 4))
-    const invoiceNumber = getNextInvoiceNumber(issueYear)
+    const invoiceNumber = getNextInvoiceNumber(issueYear, invoiceIsTest)
     const totalAmount = validRows.reduce((sum, row) => sum + row.quantity * row.unit_price, 0)
 
     const { data: invoice, error } = await supabase
@@ -3155,6 +3162,7 @@ export default function App() {
         due_date: invoiceDueDate || null,
         total_amount: totalAmount,
         status: 'offen',
+        is_test: invoiceIsTest,
         notes: invoiceNotes.trim() || null,
         created_by: user?.id || null,
       })
@@ -3184,7 +3192,7 @@ export default function App() {
     await loadInvoices()
     await loadInvoiceItems()
 
-    alert(`Rechnung ${invoiceNumber} wurde erstellt.`)
+    alert(`${invoiceIsTest ? 'Testrechnung' : 'Rechnung'} ${invoiceNumber} wurde erstellt.`)
   }
 
   async function markInvoicePaid(invoice) {
@@ -3196,7 +3204,8 @@ export default function App() {
     }
 
     const confirmed = window.confirm(
-      `Rechnung als bezahlt markieren?\n\n${invoice.invoice_number}\n${invoice.customer_name}\n${Number(invoice.total_amount || 0).toFixed(2)} €\n\nEs wird automatisch eine Kassa-Einnahme erstellt.`
+      `Rechnung als bezahlt markieren?\n\n${invoice.invoice_number}\n${invoice.customer_name}\n${Number(invoice.total_amount || 0).toFixed(2)} €\n\n` +
+        (invoice.is_test ? 'Testrechnung: Es wird KEINE Kassa-Einnahme erstellt.' : 'Es wird automatisch eine Kassa-Einnahme erstellt.')
     )
 
     if (!confirmed) return
@@ -3204,22 +3213,24 @@ export default function App() {
     const today = new Date().toISOString().slice(0, 10)
     const year = Number(today.slice(0, 4))
 
-    const { error: cashError } = await supabase.from('cash_entries').insert({
-      entry_date: today,
-      entry_year: year,
-      receipt_number: getNextReceiptNumber(year),
-      is_cancelled: false,
-      type: 'einnahme',
-      category: 'sonstiges',
-      event_id: null,
-      payment_method: 'ebanking',
-      is_opening: false,
-      amount: Number(invoice.total_amount || 0),
-      description: `Rechnung bezahlt: ${invoice.invoice_number} - ${invoice.customer_name}`,
-      receipt_url: null,
-    })
+    if (!invoice.is_test) {
+      const { error: cashError } = await supabase.from('cash_entries').insert({
+        entry_date: today,
+        entry_year: year,
+        receipt_number: getNextReceiptNumber(year),
+        is_cancelled: false,
+        type: 'einnahme',
+        category: 'sonstiges',
+        event_id: null,
+        payment_method: 'ebanking',
+        is_opening: false,
+        amount: Number(invoice.total_amount || 0),
+        description: `Rechnung bezahlt: ${invoice.invoice_number} - ${invoice.customer_name}`,
+        receipt_url: null,
+      })
 
-    if (cashError) return alert(cashError.message)
+      if (cashError) return alert(cashError.message)
+    }
 
     const { error } = await supabase
       .from('invoices')
@@ -3274,6 +3285,35 @@ export default function App() {
     alert('Rechnung wurde storniert.')
   }
 
+  async function deleteInvoice(invoice) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Rechnungen löschen.')
+
+    const confirmed = window.confirm(
+      `Rechnung wirklich endgültig löschen?\n\n${invoice.invoice_number} · ${invoice.customer_name}\n\nBei echten Rechnungen ist normalerweise Storno besser. Testrechnungen können gefahrlos gelöscht werden.`
+    )
+
+    if (!confirmed) return
+
+    const secondConfirm = window.confirm(
+      'Bitte nochmals bestätigen: Die Rechnung inklusive Positionen wird endgültig gelöscht.'
+    )
+
+    if (!secondConfirm) return
+
+    const { error } = await supabase
+      .from('invoices')
+      .delete()
+      .eq('id', invoice.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('delete', 'invoices', invoice.id, invoice, null)
+    await loadInvoices()
+    await loadInvoiceItems()
+
+    alert('Rechnung wurde gelöscht.')
+  }
+
   async function exportInvoicePdf(invoice) {
     const doc = new jsPDF()
     const items = getItemsForInvoice(invoice.id)
@@ -3282,12 +3322,19 @@ export default function App() {
     doc.setFontSize(18)
     doc.text('Styrian Bastards', 14, 18)
 
+    if (invoice.is_test) {
+      doc.setTextColor(193, 18, 31)
+      doc.setFontSize(22)
+      doc.text('TESTRECHNUNG', 120, 18)
+      doc.setTextColor(0, 0, 0)
+    }
+
     doc.setFontSize(11)
     doc.text('Vereinsrechnung', 14, 27)
     doc.text(`Rechnungsnummer: ${invoice.invoice_number}`, 14, 38)
     doc.text(`Rechnungsdatum: ${invoice.issue_date || '-'}`, 14, 45)
     doc.text(`Fällig bis: ${invoice.due_date || '-'}`, 14, 52)
-    doc.text(`Status: ${invoice.status || '-'}`, 14, 59)
+    doc.text(`Status: ${invoice.status || '-'}${invoice.is_test ? ' · TEST' : ''}`, 14, 59)
 
     doc.text('Rechnung an:', 14, 72)
     doc.text(invoice.customer_name || '-', 14, 79)
@@ -3343,6 +3390,7 @@ export default function App() {
       Datum: invoice.issue_date || '',
       Faellig: invoice.due_date || '',
       Betrag: Number(invoice.total_amount || 0).toFixed(2),
+      Testrechnung: invoice.is_test ? 'ja' : 'nein',
       Status: invoice.status || '',
       BezahltAm: invoice.paid_at || '',
       StorniertAm: invoice.cancelled_at || '',
@@ -3358,6 +3406,7 @@ export default function App() {
       'Datum',
       'Faellig',
       'Betrag',
+      'Testrechnung',
       'Status',
       'BezahltAm',
       'StorniertAm',
@@ -5147,10 +5196,28 @@ export default function App() {
                 style={inputStyle}
               />
 
+              <label style={{ display: 'block', marginBottom: 12, fontWeight: 800, color: colors.black }}>
+                <input
+                  type="checkbox"
+                  checked={invoiceIsTest}
+                  onChange={(e) => setInvoiceIsTest(e.target.checked)}
+                  style={{ marginRight: 8 }}
+                />
+                Testrechnung erstellen
+              </label>
+
+              {invoiceIsTest && (
+                <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
+                  <strong style={{ color: colors.infoText }}>Testrechnung</strong>
+                  <br />
+                  Diese Rechnung wird mit TEST gekennzeichnet und erzeugt beim Bezahlt-Markieren keine Kassa-Einnahme.
+                </div>
+              )}
+
               <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
                 <strong>Rechnungssumme: {getInvoiceRowsTotal().toFixed(2)} €</strong>
                 <br />
-                Nächste Rechnungsnummer: {getNextInvoiceNumber(Number(String(invoiceIssueDate || new Date().getFullYear()).slice(0, 4)))}
+                Nächste Rechnungsnummer: {getNextInvoiceNumber(Number(String(invoiceIssueDate || new Date().getFullYear()).slice(0, 4)), invoiceIsTest)}
               </div>
 
               <button onClick={createInvoice} style={buttonStyle}>
@@ -5179,6 +5246,12 @@ export default function App() {
             <option value="storniert">Storniert</option>
           </select>
 
+          <select value={invoiceTestFilter} onChange={(e) => setInvoiceTestFilter(e.target.value)} style={inputStyle}>
+            <option value="alle">Alle Rechnungen</option>
+            <option value="echt">Nur echte Rechnungen</option>
+            <option value="test">Nur Testrechnungen</option>
+          </select>
+
           <button onClick={exportInvoicesCsv} style={secondaryButtonStyle}>
             Rechnungen CSV
           </button>
@@ -5196,6 +5269,11 @@ export default function App() {
               }}
             >
               <strong>{invoice.invoice_number}</strong> · {invoice.customer_name}
+              {invoice.is_test && (
+                <>
+                  {' '}<strong style={{ color: colors.red }}>TEST</strong>
+                </>
+              )}
               <br />
               Datum: {invoice.issue_date || '-'} · Fällig: {invoice.due_date || '-'}
               <br />
@@ -5235,6 +5313,15 @@ export default function App() {
                   style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
                 >
                   Rechnung stornieren
+                </button>
+              )}
+
+              {isAdmin() && (
+                <button
+                  onClick={() => deleteInvoice(invoice)}
+                  style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
+                >
+                  Rechnung löschen
                 </button>
               )}
             </div>
