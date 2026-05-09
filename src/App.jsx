@@ -191,6 +191,8 @@ export default function App() {
   const [events, setEvents] = useState([])
   const [documents, setDocuments] = useState([])
   const [inventoryItems, setInventoryItems] = useState([])
+  const [invoices, setInvoices] = useState([])
+  const [invoiceItems, setInvoiceItems] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
   const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
@@ -282,6 +284,16 @@ export default function App() {
   const [showInventoryQr, setShowInventoryQr] = useState(null)
   const [mobileScanning, setMobileScanning] = useState(false)
   const [mobileScanMode, setMobileScanMode] = useState('member')
+
+  const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
+  const [invoiceCustomerEmail, setInvoiceCustomerEmail] = useState('')
+  const [invoiceCustomerAddress, setInvoiceCustomerAddress] = useState('')
+  const [invoiceIssueDate, setInvoiceIssueDate] = useState(new Date().toISOString().slice(0, 10))
+  const [invoiceDueDate, setInvoiceDueDate] = useState('')
+  const [invoiceNotes, setInvoiceNotes] = useState('')
+  const [invoiceRows, setInvoiceRows] = useState([{ description: '', quantity: 1, unit_price: '' }])
+  const [invoiceSearch, setInvoiceSearch] = useState('')
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('alle')
 
   const [restoreData, setRestoreData] = useState(null)
   const [restoreFileName, setRestoreFileName] = useState('')
@@ -413,7 +425,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadAuditLogs(), loadEventCheckins(), loadEvents(), loadDocuments(), loadInventoryItems()])
+    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadAuditLogs(), loadEventCheckins(), loadEvents(), loadDocuments(), loadInventoryItems(), loadInvoices(), loadInvoiceItems()])
   }
 
   function getAppRole() {
@@ -471,6 +483,8 @@ export default function App() {
     setEvents([])
     setDocuments([])
     setInventoryItems([])
+    setInvoices([])
+    setInvoiceItems([])
     resetForm()
   }
 
@@ -598,6 +612,35 @@ export default function App() {
     }
 
     setInventoryItems(data || [])
+  }
+
+  async function loadInvoices() {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('*')
+      .order('issue_date', { ascending: false })
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.warn(error.message)
+      return
+    }
+
+    setInvoices(data || [])
+  }
+
+  async function loadInvoiceItems() {
+    const { data, error } = await supabase
+      .from('invoice_items')
+      .select('*')
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.warn(error.message)
+      return
+    }
+
+    setInvoiceItems(data || [])
   }
 
   function getFee(memberId) {
@@ -2148,6 +2191,8 @@ export default function App() {
       documents,
       audit_logs: auditLogs,
       inventory_items: inventoryItems,
+      invoices,
+      invoice_items: invoiceItems,
     }
 
     downloadTextFile(
@@ -2996,6 +3041,331 @@ export default function App() {
     if (data.balance < 0) return { label: 'Achtung: negatives Ergebnis', color: colors.red }
     if (data.openFeesTotal > 0) return { label: 'Offene Beiträge vorhanden', color: '#92400e' }
     return { label: 'Finanzen wirken stabil', color: colors.successText }
+  }
+
+  function getNextInvoiceNumber(year = new Date().getFullYear()) {
+    const prefix = `SB-${year}-`
+
+    const maxNumber = invoices.reduce((max, invoice) => {
+      const invoiceNumber = String(invoice.invoice_number || '')
+
+      if (!invoiceNumber.startsWith(prefix)) return max
+
+      const numberPart = Number(invoiceNumber.replace(prefix, ''))
+      return Number.isFinite(numberPart) ? Math.max(max, numberPart) : max
+    }, 0)
+
+    return `${prefix}${String(maxNumber + 1).padStart(4, '0')}`
+  }
+
+  function getInvoiceRowsTotal(rows = invoiceRows) {
+    return rows.reduce((sum, row) => {
+      return sum + Number(row.quantity || 0) * Number(row.unit_price || 0)
+    }, 0)
+  }
+
+  function getItemsForInvoice(invoiceId) {
+    return invoiceItems.filter((item) => item.invoice_id === invoiceId)
+  }
+
+  function getInvoiceTotal(invoice) {
+    const items = getItemsForInvoice(invoice.id)
+
+    if (items.length === 0) return Number(invoice.total_amount || 0)
+
+    return items.reduce((sum, item) => sum + Number(item.total_price || 0), 0)
+  }
+
+  function resetInvoiceForm() {
+    setInvoiceCustomerName('')
+    setInvoiceCustomerEmail('')
+    setInvoiceCustomerAddress('')
+    setInvoiceIssueDate(new Date().toISOString().slice(0, 10))
+    setInvoiceDueDate('')
+    setInvoiceNotes('')
+    setInvoiceRows([{ description: '', quantity: 1, unit_price: '' }])
+  }
+
+  function updateInvoiceRow(index, field, value) {
+    setInvoiceRows((rows) =>
+      rows.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [field]: value } : row
+      )
+    )
+  }
+
+  function addInvoiceRow() {
+    setInvoiceRows((rows) => [...rows, { description: '', quantity: 1, unit_price: '' }])
+  }
+
+  function removeInvoiceRow(index) {
+    setInvoiceRows((rows) => rows.filter((_, rowIndex) => rowIndex !== index))
+  }
+
+  function getFilteredInvoices() {
+    const search = invoiceSearch.toLowerCase()
+
+    return invoices.filter((invoice) => {
+      const matchesSearch =
+        !search ||
+        (invoice.invoice_number || '').toLowerCase().includes(search) ||
+        (invoice.customer_name || '').toLowerCase().includes(search) ||
+        (invoice.customer_email || '').toLowerCase().includes(search) ||
+        (invoice.notes || '').toLowerCase().includes(search)
+
+      const matchesStatus = invoiceStatusFilter === 'alle' || invoice.status === invoiceStatusFilter
+
+      return matchesSearch && matchesStatus
+    })
+  }
+
+  async function createInvoice() {
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungen.')
+
+    if (!invoiceCustomerName.trim()) {
+      alert('Kundenname ist Pflicht.')
+      return
+    }
+
+    const validRows = invoiceRows
+      .map((row) => ({
+        description: String(row.description || '').trim(),
+        quantity: Number(row.quantity || 0),
+        unit_price: Number(row.unit_price || 0),
+      }))
+      .filter((row) => row.description && row.quantity > 0 && row.unit_price >= 0)
+
+    if (validRows.length === 0) {
+      alert('Bitte mindestens eine gültige Rechnungsposition eingeben.')
+      return
+    }
+
+    const issueYear = Number(String(invoiceIssueDate || new Date().toISOString().slice(0, 10)).slice(0, 4))
+    const invoiceNumber = getNextInvoiceNumber(issueYear)
+    const totalAmount = validRows.reduce((sum, row) => sum + row.quantity * row.unit_price, 0)
+
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .insert({
+        invoice_number: invoiceNumber,
+        customer_name: invoiceCustomerName.trim(),
+        customer_email: invoiceCustomerEmail.trim() || null,
+        customer_address: invoiceCustomerAddress.trim() || null,
+        issue_date: invoiceIssueDate || new Date().toISOString().slice(0, 10),
+        due_date: invoiceDueDate || null,
+        total_amount: totalAmount,
+        status: 'offen',
+        notes: invoiceNotes.trim() || null,
+        created_by: user?.id || null,
+      })
+      .select()
+      .single()
+
+    if (error) return alert(error.message)
+
+    const rowsToInsert = validRows.map((row) => ({
+      invoice_id: invoice.id,
+      description: row.description,
+      quantity: row.quantity,
+      unit_price: row.unit_price,
+      total_price: row.quantity * row.unit_price,
+    }))
+
+    const { error: itemsError } = await supabase.from('invoice_items').insert(rowsToInsert)
+
+    if (itemsError) return alert(itemsError.message)
+
+    await createAuditLog('insert', 'invoices', invoice.id, null, {
+      ...invoice,
+      items: rowsToInsert,
+    })
+
+    resetInvoiceForm()
+    await loadInvoices()
+    await loadInvoiceItems()
+
+    alert(`Rechnung ${invoiceNumber} wurde erstellt.`)
+  }
+
+  async function markInvoicePaid(invoice) {
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungen.')
+
+    if (invoice.status === 'bezahlt') {
+      alert('Diese Rechnung ist bereits bezahlt.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Rechnung als bezahlt markieren?\n\n${invoice.invoice_number}\n${invoice.customer_name}\n${Number(invoice.total_amount || 0).toFixed(2)} €\n\nEs wird automatisch eine Kassa-Einnahme erstellt.`
+    )
+
+    if (!confirmed) return
+
+    const today = new Date().toISOString().slice(0, 10)
+    const year = Number(today.slice(0, 4))
+
+    const { error: cashError } = await supabase.from('cash_entries').insert({
+      entry_date: today,
+      entry_year: year,
+      receipt_number: getNextReceiptNumber(year),
+      is_cancelled: false,
+      type: 'einnahme',
+      category: 'sonstiges',
+      event_id: null,
+      payment_method: 'ebanking',
+      is_opening: false,
+      amount: Number(invoice.total_amount || 0),
+      description: `Rechnung bezahlt: ${invoice.invoice_number} - ${invoice.customer_name}`,
+      receipt_url: null,
+    })
+
+    if (cashError) return alert(cashError.message)
+
+    const { error } = await supabase
+      .from('invoices')
+      .update({
+        status: 'bezahlt',
+        paid_at: today,
+      })
+      .eq('id', invoice.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('mark_paid', 'invoices', invoice.id, invoice, {
+      status: 'bezahlt',
+      paid_at: today,
+    })
+
+    await loadInvoices()
+    await loadCashEntries()
+
+    alert('Rechnung wurde als bezahlt markiert und in die Kassa übernommen.')
+  }
+
+  async function cancelInvoice(invoice) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Rechnungen stornieren.')
+
+    if (invoice.status === 'storniert') {
+      alert('Diese Rechnung ist bereits storniert.')
+      return
+    }
+
+    const reason = window.prompt(`Storno-Grund für ${invoice.invoice_number} eingeben:`)
+
+    if (!reason || !reason.trim()) return
+
+    const { error } = await supabase
+      .from('invoices')
+      .update({
+        status: 'storniert',
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: reason.trim(),
+      })
+      .eq('id', invoice.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('cancel', 'invoices', invoice.id, invoice, {
+      status: 'storniert',
+      cancellation_reason: reason.trim(),
+    })
+
+    await loadInvoices()
+    alert('Rechnung wurde storniert.')
+  }
+
+  async function exportInvoicePdf(invoice) {
+    const doc = new jsPDF()
+    const items = getItemsForInvoice(invoice.id)
+    const total = getInvoiceTotal(invoice)
+
+    doc.setFontSize(18)
+    doc.text('Styrian Bastards', 14, 18)
+
+    doc.setFontSize(11)
+    doc.text('Vereinsrechnung', 14, 27)
+    doc.text(`Rechnungsnummer: ${invoice.invoice_number}`, 14, 38)
+    doc.text(`Rechnungsdatum: ${invoice.issue_date || '-'}`, 14, 45)
+    doc.text(`Fällig bis: ${invoice.due_date || '-'}`, 14, 52)
+    doc.text(`Status: ${invoice.status || '-'}`, 14, 59)
+
+    doc.text('Rechnung an:', 14, 72)
+    doc.text(invoice.customer_name || '-', 14, 79)
+
+    if (invoice.customer_address) {
+      doc.text(String(invoice.customer_address), 14, 86, { maxWidth: 85 })
+    }
+
+    if (invoice.customer_email) {
+      doc.text(`E-Mail: ${invoice.customer_email}`, 14, 104)
+    }
+
+    autoTable(doc, {
+      startY: 118,
+      head: [['Beschreibung', 'Menge', 'Einzelpreis', 'Summe']],
+      body: items.map((item) => [
+        item.description || '',
+        Number(item.quantity || 0).toString(),
+        `${Number(item.unit_price || 0).toFixed(2)} EUR`,
+        `${Number(item.total_price || 0).toFixed(2)} EUR`,
+      ]),
+      foot: [['', '', 'Gesamt', `${total.toFixed(2)} EUR`]],
+      styles: { fontSize: 10 },
+      headStyles: { fillColor: [5, 5, 5] },
+    })
+
+    const finalY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 12 : 170
+
+    doc.setFontSize(10)
+    doc.text('Zahlungsinformationen:', 14, finalY)
+    doc.text('Bitte den Rechnungsbetrag unter Angabe der Rechnungsnummer als Verwendungszweck überweisen.', 14, finalY + 7, {
+      maxWidth: 180,
+    })
+    doc.text(`Verwendungszweck: ${invoice.invoice_number}`, 14, finalY + 18)
+
+    doc.text('Hinweis: Diese Rechnung wurde vom Verein Styrian Bastards erstellt.', 14, finalY + 35, {
+      maxWidth: 180,
+    })
+
+    if (invoice.notes) {
+      doc.text(`Notiz: ${invoice.notes}`, 14, finalY + 48, { maxWidth: 180 })
+    }
+
+    doc.save(`rechnung-${invoice.invoice_number}.pdf`)
+  }
+
+  function exportInvoicesCsv() {
+    const rows = getFilteredInvoices().map((invoice) => ({
+      Rechnungsnummer: invoice.invoice_number || '',
+      Kunde: invoice.customer_name || '',
+      Email: invoice.customer_email || '',
+      Adresse: invoice.customer_address || '',
+      Datum: invoice.issue_date || '',
+      Faellig: invoice.due_date || '',
+      Betrag: Number(invoice.total_amount || 0).toFixed(2),
+      Status: invoice.status || '',
+      BezahltAm: invoice.paid_at || '',
+      StorniertAm: invoice.cancelled_at || '',
+      StornoGrund: invoice.cancellation_reason || '',
+      Notizen: invoice.notes || '',
+    }))
+
+    const headers = [
+      'Rechnungsnummer',
+      'Kunde',
+      'Email',
+      'Adresse',
+      'Datum',
+      'Faellig',
+      'Betrag',
+      'Status',
+      'BezahltAm',
+      'StorniertAm',
+      'StornoGrund',
+      'Notizen',
+    ]
+
+    downloadTextFile('styrian-bastards-rechnungen.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
   }
 
   function exportMembersPdf() {
@@ -4432,6 +4802,7 @@ export default function App() {
           ['scanner', 'Scanner'],
           ['members', 'Mitglieder'],
           ['cash', 'Kassa'],
+          ['invoices', 'Rechnungen'],
           ['events', 'Events'],
           ['documents', 'Dokumente'],
           ['inventory', 'Inventar'],
@@ -4574,6 +4945,10 @@ export default function App() {
             Inventar Etiketten PDF
           </button>
 
+          <button onClick={exportInvoicesCsv} style={secondaryButtonStyle}>
+            Rechnungen CSV
+          </button>
+
           <button onClick={exportFullBackupJson} style={buttonStyle}>
             Komplett-Backup JSON
           </button>
@@ -4643,6 +5018,228 @@ export default function App() {
           </div>
         )}
       </section>
+      )}
+
+      {activePage === 'invoices' && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Vereinsrechnung PRO</h2>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
+            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.black}` }}>
+              <strong style={dashboardLabelStyle}>Rechnungen</strong>
+              <h2 style={dashboardNumberStyle}>{invoices.length}</h2>
+            </div>
+
+            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
+              <strong style={dashboardLabelStyle}>Offen</strong>
+              <h2 style={dashboardNumberStyle}>
+                {invoices.filter((invoice) => invoice.status === 'offen').reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0).toFixed(2)} €
+              </h2>
+            </div>
+
+            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
+              <strong style={dashboardLabelStyle}>Bezahlt</strong>
+              <h2 style={dashboardNumberStyle}>
+                {invoices.filter((invoice) => invoice.status === 'bezahlt').reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0).toFixed(2)} €
+              </h2>
+            </div>
+          </div>
+
+          {(canManageCash() || isAdmin()) && (
+            <>
+              <h3 style={headingStyle}>Neue Rechnung erstellen</h3>
+
+              <input
+                placeholder="Kunde / Rechnungsempfänger"
+                value={invoiceCustomerName}
+                onChange={(e) => setInvoiceCustomerName(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="E-Mail"
+                value={invoiceCustomerEmail}
+                onChange={(e) => setInvoiceCustomerEmail(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Adresse"
+                value={invoiceCustomerAddress}
+                onChange={(e) => setInvoiceCustomerAddress(e.target.value)}
+                style={inputStyle}
+              />
+
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(220px, 1fr))', gap: 12 }}>
+                <div>
+                  <label style={{ fontWeight: 800, color: colors.black }}>Rechnungsdatum</label>
+                  <input
+                    type="date"
+                    value={invoiceIssueDate}
+                    onChange={(e) => setInvoiceIssueDate(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontWeight: 800, color: colors.black }}>Fällig bis</label>
+                  <input
+                    type="date"
+                    value={invoiceDueDate}
+                    onChange={(e) => setInvoiceDueDate(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+
+              <h3 style={headingStyle}>Positionen</h3>
+
+              {invoiceRows.map((row, index) => (
+                <div key={index} style={cardStyle}>
+                  <input
+                    placeholder="Beschreibung"
+                    value={row.description}
+                    onChange={(e) => updateInvoiceRow(index, 'description', e.target.value)}
+                    style={inputStyle}
+                  />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(160px, 1fr))', gap: 12 }}>
+                    <input
+                      type="number"
+                      placeholder="Menge"
+                      value={row.quantity}
+                      onChange={(e) => updateInvoiceRow(index, 'quantity', e.target.value)}
+                      style={inputStyle}
+                    />
+
+                    <input
+                      type="number"
+                      placeholder="Einzelpreis"
+                      value={row.unit_price}
+                      onChange={(e) => updateInvoiceRow(index, 'unit_price', e.target.value)}
+                      style={inputStyle}
+                    />
+
+                    <div style={{ ...cardStyle, marginBottom: 0 }}>
+                      Summe:{' '}
+                      <strong>
+                        {(Number(row.quantity || 0) * Number(row.unit_price || 0)).toFixed(2)} €
+                      </strong>
+                    </div>
+                  </div>
+
+                  {invoiceRows.length > 1 && (
+                    <button onClick={() => removeInvoiceRow(index)} style={dangerButtonStyle}>
+                      Position entfernen
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              <button onClick={addInvoiceRow} style={secondaryButtonStyle}>
+                Position hinzufügen
+              </button>
+
+              <input
+                placeholder="Notizen"
+                value={invoiceNotes}
+                onChange={(e) => setInvoiceNotes(e.target.value)}
+                style={inputStyle}
+              />
+
+              <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
+                <strong>Rechnungssumme: {getInvoiceRowsTotal().toFixed(2)} €</strong>
+                <br />
+                Nächste Rechnungsnummer: {getNextInvoiceNumber(Number(String(invoiceIssueDate || new Date().getFullYear()).slice(0, 4)))}
+              </div>
+
+              <button onClick={createInvoice} style={buttonStyle}>
+                Rechnung erstellen
+              </button>
+
+              <button onClick={resetInvoiceForm} style={secondaryButtonStyle}>
+                Formular leeren
+              </button>
+            </>
+          )}
+
+          <h3 style={headingStyle}>Rechnungen suchen & filtern</h3>
+
+          <input
+            placeholder="Rechnung suchen..."
+            value={invoiceSearch}
+            onChange={(e) => setInvoiceSearch(e.target.value)}
+            style={inputStyle}
+          />
+
+          <select value={invoiceStatusFilter} onChange={(e) => setInvoiceStatusFilter(e.target.value)} style={inputStyle}>
+            <option value="alle">Alle Status</option>
+            <option value="offen">Offen</option>
+            <option value="bezahlt">Bezahlt</option>
+            <option value="storniert">Storniert</option>
+          </select>
+
+          <button onClick={exportInvoicesCsv} style={secondaryButtonStyle}>
+            Rechnungen CSV
+          </button>
+
+          <p>
+            Angezeigt: <strong>{getFilteredInvoices().length}</strong> von {invoices.length} Rechnungen
+          </p>
+
+          {getFilteredInvoices().map((invoice) => (
+            <div
+              key={invoice.id}
+              style={{
+                ...cardStyle,
+                borderLeft: `6px solid ${invoice.status === 'bezahlt' ? colors.successText : invoice.status === 'storniert' ? colors.red : colors.blue}`,
+              }}
+            >
+              <strong>{invoice.invoice_number}</strong> · {invoice.customer_name}
+              <br />
+              Datum: {invoice.issue_date || '-'} · Fällig: {invoice.due_date || '-'}
+              <br />
+              Status: {invoice.status || '-'} · Betrag: <strong>{Number(invoice.total_amount || 0).toFixed(2)} €</strong>
+              <br />
+              E-Mail: {invoice.customer_email || '-'}
+              <br />
+              Adresse: {invoice.customer_address || '-'}
+              <br />
+              Notizen: {invoice.notes || '-'}
+
+              {getItemsForInvoice(invoice.id).length > 0 && (
+                <>
+                  <h4>Positionen</h4>
+                  {getItemsForInvoice(invoice.id).map((item) => (
+                    <div key={item.id}>
+                      {item.description} · {Number(item.quantity || 0)} × {Number(item.unit_price || 0).toFixed(2)} € ={' '}
+                      <strong>{Number(item.total_price || 0).toFixed(2)} €</strong>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              <button onClick={() => exportInvoicePdf(invoice)} style={buttonStyle}>
+                Rechnung PDF
+              </button>
+
+              {invoice.status === 'offen' && (canManageCash() || isAdmin()) && (
+                <button onClick={() => markInvoicePaid(invoice)} style={secondaryButtonStyle}>
+                  Als bezahlt markieren
+                </button>
+              )}
+
+              {invoice.status !== 'storniert' && isAdmin() && (
+                <button
+                  onClick={() => cancelInvoice(invoice)}
+                  style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
+                >
+                  Rechnung stornieren
+                </button>
+              )}
+            </div>
+          ))}
+        </section>
       )}
 
       {activePage === 'events' && (
