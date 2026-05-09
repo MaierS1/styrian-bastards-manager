@@ -280,6 +280,8 @@ export default function App() {
   const [inventoryCsvFileName, setInventoryCsvFileName] = useState('')
   const [inventoryImporting, setInventoryImporting] = useState(false)
   const [showInventoryQr, setShowInventoryQr] = useState(null)
+  const [mobileScanning, setMobileScanning] = useState(false)
+  const [mobileScanMode, setMobileScanMode] = useState('member')
 
   const [restoreData, setRestoreData] = useState(null)
   const [restoreFileName, setRestoreFileName] = useState('')
@@ -333,6 +335,54 @@ export default function App() {
       scanner.clear().catch(() => {})
     }
   }, [scanning, members])
+
+  useEffect(() => {
+    if (!mobileScanning) return
+
+    const scanner = new Html5QrcodeScanner('mobile-reader', {
+      fps: 10,
+      qrbox: 250,
+    })
+
+    scanner.render(
+      (decodedText) => {
+        if (mobileScanMode === 'inventory') {
+          const item = inventoryItems.find(
+            (inventoryItem) =>
+              inventoryItem.inventory_number === decodedText ||
+              inventoryItem.id === decodedText ||
+              getInventoryQrValue(inventoryItem) === decodedText
+          )
+
+          if (item) {
+            setInventorySearch(item.inventory_number || item.name || '')
+            setActivePage('inventory')
+            setMobileScanning(false)
+            scanner.clear().catch(() => {})
+            return
+          }
+
+          alert('Inventar nicht gefunden.')
+          return
+        }
+
+        const member = members.find((m) => m.member_number === decodedText || m.id === decodedText)
+
+        if (member) {
+          checkInMember(member)
+          setMobileScanning(false)
+          scanner.clear().catch(() => {})
+        } else {
+          alert('Mitglied nicht gefunden.')
+        }
+      },
+      () => {}
+    )
+
+    return () => {
+      scanner.clear().catch(() => {})
+    }
+  }, [mobileScanning, mobileScanMode, members, inventoryItems])
 
   async function checkUser() {
     const {
@@ -2901,6 +2951,53 @@ export default function App() {
     doc.save('styrian-bastards-inventar-etiketten-a4-16.pdf')
   }
 
+  function getCurrentMemberFee() {
+    if (!currentMember) return null
+    return getFee(currentMember.id)
+  }
+
+  function getFinanceDashboardData() {
+    const entries = getCashEntriesForSelectedYear().filter((entry) => !entry.is_cancelled)
+    const incomeEntries = entries.filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
+    const expenseEntries = entries.filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
+
+    const incomeTotal = incomeEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+    const expenseTotal = expenseEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+    const balance = incomeTotal - expenseTotal
+
+    const openFees = fees.filter((fee) => !fee.paid && Number(fee.amount || 0) > 0)
+    const openFeesTotal = openFees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0)
+
+    const eventSummaries = events
+      .map((event) => ({
+        id: event.id,
+        name: event.name,
+        date: event.event_date,
+        income: getEventIncomeTotal(event.id),
+        expense: getEventExpenseTotal(event.id),
+        balance: getEventBalance(event.id),
+      }))
+      .filter((event) => event.income > 0 || event.expense > 0)
+      .sort((a, b) => b.balance - a.balance)
+
+    return {
+      incomeTotal,
+      expenseTotal,
+      balance,
+      openFeesCount: openFees.length,
+      openFeesTotal,
+      eventSummaries,
+    }
+  }
+
+  function getFinanceHealthStatus() {
+    const data = getFinanceDashboardData()
+
+    if (data.balance < 0) return { label: 'Achtung: negatives Ergebnis', color: colors.red }
+    if (data.openFeesTotal > 0) return { label: 'Offene Beiträge vorhanden', color: '#92400e' }
+    return { label: 'Finanzen wirken stabil', color: colors.successText }
+  }
+
   function exportMembersPdf() {
     const doc = new jsPDF()
     const filteredMembers = getFilteredMembers()
@@ -4331,6 +4428,8 @@ export default function App() {
       <nav style={navStyle}>
         {[
           ['dashboard', 'Dashboard'],
+          ['portal', 'Mein Portal'],
+          ['scanner', 'Scanner'],
           ['members', 'Mitglieder'],
           ['cash', 'Kassa'],
           ['events', 'Events'],
@@ -4907,6 +5006,81 @@ export default function App() {
         </div>
       ))}
     </div>
+  </div>
+</div>
+
+<br />
+
+<div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
+  <strong style={dashboardLabelStyle}>Finanz-Dashboard PRO</strong>
+
+  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginTop: 14 }}>
+    <div style={cardStyle}>
+      <strong>Finanzstatus</strong>
+      <br />
+      <span style={{ color: getFinanceHealthStatus().color, fontWeight: 900 }}>
+        {getFinanceHealthStatus().label}
+      </span>
+    </div>
+
+    <div style={cardStyle}>
+      <strong>Offene Beiträge</strong>
+      <br />
+      {getFinanceDashboardData().openFeesCount} offen · {getFinanceDashboardData().openFeesTotal.toFixed(2)} €
+    </div>
+
+    <div style={cardStyle}>
+      <strong>Jahresergebnis</strong>
+      <br />
+      Einnahmen {getFinanceDashboardData().incomeTotal.toFixed(2)} € · Ausgaben {getFinanceDashboardData().expenseTotal.toFixed(2)} €
+      <br />
+      <strong>{getFinanceDashboardData().balance.toFixed(2)} €</strong>
+    </div>
+  </div>
+
+  <h3 style={headingStyle}>Top Event-Ergebnisse</h3>
+
+  {getFinanceDashboardData().eventSummaries.length === 0 && (
+    <p style={mutedTextStyle}>Noch keine Event-Finanzdaten vorhanden.</p>
+  )}
+
+  {getFinanceDashboardData().eventSummaries.slice(0, 5).map((event) => (
+    <div key={event.id} style={{ ...cardStyle, marginBottom: 8 }}>
+      <strong>{event.name}</strong> · {event.date || '-'}
+      <br />
+      Einnahmen: {event.income.toFixed(2)} € · Ausgaben: {event.expense.toFixed(2)} € · Ergebnis:{' '}
+      <strong style={{ color: event.balance >= 0 ? colors.successText : colors.red }}>
+        {event.balance.toFixed(2)} €
+      </strong>
+    </div>
+  ))}
+
+  <h3 style={headingStyle}>Kategorien kompakt</h3>
+
+  <div style={{ overflowX: 'auto' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
+      <thead>
+        <tr>
+          {['Kategorie', 'Einnahmen', 'Ausgaben', 'Ergebnis'].map((header) => (
+            <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
+              {header}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {getCategorySummary().map((item) => (
+          <tr key={item.category}>
+            <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.category}</td>
+            <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.income.toFixed(2)} €</td>
+            <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.expense.toFixed(2)} €</td>
+            <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+              <strong>{item.balance.toFixed(2)} €</strong>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -5821,6 +5995,124 @@ export default function App() {
               )}
             </div>
           ))}
+        </section>
+      )}
+
+      {activePage === 'portal' && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Mein Mitgliederportal</h2>
+
+          {!currentMember ? (
+            <div style={{ ...cardStyle, background: colors.dangerBg, borderColor: colors.red }}>
+              <strong style={{ color: colors.dangerText }}>Kein Mitglied mit diesem Login verknüpft.</strong>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 15 }}>
+                <div style={{ ...cardStyle, borderTop: `6px solid ${colors.black}` }}>
+                  <strong style={dashboardLabelStyle}>Meine Daten</strong>
+                  <br />
+                  {currentMember.first_name} {currentMember.last_name}
+                  <br />
+                  {currentMember.email || '-'}
+                  <br />
+                  {currentMember.phone || '-'}
+                  <br />
+                  Mitgliedsnummer: {currentMember.member_number || '-'}
+                </div>
+
+                <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
+                  <strong style={dashboardLabelStyle}>Mitgliedschaft</strong>
+                  <br />
+                  Art: {currentMember.member_type || '-'}
+                  <br />
+                  Funktion: {getRoleLabel(currentMember.role || 'mitglied')}
+                  <br />
+                  Status: {currentMember.status || '-'}
+                </div>
+
+                <div style={{ ...cardStyle, borderTop: `6px solid ${getCurrentMemberFee()?.paid ? colors.successText : colors.red}` }}>
+                  <strong style={dashboardLabelStyle}>Mein Beitrag 2026</strong>
+                  <br />
+                  Betrag: {getCurrentMemberFee() ? `${Number(getCurrentMemberFee().amount || 0).toFixed(2)} €` : '-'}
+                  <br />
+                  Status: {getCurrentMemberFee()?.paid ? 'bezahlt' : 'offen'}
+                  <br />
+                  Zahlungsdatum: {getCurrentMemberFee()?.paid_at || '-'}
+                </div>
+              </div>
+
+              <h3 style={headingStyle}>Mein QR-Code</h3>
+
+              <div style={cardStyle}>
+                <QRCodeCanvas value={currentMember.member_number || currentMember.id} size={190} />
+                <p style={mutedTextStyle}>
+                  Dieser QR-Code kann für Check-ins bei Events verwendet werden.
+                </p>
+
+                <button onClick={() => exportMemberCardPdf(currentMember)} style={buttonStyle}>
+                  Mitgliedsausweis PDF
+                </button>
+              </div>
+
+              <h3 style={headingStyle}>Aktuelle Events</h3>
+
+              {getUpcomingEvents(60).length === 0 && <p style={mutedTextStyle}>Keine kommenden Events in den nächsten 60 Tagen.</p>}
+
+              {getUpcomingEvents(60).map((event) => (
+                <div key={event.id} style={cardStyle}>
+                  <strong>{event.name}</strong>
+                  <br />
+                  Datum: {event.event_date || '-'}
+                  <br />
+                  Ort: {event.location || '-'}
+                  <br />
+                  Status: {event.status || '-'}
+                </div>
+              ))}
+            </>
+          )}
+        </section>
+      )}
+
+      {activePage === 'scanner' && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Mobile Scanner-Ansicht</h2>
+
+          <p style={mutedTextStyle}>
+            Optimiert für Handy: Mitglieder-QR für Check-in oder Inventar-QR scannen.
+          </p>
+
+          <select value={mobileScanMode} onChange={(e) => setMobileScanMode(e.target.value)} style={inputStyle}>
+            <option value="member">Mitglied / Check-in scannen</option>
+            <option value="inventory">Inventar scannen</option>
+          </select>
+
+          <button onClick={() => setMobileScanning(true)} style={buttonStyle}>
+            Scanner starten
+          </button>
+
+          <button onClick={() => setMobileScanning(false)} style={secondaryButtonStyle}>
+            Scanner stoppen
+          </button>
+
+          {mobileScanning && (
+            <div
+              id="mobile-reader"
+              style={{
+                marginTop: 20,
+                maxWidth: 420,
+                width: '100%',
+              }}
+            />
+          )}
+
+          <div style={cardStyle}>
+            <strong>Hinweis</strong>
+            <br />
+            Bei Mitgliedern wird der Check-in für das aktive Event durchgeführt.
+            Bei Inventar wird direkt zur Inventaransicht gewechselt und der Gegenstand gesucht.
+          </div>
         </section>
       )}
 
