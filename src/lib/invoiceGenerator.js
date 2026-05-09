@@ -57,7 +57,7 @@ export async function generateInvoicePdf({
   let logo = null
 
   try {
-    logo = await imageToBase64('/styrian-bastards-logo.png')
+    logo = await imageToBase64('/styrian-bastards-logo.jpg')
   } catch {
     logo = null
   }
