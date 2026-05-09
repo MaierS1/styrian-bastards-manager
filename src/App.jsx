@@ -219,6 +219,7 @@ export default function App() {
   const [memberTypeFilter, setMemberTypeFilter] = useState('alle')
   const [roleFilter, setRoleFilter] = useState('alle')
   const [feeFilter, setFeeFilter] = useState('alle')
+  const [linkedMemberNotice, setLinkedMemberNotice] = useState('')
 
   const [cashSearch, setCashSearch] = useState('')
   const [cashTypeFilter, setCashTypeFilter] = useState('alle')
@@ -340,7 +341,7 @@ export default function App() {
 
     scanner.render(
       (decodedText) => {
-        const member = members.find((m) => m.member_number === decodedText || m.id === decodedText)
+        const member = getMemberFromQrValue(decodedText)
 
         if (member) {
           checkInMember(member)
@@ -368,6 +369,10 @@ export default function App() {
     setPortalCity(currentMember.city || '')
     setPortalClothingSize(currentMember.clothing_size || '')
   }, [currentMember])
+
+  useEffect(() => {
+    handleMemberDeepLink()
+  }, [members, currentMember])
 
   useEffect(() => {
     if (!mobileScanning) return
@@ -399,7 +404,7 @@ export default function App() {
           return
         }
 
-        const member = members.find((m) => m.member_number === decodedText || m.id === decodedText)
+        const member = getMemberFromQrValue(decodedText)
 
         if (member) {
           if (mobileScanMode === 'member_edit') {
@@ -1523,6 +1528,59 @@ export default function App() {
   function getMemberName(memberId) {
     const member = members.find((m) => m.id === memberId)
     return member ? `${member.first_name || ''} ${member.last_name || ''}` : 'Unbekannt'
+  }
+
+  function getMemberQrValue(member) {
+    const memberCode = member.member_number || member.id
+    return `${window.location.origin}${window.location.pathname}?member=${encodeURIComponent(memberCode)}`
+  }
+
+  function getMemberFromQrValue(value) {
+    const text = String(value || '').trim()
+
+    try {
+      const url = new URL(text)
+      const memberCode = url.searchParams.get('member')
+
+      if (memberCode) {
+        return members.find((member) => member.member_number === memberCode || member.id === memberCode)
+      }
+    } catch {
+      // kein URL-QR, weiter unten als alte Mitgliedsnummer/ID behandeln
+    }
+
+    return members.find((member) => member.member_number === text || member.id === text)
+  }
+
+  function handleMemberDeepLink() {
+    const params = new URLSearchParams(window.location.search)
+    const memberCode = params.get('member')
+
+    if (!memberCode || members.length === 0) return
+
+    const member = members.find((item) => item.member_number === memberCode || item.id === memberCode)
+
+    if (!member) {
+      setLinkedMemberNotice(`Mitglied aus QR-Code wurde nicht gefunden: ${memberCode}`)
+      return
+    }
+
+    if (canManageMembers() || isAdmin()) {
+      setMemberSearch(member.member_number || `${member.first_name || ''} ${member.last_name || ''}`)
+      editMember(member)
+      setActivePage('members')
+      setLinkedMemberNotice(`Mitglied aus QR-Code geöffnet: ${member.first_name || ''} ${member.last_name || ''}`)
+      return
+    }
+
+    if (currentMember?.id === member.id) {
+      setActivePage('portal')
+      setLinkedMemberNotice('Dein Mitgliederportal wurde über den QR-Code geöffnet.')
+      return
+    }
+
+    setActivePage('portal')
+    setLinkedMemberNotice('Dieser Mitgliedsausweis gehört zu einem anderen Mitglied. Du hast keine Berechtigung, diese Daten zu öffnen.')
   }
 
   function getCheckinsForActiveEvent() {
@@ -3926,7 +3984,7 @@ export default function App() {
       const x = marginX + column * (cardWidth + gapX)
       const y = marginY + row * (cardHeight + gapY)
 
-      const qrDataUrl = await QRCode.toDataURL(member.member_number || member.id, {
+      const qrDataUrl = await QRCode.toDataURL(getMemberQrValue(member), {
         width: 300,
         margin: 1,
       })
@@ -3978,7 +4036,7 @@ export default function App() {
       format: [86, 54],
     })
 
-    const qrDataUrl = await QRCode.toDataURL(member.member_number || member.id, {
+    const qrDataUrl = await QRCode.toDataURL(getMemberQrValue(member), {
       width: 300,
       margin: 1,
     })
@@ -5149,6 +5207,18 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      {linkedMemberNotice && (
+        <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue, color: colors.infoText }}>
+          <strong>QR-Code Hinweis</strong>
+          <br />
+          {linkedMemberNotice}
+          <br />
+          <button onClick={() => setLinkedMemberNotice('')} style={secondaryButtonStyle}>
+            Hinweis schließen
+          </button>
+        </div>
+      )}
 
       {activePage === 'cash' && !canManageCash() && (
         <section style={sectionStyle}>
@@ -7113,7 +7183,7 @@ export default function App() {
               <h3 style={headingStyle}>Mein QR-Code</h3>
 
               <div style={cardStyle}>
-                <QRCodeCanvas value={currentMember.member_number || currentMember.id} size={190} />
+                <QRCodeCanvas value={getMemberQrValue(currentMember)} size={190} />
                 <p style={mutedTextStyle}>
                   Dieser QR-Code kann für Check-ins bei Events verwendet werden.
                 </p>
@@ -7625,11 +7695,13 @@ export default function App() {
 
               {showQR === member.id && (
                 <div style={{ marginTop: 10 }}>
-                  <QRCodeCanvas value={member.member_number || member.id} size={160} />
+                  <QRCodeCanvas value={getMemberQrValue(member)} size={160} />
                   <p style={{ fontSize: 12 }}>
                     QR-Code für {member.first_name} {member.last_name}
                     <br />
                     {member.member_number || 'ohne Mitgliedsnummer'}
+                    <br />
+                    App-Link QR-Code
                   </p>
                 </div>
               )}
