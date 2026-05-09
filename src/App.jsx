@@ -193,6 +193,7 @@ export default function App() {
   const [inventoryItems, setInventoryItems] = useState([])
   const [invoices, setInvoices] = useState([])
   const [invoiceItems, setInvoiceItems] = useState([])
+  const [memberChangeRequests, setMemberChangeRequests] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
   const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
@@ -297,6 +298,13 @@ export default function App() {
   const [invoiceIsTest, setInvoiceIsTest] = useState(false)
   const [invoiceTestFilter, setInvoiceTestFilter] = useState('alle')
 
+  const [portalEmail, setPortalEmail] = useState('')
+  const [portalPhone, setPortalPhone] = useState('')
+  const [portalStreet, setPortalStreet] = useState('')
+  const [portalPostalCode, setPortalPostalCode] = useState('')
+  const [portalCity, setPortalCity] = useState('')
+  const [portalClothingSize, setPortalClothingSize] = useState('')
+
   const [restoreData, setRestoreData] = useState(null)
   const [restoreFileName, setRestoreFileName] = useState('')
   const [restoreImporting, setRestoreImporting] = useState(false)
@@ -351,6 +359,17 @@ export default function App() {
   }, [scanning, members])
 
   useEffect(() => {
+    if (!currentMember) return
+
+    setPortalEmail(currentMember.email || '')
+    setPortalPhone(currentMember.phone || '')
+    setPortalStreet(currentMember.street || '')
+    setPortalPostalCode(currentMember.postal_code || '')
+    setPortalCity(currentMember.city || '')
+    setPortalClothingSize(currentMember.clothing_size || '')
+  }, [currentMember])
+
+  useEffect(() => {
     if (!mobileScanning) return
 
     const scanner = new Html5QrcodeScanner('mobile-reader', {
@@ -383,6 +402,20 @@ export default function App() {
         const member = members.find((m) => m.member_number === decodedText || m.id === decodedText)
 
         if (member) {
+          if (mobileScanMode === 'member_edit') {
+            if (!canManageMembers() && !isAdmin()) {
+              alert('Keine Berechtigung zum Bearbeiten von Mitgliedern.')
+              return
+            }
+
+            setMemberSearch(member.member_number || `${member.first_name || ''} ${member.last_name || ''}`)
+            editMember(member)
+            setActivePage('members')
+            setMobileScanning(false)
+            scanner.clear().catch(() => {})
+            return
+          }
+
           checkInMember(member)
           setMobileScanning(false)
           scanner.clear().catch(() => {})
@@ -427,7 +460,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadAuditLogs(), loadEventCheckins(), loadEvents(), loadDocuments(), loadInventoryItems(), loadInvoices(), loadInvoiceItems()])
+    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadAuditLogs(), loadEventCheckins(), loadEvents(), loadDocuments(), loadInventoryItems(), loadInvoices(), loadInvoiceItems(), loadMemberChangeRequests()])
   }
 
   function getAppRole() {
@@ -487,6 +520,7 @@ export default function App() {
     setInventoryItems([])
     setInvoices([])
     setInvoiceItems([])
+    setMemberChangeRequests([])
     resetForm()
   }
 
@@ -643,6 +677,20 @@ export default function App() {
     }
 
     setInvoiceItems(data || [])
+  }
+
+  async function loadMemberChangeRequests() {
+    const { data, error } = await supabase
+      .from('member_change_requests')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.warn(error.message)
+      return
+    }
+
+    setMemberChangeRequests(data || [])
   }
 
   function getFee(memberId) {
@@ -2998,6 +3046,118 @@ export default function App() {
     }
 
     doc.save('styrian-bastards-inventar-etiketten-a4-16.pdf')
+  }
+
+  function getPendingMemberChangeRequests() {
+    return memberChangeRequests.filter((request) => request.status === 'offen')
+  }
+
+  function getMyMemberChangeRequests() {
+    if (!currentMember) return []
+    return memberChangeRequests.filter((request) => request.member_id === currentMember.id)
+  }
+
+  async function submitMemberChangeRequest() {
+    if (!currentMember) return alert('Kein Mitglied mit deinem Login verknüpft.')
+
+    const requestedData = {
+      email: portalEmail,
+      phone: portalPhone,
+      street: portalStreet,
+      postal_code: portalPostalCode,
+      city: portalCity,
+      clothing_size: portalClothingSize,
+    }
+
+    const changedFields = Object.keys(requestedData).filter((key) => {
+      return String(requestedData[key] || '') !== String(currentMember[key] || '')
+    })
+
+    if (changedFields.length === 0) {
+      alert('Es wurden keine Änderungen erkannt.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Änderungsantrag einreichen?\n\nGeänderte Felder: ${changedFields.join(', ')}\n\nEin Vorstandsmitglied muss die Änderung bestätigen.`
+    )
+
+    if (!confirmed) return
+
+    const { error } = await supabase.from('member_change_requests').insert({
+      member_id: currentMember.id,
+      requested_by: user?.id || null,
+      requested_data: requestedData,
+      status: 'offen',
+    })
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('request_member_change', 'members', currentMember.id, currentMember, requestedData)
+    await loadMemberChangeRequests()
+
+    alert('Änderungsantrag wurde eingereicht.')
+  }
+
+  async function approveMemberChangeRequest(request) {
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung.')
+
+    const member = members.find((item) => item.id === request.member_id)
+    const requestedData = request.requested_data || {}
+
+    const confirmed = window.confirm(
+      `Änderungsantrag genehmigen?\n\nMitglied: ${member ? `${member.first_name || ''} ${member.last_name || ''}` : request.member_id}`
+    )
+
+    if (!confirmed) return
+
+    const { error: memberError } = await supabase
+      .from('members')
+      .update(requestedData)
+      .eq('id', request.member_id)
+
+    if (memberError) return alert(memberError.message)
+
+    const { error } = await supabase
+      .from('member_change_requests')
+      .update({
+        status: 'genehmigt',
+        reviewed_by: user?.id || null,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', request.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('approve_member_change', 'members', request.member_id, member, requestedData)
+    await loadMembers()
+    await loadCurrentMember(user.id)
+    await loadMemberChangeRequests()
+
+    alert('Änderung wurde genehmigt und übernommen.')
+  }
+
+  async function rejectMemberChangeRequest(request) {
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung.')
+
+    const note = window.prompt('Ablehnungsgrund / Notiz:')
+
+    const { error } = await supabase
+      .from('member_change_requests')
+      .update({
+        status: 'abgelehnt',
+        reviewed_by: user?.id || null,
+        reviewed_at: new Date().toISOString(),
+        review_note: note || null,
+      })
+      .eq('id', request.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('reject_member_change', 'member_change_requests', request.id, request, { note })
+    await loadMemberChangeRequests()
+
+    alert('Änderungsantrag wurde abgelehnt.')
   }
 
   function getCurrentMemberFee() {
@@ -6867,6 +7027,89 @@ export default function App() {
                 </div>
               </div>
 
+              <h3 style={headingStyle}>Meine Daten ändern</h3>
+
+              <div style={cardStyle}>
+                <p style={mutedTextStyle}>
+                  Änderungen werden nicht sofort übernommen. Ein Vorstandsmitglied muss sie zuerst bestätigen.
+                </p>
+
+                <input
+                  placeholder="E-Mail"
+                  value={portalEmail}
+                  onChange={(e) => setPortalEmail(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <input
+                  placeholder="Telefon"
+                  value={portalPhone}
+                  onChange={(e) => setPortalPhone(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <input
+                  placeholder="Straße"
+                  value={portalStreet}
+                  onChange={(e) => setPortalStreet(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <input
+                  placeholder="PLZ"
+                  value={portalPostalCode}
+                  onChange={(e) => setPortalPostalCode(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <input
+                  placeholder="Ort"
+                  value={portalCity}
+                  onChange={(e) => setPortalCity(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <select value={portalClothingSize} onChange={(e) => setPortalClothingSize(e.target.value)} style={inputStyle}>
+                  <option value="">Kleidergröße wählen</option>
+                  <option>XXS</option>
+                  <option>XS</option>
+                  <option>S</option>
+                  <option>M</option>
+                  <option>L</option>
+                  <option>XL</option>
+                  <option>XXL</option>
+                  <option>3XL</option>
+                  <option>4XL</option>
+                  <option>5XL</option>
+                </select>
+
+                <button onClick={submitMemberChangeRequest} style={buttonStyle}>
+                  Änderung zur Freigabe einreichen
+                </button>
+              </div>
+
+              <h3 style={headingStyle}>Meine Änderungsanträge</h3>
+
+              {getMyMemberChangeRequests().length === 0 && (
+                <p style={mutedTextStyle}>Keine Änderungsanträge vorhanden.</p>
+              )}
+
+              {getMyMemberChangeRequests().slice(0, 5).map((request) => (
+                <div key={request.id} style={cardStyle}>
+                  <strong>Status: {request.status}</strong>
+                  <br />
+                  Erstellt: {request.created_at ? new Date(request.created_at).toLocaleString('de-AT') : '-'}
+                  <br />
+                  Geändert: {Object.keys(request.requested_data || {}).join(', ')}
+                  {request.review_note && (
+                    <>
+                      <br />
+                      Notiz: {request.review_note}
+                    </>
+                  )}
+                </div>
+              ))}
+
               <h3 style={headingStyle}>Mein QR-Code</h3>
 
               <div style={cardStyle}>
@@ -6910,6 +7153,9 @@ export default function App() {
 
           <select value={mobileScanMode} onChange={(e) => setMobileScanMode(e.target.value)} style={inputStyle}>
             <option value="member">Mitglied / Check-in scannen</option>
+            {(canManageMembers() || isAdmin()) && (
+              <option value="member_edit">Mitglied scannen & bearbeiten</option>
+            )}
             <option value="inventory">Inventar scannen</option>
           </select>
 
@@ -6996,6 +7242,72 @@ export default function App() {
                 Auth User ID: {member.auth_user_id}
               </div>
             ))}
+        </section>
+      )}
+
+      {activePage === 'admin' && (canManageMembers() || isAdmin()) && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Mitgliedsdaten-Freigaben</h2>
+
+          <p style={mutedTextStyle}>
+            Mitglieder können Änderungswünsche einreichen. Hier kann der Vorstand/Admin diese prüfen und freigeben.
+          </p>
+
+          {getPendingMemberChangeRequests().length === 0 && (
+            <p style={mutedTextStyle}>Keine offenen Änderungsanträge.</p>
+          )}
+
+          {getPendingMemberChangeRequests().map((request) => {
+            const member = members.find((item) => item.id === request.member_id)
+            const requestedData = request.requested_data || {}
+
+            return (
+              <div key={request.id} style={cardStyle}>
+                <strong>
+                  {member ? `${member.first_name || ''} ${member.last_name || ''}` : request.member_id}
+                </strong>
+                <br />
+                Eingereicht: {request.created_at ? new Date(request.created_at).toLocaleString('de-AT') : '-'}
+                <br />
+
+                <div style={{ overflowX: 'auto', marginTop: 10 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
+                    <thead>
+                      <tr>
+                        {['Feld', 'Aktuell', 'Neu'].map((header) => (
+                          <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.keys(requestedData).map((key) => (
+                        <tr key={key}>
+                          <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{key}</td>
+                          <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{member?.[key] || '-'}</td>
+                          <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                            <strong>{requestedData[key] || '-'}</strong>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <button onClick={() => approveMemberChangeRequest(request)} style={buttonStyle}>
+                  Genehmigen & übernehmen
+                </button>
+
+                <button
+                  onClick={() => rejectMemberChangeRequest(request)}
+                  style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
+                >
+                  Ablehnen
+                </button>
+              </div>
+            )
+          })}
         </section>
       )}
 
