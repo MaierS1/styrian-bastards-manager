@@ -17,6 +17,40 @@ function formatEuro(value) {
   return `${Number(value || 0).toFixed(2)} €`
 }
 
+function sanitizeFileName(value) {
+  return String(value || 'Rechnung')
+    .replace(/[^a-zA-Z0-9_.-]/g, '_')
+    .replace(/_+/g, '_')
+}
+
+function createEpcQrText(invoice, amount) {
+  const iban = 'WIRD NOCH EINGEFÜGT'
+
+  if (!iban || iban.includes('WIRD')) {
+    return `${window.location.origin}${window.location.pathname}?invoice=${encodeURIComponent(invoice.invoice_number || '')}`
+  }
+
+  return [
+    'BCD',
+    '002',
+    '1',
+    'SCT',
+    '',
+    'Styrian Bastards Eishockey-Fanclub',
+    iban.replace(/\s/g, ''),
+    `EUR${Number(amount || 0).toFixed(2)}`,
+    '',
+    '',
+    invoice.invoice_number || '',
+    '',
+  ].join('\n')
+}
+
+function getInvoiceTitle(invoice) {
+  if (invoice.invoice_type === 'storno') return 'STORNORECHNUNG'
+  return 'RECHNUNG'
+}
+
 function getInvoiceDate(invoice) {
   return invoice.issue_date || invoice.invoice_date || '-'
 }
@@ -72,6 +106,8 @@ export async function generateInvoicePdf({
   items = [],
   isTest = false,
   isCancelled = false,
+  download = true,
+  returnBlob = false,
 }) {
   const doc = new jsPDF('p', 'mm', 'a4')
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -102,7 +138,7 @@ export async function generateInvoicePdf({
 
   const total = normalizedItems.reduce((sum, item) => sum + Number(item.total || 0), 0)
   const invoiceNumber = invoice.invoice_number || 'SB'
-  const qrText = `${window.location.origin}${window.location.pathname}?invoice=${encodeURIComponent(invoiceNumber)}`
+  const qrText = createEpcQrText(invoice, Math.abs(total))
   const qrCode = await QRCode.toDataURL(qrText)
 
   doc.setFillColor(255, 255, 255)
@@ -147,7 +183,7 @@ export async function generateInvoicePdf({
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(24)
-  doc.text('RECHNUNG', 15, 64)
+  doc.text(getInvoiceTitle(invoice), 15, 64)
 
   if (isTest || invoice.is_test) {
     doc.setTextColor(193, 18, 31)
@@ -199,6 +235,13 @@ export async function generateInvoicePdf({
     doc.text('Art:', infoX, 108)
     doc.setFont('helvetica', 'normal')
     doc.text('Mitgliedsbeitrag', valueX, 108, { align: 'right' })
+  }
+
+  if (invoice.invoice_type === 'storno') {
+    doc.setFont('helvetica', 'bold')
+    doc.text('Art:', infoX, 115)
+    doc.setFont('helvetica', 'normal')
+    doc.text('Stornorechnung', valueX, 115, { align: 'right' })
   }
 
   autoTable(doc, {
@@ -257,7 +300,7 @@ export async function generateInvoicePdf({
 
   doc.addImage(qrCode, 'PNG', 153, tableEndY + 18, 32, 32)
   doc.setFontSize(7)
-  doc.text('Rechnung / Verwendungszweck', 169, tableEndY + 54, { align: 'center' })
+  doc.text('Banking-QR / Verwendungszweck', 169, tableEndY + 54, { align: 'center' })
 
   doc.setFont('helvetica', 'italic')
   doc.setFontSize(9)
@@ -304,5 +347,21 @@ export async function generateInvoicePdf({
     align: 'center',
   })
 
-  doc.save(`Rechnung_${invoiceNumber}.pdf`)
+  const filename = `${invoice.invoice_type === 'storno' ? 'Stornorechnung' : 'Rechnung'}_${sanitizeFileName(invoiceNumber)}.pdf`
+
+  if (returnBlob) {
+    return {
+      blob: doc.output('blob'),
+      filename,
+    }
+  }
+
+  if (download) {
+    doc.save(filename)
+  }
+
+  return {
+    blob: doc.output('blob'),
+    filename,
+  }
 }

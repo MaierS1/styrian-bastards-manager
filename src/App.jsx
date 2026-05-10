@@ -3650,6 +3650,252 @@ export default function App() {
     })
   }
 
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const result = String(reader.result || '')
+        resolve(result.split(',')[1] || '')
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  }
+
+  function getInvoiceYear(invoice) {
+    return String(invoice.issue_date || new Date().toISOString().slice(0, 10)).slice(0, 4)
+  }
+
+  function getInvoiceFilePath(invoice, filename) {
+    return `invoices/${getInvoiceYear(invoice)}/${filename}`
+  }
+
+  function isInvoiceOverdue(invoice) {
+    if (invoice.status !== 'offen') return false
+    if (!invoice.due_date) return false
+
+    const due = new Date(invoice.due_date)
+    due.setHours(23, 59, 59, 999)
+
+    return due < new Date()
+  }
+
+  function getOverdueInvoices() {
+    return invoices.filter((invoice) => isInvoiceOverdue(invoice))
+  }
+
+  async function buildInvoicePdfBlob(invoice) {
+    const result = await generateInvoicePdf({
+      invoice,
+      member: invoice.member_id ? getMemberById(invoice.member_id) : null,
+      items: getItemsForInvoice(invoice.id),
+      isTest: Boolean(invoice.is_test || getMemberById(invoice.member_id)?.is_test),
+      isCancelled: invoice.status === 'storniert',
+      download: false,
+      returnBlob: true,
+    })
+
+    return result
+  }
+
+  async function archiveInvoicePdf(invoice) {
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungsarchiv.')
+
+    const { blob, filename } = await buildInvoicePdfBlob(invoice)
+    const filePath = getInvoiceFilePath(invoice, filename)
+
+    const { error: uploadError } = await supabase.storage
+      .from('invoice-archive')
+      .upload(filePath, blob, {
+        contentType: 'application/pdf',
+        upsert: true,
+      })
+
+    if (uploadError) return alert(uploadError.message)
+
+    const { error } = await supabase
+      .from('invoices')
+      .update({
+        pdf_url: filePath,
+        pdf_archived_at: new Date().toISOString(),
+      })
+      .eq('id', invoice.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('archive_pdf', 'invoices', invoice.id, invoice, { pdf_url: filePath })
+    await loadInvoices()
+
+    alert('Rechnung wurde im Archiv gespeichert.')
+  }
+
+  async function openArchivedInvoice(invoice) {
+    if (!invoice.pdf_url) {
+      alert('Für diese Rechnung ist noch kein Archiv-PDF gespeichert.')
+      return
+    }
+
+    const { data, error } = await supabase.storage
+      .from('invoice-archive')
+      .createSignedUrl(invoice.pdf_url, 300)
+
+    if (error) return alert(error.message)
+
+    window.open(data.signedUrl, '_blank')
+  }
+
+  async function sendInvoiceEmail(invoice, reminder = false) {
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungsversand.')
+
+    if (!invoice.customer_email) {
+      alert('Diese Rechnung hat keine E-Mail-Adresse.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `${reminder ? 'Zahlungserinnerung' : 'Rechnung'} per E-Mail senden?\n\n${invoice.customer_email}\n${invoice.invoice_number}`
+    )
+
+    if (!confirmed) return
+
+    const { blob, filename } = await buildInvoicePdfBlob(invoice)
+    const pdfBase64 = await blobToBase64(blob)
+
+    const subject = reminder
+      ? `Zahlungserinnerung ${invoice.invoice_number}`
+      : `Rechnung ${invoice.invoice_number}`
+
+    const html = reminder
+      ? `<p>Hallo,</p><p>wir möchten freundlich an die offene Rechnung <strong>${invoice.invoice_number}</strong> erinnern.</p><p>Danke und sportliche Grüße<br/>Styrian Bastards Eishockey-Fanclub</p>`
+      : `<p>Hallo,</p><p>anbei senden wir die Rechnung <strong>${invoice.invoice_number}</strong>.</p><p>Danke und sportliche Grüße<br/>Styrian Bastards Eishockey-Fanclub</p>`
+
+    const { data, error } = await supabase.functions.invoke('send-invoice-email', {
+      body: {
+        to: invoice.customer_email,
+        subject,
+        html,
+        pdf_base64: pdfBase64,
+        filename,
+        invoice_number: invoice.invoice_number,
+      },
+    })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    if (data?.error) {
+      alert(data.error)
+      return
+    }
+
+    const updatePayload = reminder
+      ? {
+          last_reminder_at: new Date().toISOString(),
+          reminder_count: Number(invoice.reminder_count || 0) + 1,
+        }
+      : {
+          emailed_at: new Date().toISOString(),
+        }
+
+    await supabase.from('invoices').update(updatePayload).eq('id', invoice.id)
+
+    await createAuditLog(reminder ? 'send_invoice_reminder' : 'send_invoice_email', 'invoices', invoice.id, invoice, {
+      to: invoice.customer_email,
+    })
+
+    await loadInvoices()
+
+    alert(reminder ? 'Zahlungserinnerung wurde gesendet.' : 'Rechnung wurde per E-Mail gesendet.')
+  }
+
+  async function createCancellationInvoice(invoice) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Stornorechnungen erstellen.')
+
+    const existingCancellation = invoices.find(
+      (item) => item.original_invoice_id === invoice.id && item.invoice_type === 'storno'
+    )
+
+    if (existingCancellation) {
+      alert(`Für diese Rechnung existiert bereits eine Stornorechnung: ${existingCancellation.invoice_number}`)
+      return
+    }
+
+    const reason = window.prompt(`Grund für Stornorechnung zu ${invoice.invoice_number}:`)
+
+    if (!reason || !reason.trim()) return
+
+    const year = Number(getInvoiceYear(invoice))
+    const invoiceNumber = `STORNO-${getNextInvoiceNumber(year, Boolean(invoice.is_test))}`
+    const originalItems = getItemsForInvoice(invoice.id)
+
+    const { data: cancellation, error } = await supabase
+      .from('invoices')
+      .insert({
+        invoice_number: invoiceNumber,
+        customer_id: invoice.customer_id || null,
+        customer_name: invoice.customer_name,
+        customer_email: invoice.customer_email || null,
+        customer_address: invoice.customer_address || null,
+        customer_street: invoice.customer_street || null,
+        customer_house_number: invoice.customer_house_number || null,
+        customer_address_addition: invoice.customer_address_addition || null,
+        customer_postal_code: invoice.customer_postal_code || null,
+        customer_city: invoice.customer_city || null,
+        customer_country: invoice.customer_country || 'Österreich',
+        issue_date: new Date().toISOString().slice(0, 10),
+        due_date: null,
+        total_amount: -Math.abs(Number(invoice.total_amount || 0)),
+        status: 'storniert',
+        is_test: Boolean(invoice.is_test),
+        invoice_type: 'storno',
+        original_invoice_id: invoice.id,
+        cancellation_reason: reason.trim(),
+        notes: `Stornorechnung zu ${invoice.invoice_number}`,
+        created_by: user?.id || null,
+        member_id: invoice.member_id || null,
+        membership_fee_id: invoice.membership_fee_id || null,
+      })
+      .select()
+      .single()
+
+    if (error) return alert(error.message)
+
+    const rowsToInsert = originalItems.map((item) => ({
+      invoice_id: cancellation.id,
+      description: `Storno: ${item.description || ''}`,
+      quantity: Number(item.quantity || 0),
+      unit_price: -Math.abs(Number(item.unit_price || 0)),
+      total_price: -Math.abs(Number(item.total_price || 0)),
+    }))
+
+    if (rowsToInsert.length > 0) {
+      const { error: itemsError } = await supabase.from('invoice_items').insert(rowsToInsert)
+      if (itemsError) return alert(itemsError.message)
+    }
+
+    await supabase
+      .from('invoices')
+      .update({
+        status: 'storniert',
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: reason.trim(),
+      })
+      .eq('id', invoice.id)
+
+    await createAuditLog('create_cancellation_invoice', 'invoices', invoice.id, invoice, {
+      cancellation_invoice_id: cancellation.id,
+      cancellation_invoice_number: invoiceNumber,
+      reason: reason.trim(),
+    })
+
+    await loadInvoices()
+    await loadInvoiceItems()
+
+    alert(`Stornorechnung ${invoiceNumber} wurde erstellt.`)
+  }
+
   function getNextInvoiceNumber(year = new Date().getFullYear(), isTest = false) {
     const prefix = isTest ? `TEST-SB-${year}-` : `SB-${year}-`
 
@@ -4058,15 +4304,13 @@ export default function App() {
   }
 
   async function exportInvoicePdf(invoice) {
-    const items = getItemsForInvoice(invoice.id)
-    const member = invoice.member_id ? getMemberById(invoice.member_id) : null
-
     await generateInvoicePdf({
       invoice,
-      member,
-      items,
+      member: invoice.member_id ? getMemberById(invoice.member_id) : null,
+      items: getItemsForInvoice(invoice.id),
       isTest: Boolean(invoice.is_test || getMemberById(invoice.member_id)?.is_test),
       isCancelled: invoice.status === 'storniert',
+      download: true,
     })
   }
 
@@ -4088,6 +4332,11 @@ export default function App() {
       Betrag: Number(invoice.total_amount || 0).toFixed(2),
       Testrechnung: invoice.is_test ? 'ja' : 'nein',
       Status: invoice.status || '',
+      Typ: invoice.invoice_type || 'rechnung',
+      ArchivPDF: invoice.pdf_url || '',
+      EMailGesendet: invoice.emailed_at || '',
+      LetzteMahnung: invoice.last_reminder_at || '',
+      Mahnungen: Number(invoice.reminder_count || 0),
       BezahltAm: invoice.paid_at || '',
       StorniertAm: invoice.cancelled_at || '',
       StornoGrund: invoice.cancellation_reason || '',
@@ -4113,6 +4362,11 @@ export default function App() {
       'Betrag',
       'Testrechnung',
       'Status',
+      'Typ',
+      'ArchivPDF',
+      'EMailGesendet',
+      'LetzteMahnung',
+      'Mahnungen',
       'BezahltAm',
       'StorniertAm',
       'StornoGrund',
@@ -5817,6 +6071,34 @@ export default function App() {
             </div>
           </div>
 
+          <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
+            <strong style={dashboardLabelStyle}>Rechnungsarchiv & Zahlungserinnerungen</strong>
+            <br />
+            Archivierte PDFs: {invoices.filter((invoice) => invoice.pdf_url).length}
+            <br />
+            Überfällige offene Rechnungen: <strong>{getOverdueInvoices().length}</strong>
+            <br />
+            <span style={mutedTextStyle}>
+              PDFs können im Supabase Storage gespeichert, geöffnet und per E-Mail versendet werden.
+            </span>
+          </div>
+
+          {getOverdueInvoices().length > 0 && (
+            <div style={{ ...cardStyle, background: '#fffbeb', borderColor: '#f59e0b' }}>
+              <strong style={{ color: '#92400e' }}>Überfällige Rechnungen</strong>
+              {getOverdueInvoices().slice(0, 5).map((invoice) => (
+                <div key={invoice.id} style={{ marginTop: 8 }}>
+                  {invoice.invoice_number} · {invoice.customer_name} · fällig seit {invoice.due_date}
+                  {invoice.customer_email && (
+                    <button onClick={() => sendInvoiceEmail(invoice, true)} style={secondaryButtonStyle}>
+                      Zahlungserinnerung senden
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {(canManageCash() || isAdmin()) && (
             <>
               <h3 style={headingStyle}>Kunden</h3>
@@ -6175,7 +6457,11 @@ export default function App() {
               <br />
               Datum: {invoice.issue_date || '-'} · Fällig: {invoice.due_date || '-'}
               <br />
-              Status: {invoice.status || '-'} · Betrag: <strong>{Number(invoice.total_amount || 0).toFixed(2)} €</strong>
+              Status: {invoice.status || '-'} · Typ: {invoice.invoice_type || 'rechnung'} · Betrag: <strong>{Number(invoice.total_amount || 0).toFixed(2)} €</strong>
+              <br />
+              Archiv: {invoice.pdf_url ? 'PDF gespeichert' : 'noch nicht gespeichert'} · Mahnungen: {Number(invoice.reminder_count || 0)}
+              <br />
+              Letzte Mahnung: {invoice.last_reminder_at ? new Date(invoice.last_reminder_at).toLocaleString('de-AT') : '-'}
               <br />
               E-Mail: {invoice.customer_email || '-'}
               <br />
@@ -6205,6 +6491,28 @@ export default function App() {
                 Rechnung PDF
               </button>
 
+              <button onClick={() => archiveInvoicePdf(invoice)} style={secondaryButtonStyle}>
+                Im Archiv speichern
+              </button>
+
+              {invoice.pdf_url && (
+                <button onClick={() => openArchivedInvoice(invoice)} style={secondaryButtonStyle}>
+                  Archiv-PDF öffnen
+                </button>
+              )}
+
+              {invoice.customer_email && (
+                <button onClick={() => sendInvoiceEmail(invoice, false)} style={secondaryButtonStyle}>
+                  Rechnung per E-Mail senden
+                </button>
+              )}
+
+              {invoice.customer_email && invoice.status === 'offen' && (
+                <button onClick={() => sendInvoiceEmail(invoice, true)} style={secondaryButtonStyle}>
+                  Zahlungserinnerung senden
+                </button>
+              )}
+
               {invoice.status === 'offen' && (canManageCash() || isAdmin()) && (
                 <button onClick={() => markInvoicePaid(invoice)} style={secondaryButtonStyle}>
                   Als bezahlt markieren
@@ -6212,12 +6520,21 @@ export default function App() {
               )}
 
               {invoice.status !== 'storniert' && isAdmin() && (
-                <button
-                  onClick={() => cancelInvoice(invoice)}
-                  style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
-                >
-                  Rechnung stornieren
-                </button>
+                <>
+                  <button
+                    onClick={() => createCancellationInvoice(invoice)}
+                    style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
+                  >
+                    Stornorechnung erstellen
+                  </button>
+
+                  <button
+                    onClick={() => cancelInvoice(invoice)}
+                    style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
+                  >
+                    Nur Status stornieren
+                  </button>
+                </>
               )}
 
               {isAdmin() && (
