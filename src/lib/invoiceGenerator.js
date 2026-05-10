@@ -34,7 +34,29 @@ function getCustomerLines(invoice, member) {
       `${member.first_name || ''} ${member.last_name || ''}`.trim(),
       member.street || '',
       `${member.postal_code || ''} ${member.city || ''}`.trim(),
+      'Österreich',
     ].filter((line) => line && line.trim())
+  }
+
+  const streetLine = [invoice.customer_street, invoice.customer_house_number]
+    .filter(Boolean)
+    .join(' ')
+
+  const cityLine = [invoice.customer_postal_code, invoice.customer_city]
+    .filter(Boolean)
+    .join(' ')
+
+  const structuredLines = [
+    invoice.customer_name || '',
+    streetLine,
+    invoice.customer_address_addition || '',
+    cityLine,
+    invoice.customer_country || '',
+    invoice.customer_email ? `E-Mail: ${invoice.customer_email}` : '',
+  ].filter((line) => line && String(line).trim())
+
+  if (structuredLines.length > 1) {
+    return structuredLines
   }
 
   return [
@@ -57,9 +79,13 @@ export async function generateInvoicePdf({
   let logo = null
 
   try {
-    logo = await imageToBase64('/styrian-bastards-logo.jpg')
+    logo = await imageToBase64('/styrian-bastards-logo.png')
   } catch {
-    logo = null
+    try {
+      logo = await imageToBase64('/styrian-bastards-logo.jpg')
+    } catch {
+      logo = null
+    }
   }
 
   const normalizedItems = items.map((item) => ({

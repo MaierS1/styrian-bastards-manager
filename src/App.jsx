@@ -194,6 +194,7 @@ export default function App() {
   const [inventoryItems, setInventoryItems] = useState([])
   const [invoices, setInvoices] = useState([])
   const [invoiceItems, setInvoiceItems] = useState([])
+  const [invoiceCustomers, setInvoiceCustomers] = useState([])
   const [memberChangeRequests, setMemberChangeRequests] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
@@ -290,9 +291,15 @@ export default function App() {
   const [mobileScanning, setMobileScanning] = useState(false)
   const [mobileScanMode, setMobileScanMode] = useState('member')
 
+  const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
   const [invoiceCustomerEmail, setInvoiceCustomerEmail] = useState('')
-  const [invoiceCustomerAddress, setInvoiceCustomerAddress] = useState('')
+  const [invoiceCustomerStreet, setInvoiceCustomerStreet] = useState('')
+  const [invoiceCustomerHouseNumber, setInvoiceCustomerHouseNumber] = useState('')
+  const [invoiceCustomerAddressAddition, setInvoiceCustomerAddressAddition] = useState('')
+  const [invoiceCustomerPostalCode, setInvoiceCustomerPostalCode] = useState('')
+  const [invoiceCustomerCity, setInvoiceCustomerCity] = useState('')
+  const [invoiceCustomerCountry, setInvoiceCustomerCountry] = useState('Österreich')
   const [invoiceIssueDate, setInvoiceIssueDate] = useState(new Date().toISOString().slice(0, 10))
   const [invoiceDueDate, setInvoiceDueDate] = useState('')
   const [invoiceNotes, setInvoiceNotes] = useState('')
@@ -301,6 +308,18 @@ export default function App() {
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('alle')
   const [invoiceIsTest, setInvoiceIsTest] = useState(false)
   const [invoiceTestFilter, setInvoiceTestFilter] = useState('alle')
+
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [editingCustomerId, setEditingCustomerId] = useState(null)
+  const [customerName, setCustomerName] = useState('')
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [customerStreet, setCustomerStreet] = useState('')
+  const [customerHouseNumber, setCustomerHouseNumber] = useState('')
+  const [customerAddressAddition, setCustomerAddressAddition] = useState('')
+  const [customerPostalCode, setCustomerPostalCode] = useState('')
+  const [customerCity, setCustomerCity] = useState('')
+  const [customerCountry, setCustomerCountry] = useState('Österreich')
+  const [customerNotes, setCustomerNotes] = useState('')
 
   const [portalEmail, setPortalEmail] = useState('')
   const [portalPhone, setPortalPhone] = useState('')
@@ -685,6 +704,20 @@ export default function App() {
     }
 
     setInvoiceItems(data || [])
+  }
+
+  async function loadInvoiceCustomers() {
+    const { data, error } = await supabase
+      .from('invoice_customers')
+      .select('*')
+      .order('name', { ascending: true })
+
+    if (error) {
+      console.warn(error.message)
+      return
+    }
+
+    setInvoiceCustomers(data || [])
   }
 
   async function loadMemberChangeRequests() {
@@ -2334,6 +2367,7 @@ export default function App() {
       inventory_items: inventoryItems,
       invoices,
       invoice_items: invoiceItems,
+      invoice_customers: invoiceCustomers,
     }
 
     downloadTextFile(
@@ -3448,6 +3482,174 @@ export default function App() {
     return { label: 'Finanzen wirken stabil', color: colors.successText }
   }
 
+  function formatCustomerAddressFromFields(data) {
+    const streetLine = [data.customer_street || data.street, data.customer_house_number || data.house_number]
+      .filter(Boolean)
+      .join(' ')
+
+    return [
+      streetLine,
+      data.customer_address_addition || data.address_addition,
+      [data.customer_postal_code || data.postal_code, data.customer_city || data.city]
+        .filter(Boolean)
+        .join(' '),
+      data.customer_country || data.country,
+    ]
+      .filter((line) => line && String(line).trim())
+      .join(', ')
+  }
+
+  function getInvoiceCustomerAddress(invoice) {
+    return formatCustomerAddressFromFields({
+      customer_street: invoice.customer_street,
+      customer_house_number: invoice.customer_house_number,
+      customer_address_addition: invoice.customer_address_addition,
+      customer_postal_code: invoice.customer_postal_code,
+      customer_city: invoice.customer_city,
+      customer_country: invoice.customer_country,
+    }) || invoice.customer_address || '-'
+  }
+
+  function getSelectedInvoiceCustomer() {
+    return invoiceCustomers.find((customer) => customer.id === selectedInvoiceCustomerId)
+  }
+
+  function selectInvoiceCustomer(customerId) {
+    setSelectedInvoiceCustomerId(customerId)
+
+    if (!customerId) return
+
+    const customer = invoiceCustomers.find((item) => item.id === customerId)
+
+    if (!customer) return
+
+    setInvoiceCustomerName(customer.name || '')
+    setInvoiceCustomerEmail(customer.email || '')
+    setInvoiceCustomerStreet(customer.street || '')
+    setInvoiceCustomerHouseNumber(customer.house_number || '')
+    setInvoiceCustomerAddressAddition(customer.address_addition || '')
+    setInvoiceCustomerPostalCode(customer.postal_code || '')
+    setInvoiceCustomerCity(customer.city || '')
+    setInvoiceCustomerCountry(customer.country || 'Österreich')
+  }
+
+  function resetCustomerForm() {
+    setEditingCustomerId(null)
+    setCustomerName('')
+    setCustomerEmail('')
+    setCustomerStreet('')
+    setCustomerHouseNumber('')
+    setCustomerAddressAddition('')
+    setCustomerPostalCode('')
+    setCustomerCity('')
+    setCustomerCountry('Österreich')
+    setCustomerNotes('')
+  }
+
+  function editInvoiceCustomer(customer) {
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Kunden.')
+
+    setEditingCustomerId(customer.id)
+    setCustomerName(customer.name || '')
+    setCustomerEmail(customer.email || '')
+    setCustomerStreet(customer.street || '')
+    setCustomerHouseNumber(customer.house_number || '')
+    setCustomerAddressAddition(customer.address_addition || '')
+    setCustomerPostalCode(customer.postal_code || '')
+    setCustomerCity(customer.city || '')
+    setCustomerCountry(customer.country || 'Österreich')
+    setCustomerNotes(customer.notes || '')
+  }
+
+  async function saveInvoiceCustomer() {
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Kunden.')
+
+    if (!customerName.trim()) {
+      alert('Kundenname ist Pflicht.')
+      return
+    }
+
+    const payload = {
+      name: customerName.trim(),
+      email: customerEmail.trim() || null,
+      street: customerStreet.trim() || null,
+      house_number: customerHouseNumber.trim() || null,
+      address_addition: customerAddressAddition.trim() || null,
+      postal_code: customerPostalCode.trim() || null,
+      city: customerCity.trim() || null,
+      country: customerCountry.trim() || 'Österreich',
+      notes: customerNotes.trim() || null,
+    }
+
+    if (editingCustomerId) {
+      const oldCustomer = invoiceCustomers.find((customer) => customer.id === editingCustomerId)
+
+      const { error } = await supabase
+        .from('invoice_customers')
+        .update(payload)
+        .eq('id', editingCustomerId)
+
+      if (error) return alert(error.message)
+
+      await createAuditLog('update', 'invoice_customers', editingCustomerId, oldCustomer, payload)
+      alert('Kunde wurde aktualisiert.')
+    } else {
+      const { data, error } = await supabase
+        .from('invoice_customers')
+        .insert(payload)
+        .select()
+        .single()
+
+      if (error) return alert(error.message)
+
+      await createAuditLog('insert', 'invoice_customers', data?.id, null, data)
+      alert('Kunde wurde angelegt.')
+    }
+
+    resetCustomerForm()
+    await loadInvoiceCustomers()
+  }
+
+  async function deleteInvoiceCustomer(customer) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Kunden löschen.')
+
+    const used = invoices.some((invoice) => invoice.customer_id === customer.id)
+
+    if (used) {
+      alert('Dieser Kunde wird bereits in Rechnungen verwendet und kann nicht gelöscht werden.')
+      return
+    }
+
+    const confirmed = window.confirm(`Kunde wirklich löschen?\n\n${customer.name}`)
+
+    if (!confirmed) return
+
+    const { error } = await supabase
+      .from('invoice_customers')
+      .delete()
+      .eq('id', customer.id)
+
+    if (error) return alert(error.message)
+
+    await createAuditLog('delete', 'invoice_customers', customer.id, customer, null)
+    await loadInvoiceCustomers()
+    alert('Kunde wurde gelöscht.')
+  }
+
+  function getFilteredInvoiceCustomers() {
+    const search = customerSearch.toLowerCase()
+
+    return invoiceCustomers.filter((customer) => {
+      return (
+        !search ||
+        (customer.name || '').toLowerCase().includes(search) ||
+        (customer.email || '').toLowerCase().includes(search) ||
+        (customer.city || '').toLowerCase().includes(search) ||
+        (customer.street || '').toLowerCase().includes(search)
+      )
+    })
+  }
+
   function getNextInvoiceNumber(year = new Date().getFullYear(), isTest = false) {
     const prefix = isTest ? `TEST-SB-${year}-` : `SB-${year}-`
 
@@ -3490,9 +3692,15 @@ export default function App() {
   }
 
   function resetInvoiceForm() {
+    setSelectedInvoiceCustomerId('')
     setInvoiceCustomerName('')
     setInvoiceCustomerEmail('')
-    setInvoiceCustomerAddress('')
+    setInvoiceCustomerStreet('')
+    setInvoiceCustomerHouseNumber('')
+    setInvoiceCustomerAddressAddition('')
+    setInvoiceCustomerPostalCode('')
+    setInvoiceCustomerCity('')
+    setInvoiceCustomerCountry('Österreich')
     setInvoiceIssueDate(new Date().toISOString().slice(0, 10))
     setInvoiceDueDate('')
     setInvoiceNotes('')
@@ -3587,6 +3795,12 @@ export default function App() {
         customer_address: [member.street, `${member.postal_code || ''} ${member.city || ''}`.trim()]
           .filter(Boolean)
           .join(', ') || null,
+        customer_street: member.street || null,
+        customer_house_number: null,
+        customer_address_addition: null,
+        customer_postal_code: member.postal_code || null,
+        customer_city: member.city || null,
+        customer_country: 'Österreich',
         issue_date: new Date().toISOString().slice(0, 10),
         due_date: null,
         total_amount: amount,
@@ -3653,9 +3867,23 @@ export default function App() {
       .from('invoices')
       .insert({
         invoice_number: invoiceNumber,
+        customer_id: selectedInvoiceCustomerId || null,
         customer_name: invoiceCustomerName.trim(),
         customer_email: invoiceCustomerEmail.trim() || null,
-        customer_address: invoiceCustomerAddress.trim() || null,
+        customer_address: formatCustomerAddressFromFields({
+          street: invoiceCustomerStreet,
+          house_number: invoiceCustomerHouseNumber,
+          address_addition: invoiceCustomerAddressAddition,
+          postal_code: invoiceCustomerPostalCode,
+          city: invoiceCustomerCity,
+          country: invoiceCustomerCountry,
+        }) || null,
+        customer_street: invoiceCustomerStreet.trim() || null,
+        customer_house_number: invoiceCustomerHouseNumber.trim() || null,
+        customer_address_addition: invoiceCustomerAddressAddition.trim() || null,
+        customer_postal_code: invoiceCustomerPostalCode.trim() || null,
+        customer_city: invoiceCustomerCity.trim() || null,
+        customer_country: invoiceCustomerCountry.trim() || 'Österreich',
         issue_date: invoiceIssueDate || new Date().toISOString().slice(0, 10),
         due_date: invoiceDueDate || null,
         total_amount: totalAmount,
@@ -3847,7 +4075,14 @@ export default function App() {
       Rechnungsnummer: invoice.invoice_number || '',
       Kunde: invoice.customer_name || '',
       Email: invoice.customer_email || '',
-      Adresse: invoice.customer_address || '',
+      KundenID: invoice.customer_id || '',
+      Straße: invoice.customer_street || '',
+      Hausnummer: invoice.customer_house_number || '',
+      Zusatz: invoice.customer_address_addition || '',
+      PLZ: invoice.customer_postal_code || '',
+      Ort: invoice.customer_city || '',
+      Land: invoice.customer_country || '',
+      Adresse: getInvoiceCustomerAddress(invoice),
       Datum: invoice.issue_date || '',
       Faellig: invoice.due_date || '',
       Betrag: Number(invoice.total_amount || 0).toFixed(2),
@@ -3865,6 +4100,13 @@ export default function App() {
       'Rechnungsnummer',
       'Kunde',
       'Email',
+      'KundenID',
+      'Straße',
+      'Hausnummer',
+      'Zusatz',
+      'PLZ',
+      'Ort',
+      'Land',
       'Adresse',
       'Datum',
       'Faellig',
@@ -5577,7 +5819,143 @@ export default function App() {
 
           {(canManageCash() || isAdmin()) && (
             <>
+              <h3 style={headingStyle}>Kunden</h3>
+
+              <div style={cardStyle}>
+                <h4>{editingCustomerId ? 'Kunde bearbeiten' : 'Neuen Kunden anlegen'}</h4>
+
+                <input
+                  placeholder="Kundenname / Firma / Verein"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <input
+                  placeholder="E-Mail"
+                  value={customerEmail}
+                  onChange={(e) => setCustomerEmail(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 12 }}>
+                  <input
+                    placeholder="Straße"
+                    value={customerStreet}
+                    onChange={(e) => setCustomerStreet(e.target.value)}
+                    style={inputStyle}
+                  />
+
+                  <input
+                    placeholder="Hausnummer"
+                    value={customerHouseNumber}
+                    onChange={(e) => setCustomerHouseNumber(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+
+                <input
+                  placeholder="Adresszusatz, z.B. Tür, Top, Abteilung"
+                  value={customerAddressAddition}
+                  onChange={(e) => setCustomerAddressAddition(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 2fr 1fr', gap: 12 }}>
+                  <input
+                    placeholder="PLZ"
+                    value={customerPostalCode}
+                    onChange={(e) => setCustomerPostalCode(e.target.value)}
+                    style={inputStyle}
+                  />
+
+                  <input
+                    placeholder="Ort"
+                    value={customerCity}
+                    onChange={(e) => setCustomerCity(e.target.value)}
+                    style={inputStyle}
+                  />
+
+                  <input
+                    placeholder="Land"
+                    value={customerCountry}
+                    onChange={(e) => setCustomerCountry(e.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+
+                <input
+                  placeholder="Kundennotiz"
+                  value={customerNotes}
+                  onChange={(e) => setCustomerNotes(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <button onClick={saveInvoiceCustomer} style={buttonStyle}>
+                  {editingCustomerId ? 'Kunde speichern' : 'Kunde anlegen'}
+                </button>
+
+                {editingCustomerId && (
+                  <button onClick={resetCustomerForm} style={secondaryButtonStyle}>
+                    Bearbeiten abbrechen
+                  </button>
+                )}
+              </div>
+
+              <input
+                placeholder="Kunden suchen..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                style={inputStyle}
+              />
+
+              {getFilteredInvoiceCustomers().slice(0, 8).map((customer) => (
+                <div key={customer.id} style={cardStyle}>
+                  <strong>{customer.name}</strong>
+                  <br />
+                  {customer.email || '-'}
+                  <br />
+                  {formatCustomerAddressFromFields(customer) || '-'}
+                  <br />
+
+                  <button onClick={() => selectInvoiceCustomer(customer.id)} style={secondaryButtonStyle}>
+                    Für Rechnung auswählen
+                  </button>
+
+                  <button onClick={() => editInvoiceCustomer(customer)} style={buttonStyle}>
+                    Kunde bearbeiten
+                  </button>
+
+                  {isAdmin() && (
+                    <button
+                      onClick={() => deleteInvoiceCustomer(customer)}
+                      style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
+                    >
+                      Kunde löschen
+                    </button>
+                  )}
+                </div>
+              ))}
+
               <h3 style={headingStyle}>Neue Rechnung erstellen</h3>
+
+              <select value={selectedInvoiceCustomerId} onChange={(e) => selectInvoiceCustomer(e.target.value)} style={inputStyle}>
+                <option value="">Keinen gespeicherten Kunden auswählen</option>
+                {invoiceCustomers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.name} · {customer.city || '-'}
+                  </option>
+                ))}
+              </select>
+
+              {selectedInvoiceCustomerId && (
+                <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
+                  Ausgewählter Kunde:{' '}
+                  <strong>{getSelectedInvoiceCustomer()?.name}</strong>
+                  <br />
+                  {formatCustomerAddressFromFields(getSelectedInvoiceCustomer() || {}) || '-'}
+                </div>
+              )}
 
               <input
                 placeholder="Kunde / Rechnungsempfänger"
@@ -5593,12 +5971,51 @@ export default function App() {
                 style={inputStyle}
               />
 
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 12 }}>
+                <input
+                  placeholder="Straße"
+                  value={invoiceCustomerStreet}
+                  onChange={(e) => setInvoiceCustomerStreet(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <input
+                  placeholder="Hausnummer"
+                  value={invoiceCustomerHouseNumber}
+                  onChange={(e) => setInvoiceCustomerHouseNumber(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+
               <input
-                placeholder="Adresse"
-                value={invoiceCustomerAddress}
-                onChange={(e) => setInvoiceCustomerAddress(e.target.value)}
+                placeholder="Adresszusatz, z.B. Top, Tür, Abteilung"
+                value={invoiceCustomerAddressAddition}
+                onChange={(e) => setInvoiceCustomerAddressAddition(e.target.value)}
                 style={inputStyle}
               />
+
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 2fr 1fr', gap: 12 }}>
+                <input
+                  placeholder="PLZ"
+                  value={invoiceCustomerPostalCode}
+                  onChange={(e) => setInvoiceCustomerPostalCode(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <input
+                  placeholder="Ort"
+                  value={invoiceCustomerCity}
+                  onChange={(e) => setInvoiceCustomerCity(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <input
+                  placeholder="Land"
+                  value={invoiceCustomerCountry}
+                  onChange={(e) => setInvoiceCustomerCountry(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(220px, 1fr))', gap: 12 }}>
                 <div>
@@ -5749,7 +6166,7 @@ export default function App() {
                 borderLeft: `6px solid ${invoice.status === 'bezahlt' ? colors.successText : invoice.status === 'storniert' ? colors.red : colors.blue}`,
               }}
             >
-              <strong>{invoice.invoice_number}</strong> · {invoice.customer_name}
+              <strong>{invoice.invoice_number}</strong> · {invoice.customer_name}{invoice.customer_id ? ' · gespeicherter Kunde' : ''}
               {(invoice.is_test || getMemberById(invoice.member_id)?.is_test) && (
                 <>
                   {' '}<strong style={{ color: colors.red }}>TEST</strong>
@@ -5762,7 +6179,7 @@ export default function App() {
               <br />
               E-Mail: {invoice.customer_email || '-'}
               <br />
-              Adresse: {invoice.customer_address || '-'}
+              Adresse: {getInvoiceCustomerAddress(invoice)}
               <br />
               Notizen: {invoice.notes || '-'}
               {invoice.membership_fee_id && (
