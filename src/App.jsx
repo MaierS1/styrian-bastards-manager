@@ -12,7 +12,6 @@ import {
   headingStyle,
   inputStyle,
   isMobile,
-  mutedTextStyle,
   navButtonStyle,
   navStyle,
   pageStyle,
@@ -41,6 +40,7 @@ import { InventoryPage } from './components/inventory/InventoryPage'
 import { InvoicesPage } from './components/invoices/InvoicesPage'
 import { DashboardPage } from './components/dashboard/DashboardPage'
 import { PortalPage } from './components/portal/PortalPage'
+import { MobileScannerPage } from './components/scanner/MobileScannerPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -6006,47 +6006,14 @@ export default function App() {
       )}
 
       {activePage === 'scanner' && (
-        <section style={sectionStyle}>
-          <h2 style={headingStyle}>Mobile Scanner-Ansicht</h2>
-
-          <p style={mutedTextStyle}>
-            Optimiert für Handy: Mitglieder-QR für Check-in oder Inventar-QR scannen.
-          </p>
-
-          <select value={mobileScanMode} onChange={(e) => setMobileScanMode(e.target.value)} style={inputStyle}>
-            <option value="member">Mitglied / Check-in scannen</option>
-            {(canManageMembers() || isAdmin()) && (
-              <option value="member_edit">Mitglied scannen & bearbeiten</option>
-            )}
-            <option value="inventory">Inventar scannen</option>
-          </select>
-
-          <button onClick={() => setMobileScanning(true)} style={buttonStyle}>
-            Scanner starten
-          </button>
-
-          <button onClick={() => setMobileScanning(false)} style={secondaryButtonStyle}>
-            Scanner stoppen
-          </button>
-
-          {mobileScanning && (
-            <div
-              id="mobile-reader"
-              style={{
-                marginTop: 20,
-                maxWidth: 420,
-                width: '100%',
-              }}
-            />
-          )}
-
-          <div style={cardStyle}>
-            <strong>Hinweis</strong>
-            <br />
-            Bei Mitgliedern wird der Check-in für das aktive Event durchgeführt.
-            Bei Inventar wird direkt zur Inventaransicht gewechselt und der Gegenstand gesucht.
-          </div>
-        </section>
+        <MobileScannerPage
+          mobileScanMode={mobileScanMode}
+          setMobileScanMode={setMobileScanMode}
+          mobileScanning={mobileScanning}
+          setMobileScanning={setMobileScanning}
+          canManageMembers={canManageMembers}
+          isAdmin={isAdmin}
+        />
       )}
 
       {activePage === 'admin' && (
