@@ -1,10 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import { generateInvoicePdf } from './lib/invoiceGenerator'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import { Html5QrcodeScanner } from 'html5-qrcode'
-import QRCode from 'qrcode'
 import {
   buttonStyle,
   cardStyle,
@@ -68,6 +64,38 @@ import {
   normalizeInventoryDate as buildNormalizeInventoryDate,
   normalizeInventoryStatus as buildNormalizeInventoryStatus,
 } from './services/helpers/inventoryHelpers'
+import {
+  exportMembersCsv as exportMembersCsvService,
+  exportCashCsv as exportCashCsvService,
+  exportTaxAdvisorCsv as exportTaxAdvisorCsvService,
+  exportTaxAdvisorProCsv as exportTaxAdvisorProCsvService,
+  exportCategorySummaryCsv as exportCategorySummaryCsvService,
+  exportExcelStyleCashbookCsv as exportExcelStyleCashbookCsvService,
+  exportEventsCsv as exportEventsCsvService,
+  exportCheckinsCsv as exportCheckinsCsvService,
+  exportDocumentsCsv as exportDocumentsCsvService,
+  exportFullBackupJson as exportFullBackupJsonService,
+  exportAuditLogsCsv as exportAuditLogsCsvService,
+  exportInventoryCsv as exportInventoryCsvService,
+  exportInvoicesCsv as exportInvoicesCsvService,
+} from './services/export/csvExports'
+import {
+  blobToBase64 as blobToBase64Service,
+  buildInvoicePdfBlob as buildInvoicePdfBlobService,
+  exportInvoicePdf as exportInvoicePdfService,
+  exportMembersPdf as exportMembersPdfService,
+  exportCashPdf as exportCashPdfService,
+  exportDetailedCashbookPdf as exportDetailedCashbookPdfService,
+  exportOpenFeesPdf as exportOpenFeesPdfService,
+  exportCheckinsPdf as exportCheckinsPdfService,
+  exportEventFinancePdf as exportEventFinancePdfService,
+  exportAllMemberCardsPdf as exportAllMemberCardsPdfService,
+  exportMemberCardPdf as exportMemberCardPdfService,
+  exportInventoryPdf as exportInventoryPdfService,
+  exportInventoryLabelPdf as exportInventoryLabelPdfService,
+  exportInventoryLabelsPdf as exportInventoryLabelsPdfService,
+  exportExcelStyleCashbookPdf as exportExcelStyleCashbookPdfService,
+} from './services/pdf/pdfExports'
 import { MembersPage } from './components/members/MembersPage'
 import { CashPage } from './components/cash/CashPage'
 import { DocumentsPage } from './components/documents/DocumentsPage'
@@ -1555,157 +1583,36 @@ export default function App() {
     })
   }
 
-  function downloadTextFile(filename, content, mimeType = 'text/plain;charset=utf-8') {
-    const blob = new Blob([content], { type: mimeType })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  }
-
-  function csvEscape(value) {
-    const text = String(value ?? '')
-    return `"${text.replace(/"/g, '""')}"`
-  }
-
-  function rowsToCsv(headers, rows) {
-    const headerLine = headers.map(csvEscape).join(';')
-    const bodyLines = rows.map((row) => headers.map((header) => csvEscape(row[header])).join(';'))
-
-    return [headerLine, ...bodyLines].join('\n')
-  }
-
   function exportMembersCsv() {
-    const rows = members.map((member) => {
-      const fee = getFee(member.id)
-
-      return {
-        Mitgliedsnummer: member.member_number || '',
-        Vorname: member.first_name || '',
-        Nachname: member.last_name || '',
-        Email: member.email || '',
-        Telefon: member.phone || '',
-        Mitgliedsart: member.member_type || '',
-        Vereinsfunktion: getRoleLabel(member.role || 'mitglied'),
-        AppRecht: getAppRoleLabel(member.app_role || 'readonly'),
-        Status: member.status || '',
-        Strasse: member.street || '',
-        PLZ: member.postal_code || '',
-        Ort: member.city || '',
-        Geburtsdatum: member.birthdate || '',
-        Kleidergroesse: member.clothing_size || '',
-        Beitrag2026: fee ? Number(fee.amount || 0).toFixed(2) : '',
-        BeitragBezahlt: fee ? (fee.paid ? 'ja' : 'nein') : '',
-        Zahlungsdatum: fee?.paid_at || '',
-        Zahlungsart: fee?.payment_method || '',
-      }
+    return exportMembersCsvService({
+      members,
+      getFee,
+      getRoleLabel,
+      getAppRoleLabel,
     })
-
-    const headers = [
-      'Mitgliedsnummer',
-      'Vorname',
-      'Nachname',
-      'Email',
-      'Telefon',
-      'Mitgliedsart',
-      'Vereinsfunktion',
-      'AppRecht',
-      'Status',
-      'Strasse',
-      'PLZ',
-      'Ort',
-      'Geburtsdatum',
-      'Kleidergroesse',
-      'Beitrag2026',
-      'BeitragBezahlt',
-      'Zahlungsdatum',
-      'Zahlungsart',
-    ]
-
-    downloadTextFile('styrian-bastards-mitglieder.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
   }
 
   function exportCashCsv() {
-    const rows = getFilteredCashEntries().map((entry) => ({
-      Belegnummer: entry.receipt_number || '',
-      Datum: entry.entry_date || '',
-      Jahr: getEntryYear(entry),
-      Typ: entry.type || '',
-      Zahlungsart: getPaymentMethodLabel(getPaymentMethod(entry)),
-      Kategorie: entry.is_opening ? 'Ãœbertrag' : entry.category || '',
-      Event: getEventNameById(entry.event_id) || '',
-      Rechnung: entry.invoice_id ? getInvoiceById(entry.invoice_id)?.invoice_number || entry.invoice_id : '',
-      Betrag: Number(entry.amount || 0).toFixed(2),
-      Beschreibung: entry.description || '',
-      Beleg: entry.receipt_url || '',
-      Uebertrag: entry.is_opening ? 'ja' : 'nein',
-      Storniert: entry.is_cancelled ? 'ja' : 'nein',
-      StornoGrund: entry.cancellation_reason || '',
-    }))
-
-    const headers = [
-      'Belegnummer',
-      'Datum',
-      'Jahr',
-      'Typ',
-      'Zahlungsart',
-      'Kategorie',
-      'Event',
-      'Rechnung',
-      'Betrag',
-      'Beschreibung',
-      'Beleg',
-      'Uebertrag',
-      'Storniert',
-      'StornoGrund',
-    ]
-
-    downloadTextFile(`styrian-bastards-kassabuch-${selectedCashYear}.csv`, rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+    return exportCashCsvService({
+      filteredCashEntries: getFilteredCashEntries(),
+      selectedCashYear,
+      getEntryYear,
+      getPaymentMethodLabel,
+      getPaymentMethod,
+      getEventNameById,
+      getInvoiceById,
+    })
   }
 
   function exportTaxAdvisorCsv() {
-    const rows = getFilteredCashEntries()
-      .filter((entry) => !entry.is_opening)
-      .map((entry) => ({
-        Datum: entry.entry_date || '',
-        Jahr: getEntryYear(entry),
-        Belegnummer: entry.receipt_number || '',
-        Einnahme: entry.type === 'einnahme' ? Number(entry.amount || 0).toFixed(2) : '',
-        Ausgabe: entry.type === 'ausgabe' ? Number(entry.amount || 0).toFixed(2) : '',
-        Zahlungsart: getPaymentMethodLabel(getPaymentMethod(entry)),
-        Kategorie: entry.category || '',
-        Event: getEventNameById(entry.event_id) || '',
-        Beschreibung: entry.description || '',
-        Belegpfad: entry.receipt_url || '',
-        Storniert: entry.is_cancelled ? 'ja' : 'nein',
-        StornoGrund: entry.cancellation_reason || '',
-      }))
-
-    const headers = [
-      'Datum',
-      'Jahr',
-      'Belegnummer',
-      'Einnahme',
-      'Ausgabe',
-      'Zahlungsart',
-      'Kategorie',
-      'Event',
-      'Beschreibung',
-      'Belegpfad',
-      'Storniert',
-      'StornoGrund',
-    ]
-
-    downloadTextFile(
-      `styrian-bastards-steuerberater-${selectedCashYear}.csv`,
-      rowsToCsv(headers, rows),
-      'text/csv;charset=utf-8'
-    )
+    return exportTaxAdvisorCsvService({
+      filteredCashEntries: getFilteredCashEntries(),
+      selectedCashYear,
+      getEntryYear,
+      getPaymentMethodLabel,
+      getPaymentMethod,
+      getEventNameById,
+    })
   }
 
   function getCategorySummary() {
@@ -1739,384 +1646,82 @@ export default function App() {
   }
 
   function exportTaxAdvisorProCsv() {
-    const rows = getFilteredCashEntries()
-      .filter((entry) => !entry.is_opening)
-      .map((entry) => ({
-        Belegnummer: entry.receipt_number || '',
-        Datum: entry.entry_date || '',
-        Jahr: getEntryYear(entry),
-        Monat: String(entry.entry_date || '').slice(5, 7),
-        Typ: entry.type || '',
-        Einnahme: entry.type === 'einnahme' && !entry.is_cancelled ? Number(entry.amount || 0).toFixed(2) : '',
-        Ausgabe: entry.type === 'ausgabe' && !entry.is_cancelled ? Number(entry.amount || 0).toFixed(2) : '',
-        BetragNettoFuerAuswertung: entry.is_cancelled ? '0.00' : getCashEntrySignedAmount(entry).toFixed(2),
-        Zahlungsart: getPaymentMethodLabel(getPaymentMethod(entry)),
-        Kategorie: entry.category || '',
-        Event: getEventNameById(entry.event_id) || '',
-        Beschreibung: entry.description || '',
-        BelegVorhanden: entry.receipt_url ? 'ja' : 'nein',
-        Belegpfad: entry.receipt_url || '',
-        Storniert: entry.is_cancelled ? 'ja' : 'nein',
-        StorniertAm: entry.cancelled_at || '',
-        StornoGrund: entry.cancellation_reason || '',
-      }))
-
-    const headers = [
-      'Belegnummer',
-      'Datum',
-      'Jahr',
-      'Monat',
-      'Typ',
-      'Einnahme',
-      'Ausgabe',
-      'BetragNettoFuerAuswertung',
-      'Zahlungsart',
-      'Kategorie',
-      'Event',
-      'Beschreibung',
-      'BelegVorhanden',
-      'Belegpfad',
-      'Storniert',
-      'StorniertAm',
-      'StornoGrund',
-    ]
-
-    downloadTextFile(
-      `styrian-bastards-steuerberater-pro-${selectedCashYear}.csv`,
-      rowsToCsv(headers, rows),
-      'text/csv;charset=utf-8'
-    )
+    return exportTaxAdvisorProCsvService({
+      filteredCashEntries: getFilteredCashEntries(),
+      selectedCashYear,
+      getEntryYear,
+      getCashEntrySignedAmount,
+      getPaymentMethodLabel,
+      getPaymentMethod,
+      getEventNameById,
+    })
   }
 
   function exportCategorySummaryCsv() {
-    const rows = getCategorySummary().map((item) => ({
-      Kategorie: item.category,
-      Einnahmen: item.income.toFixed(2),
-      Ausgaben: item.expense.toFixed(2),
-      Ergebnis: item.balance.toFixed(2),
-      Buchungen: item.count,
-    }))
-
-    const headers = ['Kategorie', 'Einnahmen', 'Ausgaben', 'Ergebnis', 'Buchungen']
-
-    downloadTextFile(
-      `styrian-bastards-kategorien-${selectedCashYear}.csv`,
-      rowsToCsv(headers, rows),
-      'text/csv;charset=utf-8'
-    )
+    return exportCategorySummaryCsvService({
+      categorySummary: getCategorySummary(),
+      selectedCashYear,
+    })
   }
 
   function exportExcelStyleCashbookCsv() {
-    const summary = getCashbookDetailedSummary()
-    const rows = []
-
-    summary.forEach((month) => {
-      rows.push({
-        Monat: getCashMonthLabel(month.monthKey),
-        Nummer: '',
-        Datum: '',
-        Bezeichnung: '',
-        Kuerzel: '',
-        EinnahmeEBanking: '',
-        AusgabeEBanking: '',
-        EinnahmeBar: '',
-        AusgabeBar: '',
-        Anmerkung: '',
-      })
-
-      month.entries
-        .sort((a, b) => String(a.entry_date || '').localeCompare(String(b.entry_date || '')))
-        .forEach((entry) => {
-          const paymentMethod = getPaymentMethod(entry)
-          const amount = Number(entry.amount || 0).toFixed(2)
-
-          rows.push({
-            Monat: '',
-            Nummer: entry.receipt_number || '',
-            Datum: entry.entry_date || '',
-            Bezeichnung: entry.description || '',
-            Kuerzel: entry.is_opening ? 'Ãœbertrag' : entry.category || '',
-            EinnahmeEBanking: entry.type === 'einnahme' && paymentMethod === 'ebanking' ? amount : '',
-            AusgabeEBanking: entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? amount : '',
-            EinnahmeBar: entry.type === 'einnahme' && paymentMethod === 'bar' ? amount : '',
-            AusgabeBar: entry.type === 'ausgabe' && paymentMethod === 'bar' ? amount : '',
-            Anmerkung: entry.is_cancelled ? `STORNIERT: ${entry.cancellation_reason || ''}` : getEventNameById(entry.event_id) || '',
-          })
-        })
-
-      rows.push({
-        Monat: 'Summen einzeln',
-        Nummer: '',
-        Datum: '',
-        Bezeichnung: '',
-        Kuerzel: '',
-        EinnahmeEBanking: (month.openingBankIncome + month.incomeBank).toFixed(2),
-        AusgabeEBanking: (month.openingBankExpense + month.expenseBank).toFixed(2),
-        EinnahmeBar: (month.openingCashIncome + month.incomeCash).toFixed(2),
-        AusgabeBar: (month.openingCashExpense + month.expenseCash).toFixed(2),
-        Anmerkung: '',
-      })
-
-      rows.push({
-        Monat: 'Einnahmen gesamt',
-        Nummer: month.totalIncomeWithOpening.toFixed(2),
-        Datum: '',
-        Bezeichnung: '',
-        Kuerzel: '',
-        EinnahmeEBanking: 'Summe E-Banking',
-        AusgabeEBanking: '',
-        EinnahmeBar: 'Summe Bar',
-        AusgabeBar: '',
-        Anmerkung: '',
-      })
-
-      rows.push({
-        Monat: 'Ausgaben gesamt',
-        Nummer: month.totalExpenseWithOpening.toFixed(2),
-        Datum: '',
-        Bezeichnung: '',
-        Kuerzel: '',
-        EinnahmeEBanking: month.openingBank.toFixed(2),
-        AusgabeEBanking: '',
-        EinnahmeBar: month.openingCash.toFixed(2),
-        AusgabeBar: '',
-        Anmerkung: '',
-      })
-
-      rows.push({
-        Monat: 'Differenz',
-        Nummer: month.differenceWithOpening.toFixed(2),
-        Datum: '',
-        Bezeichnung: '',
-        Kuerzel: '',
-        EinnahmeEBanking: '',
-        AusgabeEBanking: '',
-        EinnahmeBar: '',
-        AusgabeBar: '',
-        Anmerkung: '',
-      })
-
-      rows.push({
-        Monat: '',
-        Nummer: '',
-        Datum: '',
-        Bezeichnung: '',
-        Kuerzel: '',
-        EinnahmeEBanking: '',
-        AusgabeEBanking: '',
-        EinnahmeBar: '',
-        AusgabeBar: '',
-        Anmerkung: '',
-      })
+    return exportExcelStyleCashbookCsvService({
+      summary: getCashbookDetailedSummary(),
+      getCashMonthLabel,
+      getPaymentMethod,
+      getEventNameById,
+      selectedCashYear,
     })
-
-    const headers = [
-      'Monat',
-      'Nummer',
-      'Datum',
-      'Bezeichnung',
-      'Kuerzel',
-      'EinnahmeEBanking',
-      'AusgabeEBanking',
-      'EinnahmeBar',
-      'AusgabeBar',
-      'Anmerkung',
-    ]
-
-    downloadTextFile(
-      `styrian-bastards-kassabuch-excel-style-${selectedCashYear}.csv`,
-      rowsToCsv(headers, rows),
-      'text/csv;charset=utf-8'
-    )
   }
 
   function exportExcelStyleCashbookPdf() {
-    const doc = new jsPDF('landscape')
-    const summary = getCashbookDetailedSummary()
-
-    doc.text('Styrian Bastards - Kassabuch wie Excel', 14, 15)
-    doc.text(`Jahr/Filter: ${selectedCashYear}`, 14, 23)
-    doc.text(`Kassastand: ${getCashBalance().toFixed(2)} EUR`, 14, 31)
-
-    const rows = []
-
-    summary.forEach((month) => {
-      rows.push([
-        getCashMonthLabel(month.monthKey),
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-      ])
-
-      month.entries
-        .sort((a, b) => String(a.entry_date || '').localeCompare(String(b.entry_date || '')))
-        .forEach((entry) => {
-          const paymentMethod = getPaymentMethod(entry)
-          const amount = Number(entry.amount || 0).toFixed(2)
-
-          rows.push([
-            '',
-            entry.receipt_number || '',
-            entry.entry_date || '',
-            entry.description || '',
-            entry.is_opening ? 'Ãœbertrag' : entry.category || '',
-            entry.type === 'einnahme' && paymentMethod === 'ebanking' ? `${amount} EUR` : '',
-            entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? `${amount} EUR` : '',
-            entry.type === 'einnahme' && paymentMethod === 'bar' ? `${amount} EUR` : '',
-            entry.type === 'ausgabe' && paymentMethod === 'bar' ? `${amount} EUR` : '',
-            entry.is_cancelled ? `STORNIERT: ${entry.cancellation_reason || ''}` : getEventNameById(entry.event_id) || '',
-          ])
-        })
-
-      rows.push([
-        'Summen einzeln',
-        '',
-        '',
-        '',
-        '',
-        `${(month.openingBankIncome + month.incomeBank).toFixed(2)} EUR`,
-        `${(month.openingBankExpense + month.expenseBank).toFixed(2)} EUR`,
-        `${(month.openingCashIncome + month.incomeCash).toFixed(2)} EUR`,
-        `${(month.openingCashExpense + month.expenseCash).toFixed(2)} EUR`,
-        '',
-      ])
-
-      rows.push([
-        'Einnahmen gesamt',
-        `${month.totalIncomeWithOpening.toFixed(2)} EUR`,
-        '',
-        '',
-        '',
-        'Summe E-Banking',
-        '',
-        'Summe Bar',
-        '',
-        '',
-      ])
-
-      rows.push([
-        'Ausgaben gesamt',
-        `${month.totalExpenseWithOpening.toFixed(2)} EUR`,
-        '',
-        '',
-        '',
-        `${month.openingBank.toFixed(2)} EUR`,
-        '',
-        `${month.openingCash.toFixed(2)} EUR`,
-        '',
-        '',
-      ])
-
-      rows.push([
-        'Differenz',
-        `${month.differenceWithOpening.toFixed(2)} EUR`,
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-      ])
+    return exportExcelStyleCashbookPdfService({
+      summary: getCashbookDetailedSummary(),
+      getCashBalance,
+      getCashMonthLabel,
+      selectedCashYear,
+      getPaymentMethod,
+      getEventNameById,
     })
-
-    autoTable(doc, {
-      startY: 40,
-      head: [[
-        'Monat',
-        'Nummer/Summe',
-        'Datum',
-        'Bezeichnung',
-        'KÃ¼rzel',
-        'Einnahme E-Banking',
-        'Ausgabe E-Banking',
-        'Einnahme Bar',
-        'Ausgabe Bar',
-        'Anmerkung',
-      ]],
-      body: rows,
-      styles: { fontSize: 7 },
-      headStyles: { fillColor: [5, 5, 5] },
-    })
-
-    doc.save(`styrian-bastards-kassabuch-excel-style-${selectedCashYear}.pdf`)
   }
 
   function exportEventsCsv() {
-    const rows = events.map((event) => ({
-      Name: event.name || '',
-      Datum: event.event_date || '',
-      Ort: event.location || '',
-      Status: event.status || '',
-      Notizen: event.notes || '',
-      Einnahmen: getEventIncomeTotal(event.id).toFixed(2),
-      Ausgaben: getEventExpenseTotal(event.id).toFixed(2),
-      Ergebnis: getEventBalance(event.id).toFixed(2),
-    }))
-
-    const headers = ['Name', 'Datum', 'Ort', 'Status', 'Notizen', 'Einnahmen', 'Ausgaben', 'Ergebnis']
-
-    downloadTextFile('styrian-bastards-events.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+    return exportEventsCsvService({
+      events,
+      getEventIncomeTotal,
+      getEventExpenseTotal,
+      getEventBalance,
+    })
   }
 
   function exportCheckinsCsv() {
-    const rows = eventCheckins.map((checkin) => ({
-      Event: checkin.event_name || '',
-      Mitglied: getMemberName(checkin.member_id),
-      Datum: checkin.checkin_date || '',
-      Uhrzeit: checkin.checkin_time ? new Date(checkin.checkin_time).toLocaleTimeString('de-AT') : '',
-    }))
-
-    const headers = ['Event', 'Mitglied', 'Datum', 'Uhrzeit']
-
-    downloadTextFile('styrian-bastards-checkins.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+    return exportCheckinsCsvService({
+      eventCheckins,
+      getMemberName,
+    })
   }
 
   function exportDocumentsCsv() {
-    const rows = documents.map((document) => ({
-      Titel: document.title || '',
-      Kategorie: document.category || '',
-      Datum: document.document_date || '',
-      Beschreibung: document.description || '',
-      Datei: document.file_name || document.file_path || '',
-      Pfad: document.file_path || '',
-      MimeType: document.mime_type || '',
-    }))
-
-    const headers = ['Titel', 'Kategorie', 'Datum', 'Beschreibung', 'Datei', 'Pfad', 'MimeType']
-
-    downloadTextFile('styrian-bastards-dokumente.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+    return exportDocumentsCsvService({
+      documents,
+    })
   }
 
   function exportFullBackupJson() {
-    const backup = {
-      exported_at: new Date().toISOString(),
-      selected_cash_year: selectedCashYear,
+    return exportFullBackupJsonService({
+      selectedCashYear,
       members,
-      membership_fees: fees,
-      cash_entries: cashEntries,
+      fees,
+      cashEntries,
       events,
-      event_checkins: eventCheckins,
+      eventCheckins,
       documents,
-      audit_logs: auditLogs,
-      inventory_items: inventoryItems,
+      auditLogs,
+      inventoryItems,
       invoices,
-      invoice_items: invoiceItems,
-      invoice_customers: invoiceCustomers,
-    }
-
-    downloadTextFile(
-      `styrian-bastards-backup-${new Date().toISOString().slice(0, 10)}.json`,
-      JSON.stringify(backup, null, 2),
-      'application/json;charset=utf-8'
-    )
+      invoiceItems,
+      invoiceCustomers,
+    })
   }
 
   function handleRestoreFile(event) {
@@ -2258,19 +1863,9 @@ export default function App() {
   }
 
   function exportAuditLogsCsv() {
-    const rows = auditLogs.map((log) => ({
-      Datum: log.created_at || '',
-      Benutzer: log.user_email || '',
-      Aktion: log.action || '',
-      Tabelle: log.table_name || '',
-      Datensatz: log.record_id || '',
-      Vorher: JSON.stringify(log.old_data || {}),
-      Nachher: JSON.stringify(log.new_data || {}),
-    }))
-
-    const headers = ['Datum', 'Benutzer', 'Aktion', 'Tabelle', 'Datensatz', 'Vorher', 'Nachher']
-
-    downloadTextFile('styrian-bastards-audit-log.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+    return exportAuditLogsCsvService({
+      auditLogs,
+    })
   }
 
   async function inviteMemberUser(member) {
@@ -2646,164 +2241,27 @@ export default function App() {
   }
 
   function exportInventoryCsv() {
-    const rows = getFilteredInventoryItems().map((item) => ({
-      InventarNr: item.inventory_number || '',
-      Bezeichnung: item.name || '',
-      Kategorie: item.category || '',
-      Verantwortlich: item.responsible || '',
-      Standort: item.location || '',
-      Anschaffungsdatum: item.purchase_date || '',
-      Zustand: item.condition || '',
-      Status: item.status || '',
-      LetztePruefung: item.last_check_date || '',
-      Pruefstatus: item.check_status || '',
-      QRURL: getInventoryQrValue(item),
-      EtikettZeile1: item.label_line_1 || 'STYRIAN BASTARDS',
-      EtikettZeile2: item.label_line_2 || 'VEREINSEIGENTUM',
-      EtikettZeile3: item.label_line_3 || `Inv.-Nr.: ${item.inventory_number || ''}`,
-      EtikettZeile4: item.label_line_4 || item.name || '',
-      Notizen: item.notes || '',
-    }))
-
-    const headers = [
-      'InventarNr',
-      'Bezeichnung',
-      'Kategorie',
-      'Verantwortlich',
-      'Standort',
-      'Anschaffungsdatum',
-      'Zustand',
-      'Status',
-      'LetztePruefung',
-      'Pruefstatus',
-      'QRURL',
-      'EtikettZeile1',
-      'EtikettZeile2',
-      'EtikettZeile3',
-      'EtikettZeile4',
-      'Notizen',
-    ]
-
-    downloadTextFile('styrian-bastards-inventar.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+    return exportInventoryCsvService({
+      filteredInventoryItems: getFilteredInventoryItems(),
+      getInventoryQrValue,
+    })
   }
 
   function exportInventoryPdf() {
-    const doc = new jsPDF('landscape')
-    const items = getFilteredInventoryItems()
-
-    doc.text('Styrian Bastards - Inventarliste', 14, 15)
-
-    autoTable(doc, {
-      startY: 25,
-      head: [['Inventar-Nr.', 'Bezeichnung', 'Kategorie', 'Verantwortlich', 'Standort', 'Zustand', 'Status', 'PrÃ¼fung']],
-      body: items.map((item) => [
-        item.inventory_number || '',
-        item.name || '',
-        item.category || '',
-        item.responsible || '',
-        item.location || '',
-        item.condition || '',
-        item.status || '',
-        `${item.last_check_date || '-'} / ${item.check_status || '-'}`,
-      ]),
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [5, 5, 5] },
+    return exportInventoryPdfService({
+      filteredInventoryItems: getFilteredInventoryItems(),
     })
-
-    doc.save('styrian-bastards-inventarliste.pdf')
   }
 
   async function exportInventoryLabelPdf(item) {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: [70, 36],
-    })
-
-    const qrDataUrl = await QRCode.toDataURL(getInventoryQrValue(item), {
-      width: 220,
-      margin: 1,
-    })
-
-    doc.setFillColor(255, 255, 255)
-    doc.rect(0, 0, 70, 36, 'F')
-
-    doc.setTextColor(0, 0, 0)
-    doc.setFontSize(8)
-    doc.text(item.label_line_1 || 'STYRIAN BASTARDS', 4, 6)
-    doc.setFontSize(7)
-    doc.text(item.label_line_2 || 'VEREINSEIGENTUM', 4, 11)
-    doc.text(item.label_line_3 || `Inv.-Nr.: ${item.inventory_number || ''}`, 4, 16)
-    doc.text(item.label_line_4 || item.name || '', 4, 21, { maxWidth: 42 })
-
-    doc.addImage(qrDataUrl, 'PNG', 48, 5, 17, 17)
-
-    doc.setFontSize(6)
-    doc.text(item.inventory_number || '', 50, 27)
-
-    doc.save(`etikett-${item.inventory_number || 'inventar'}.pdf`)
+    return exportInventoryLabelPdfService(item, getInventoryQrValue)
   }
 
   async function exportInventoryLabelsPdf() {
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
+    return exportInventoryLabelsPdfService({
+      filteredInventoryItems: getFilteredInventoryItems(),
+      getInventoryQrValue,
     })
-
-    const items = getFilteredInventoryItems()
-
-    // A4 Hochformat: 210 x 297 mm
-    // 2 Spalten x 8 Reihen = 16 Etiketten pro Seite
-    const pageWidth = 210
-    const pageHeight = 297
-    const marginX = 10
-    const marginY = 10
-    const gapX = 6
-    const gapY = 4
-    const columns = 2
-    const rowsPerPage = 8
-    const labelsPerPage = columns * rowsPerPage
-
-    const labelWidth = (pageWidth - marginX * 2 - gapX) / 2
-    const labelHeight = (pageHeight - marginY * 2 - gapY * (rowsPerPage - 1)) / rowsPerPage
-
-    for (let index = 0; index < items.length; index += 1) {
-      if (index > 0 && index % labelsPerPage === 0) {
-        doc.addPage()
-      }
-
-      const item = items[index]
-      const indexOnPage = index % labelsPerPage
-      const column = indexOnPage % columns
-      const row = Math.floor(indexOnPage / columns)
-
-      const x = marginX + column * (labelWidth + gapX)
-      const y = marginY + row * (labelHeight + gapY)
-
-      const qrDataUrl = await QRCode.toDataURL(getInventoryQrValue(item), {
-        width: 180,
-        margin: 1,
-      })
-
-      doc.rect(x, y, labelWidth, labelHeight)
-
-      doc.setTextColor(0, 0, 0)
-      doc.setFontSize(8)
-      doc.text(item.label_line_1 || 'STYRIAN BASTARDS', x + 4, y + 6)
-
-      doc.setFontSize(7)
-      doc.text(item.label_line_2 || 'VEREINSEIGENTUM', x + 4, y + 11)
-      doc.text(item.label_line_3 || `Inv.-Nr.: ${item.inventory_number || ''}`, x + 4, y + 16)
-      doc.text(item.label_line_4 || item.name || '', x + 4, y + 21, { maxWidth: labelWidth - 30 })
-
-      doc.addImage(qrDataUrl, 'PNG', x + labelWidth - 23, y + 5, 18, 18)
-
-      doc.setFontSize(6)
-      doc.text(item.inventory_number || '', x + labelWidth - 22, y + 27)
-    }
-
-    doc.save('styrian-bastards-inventar-etiketten-a4-16.pdf')
   }
 
   function getTestMembers() {
@@ -3223,15 +2681,7 @@ export default function App() {
   }
 
   function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        const result = String(reader.result || '')
-        resolve(result.split(',')[1] || '')
-      }
-      reader.onerror = reject
-      reader.readAsDataURL(blob)
-    })
+    return blobToBase64Service(blob)
   }
 
   function getInvoiceYear(invoice) {
@@ -3257,17 +2707,13 @@ export default function App() {
   }
 
   async function buildInvoicePdfBlob(invoice) {
-    const result = await generateInvoicePdf({
+    return buildInvoicePdfBlobService({
       invoice,
       member: invoice.member_id ? getMemberById(invoice.member_id) : null,
       items: getItemsForInvoice(invoice.id),
       isTest: Boolean(invoice.is_test || getMemberById(invoice.member_id)?.is_test),
       isCancelled: invoice.status === 'storniert',
-      download: false,
-      returnBlob: true,
     })
-
-    return result
   }
 
   async function archiveInvoicePdf(invoice) {
@@ -3838,390 +3284,90 @@ export default function App() {
   }
 
   async function exportInvoicePdf(invoice) {
-    await generateInvoicePdf({
+    return exportInvoicePdfService({
       invoice,
       member: invoice.member_id ? getMemberById(invoice.member_id) : null,
       items: getItemsForInvoice(invoice.id),
       isTest: Boolean(invoice.is_test || getMemberById(invoice.member_id)?.is_test),
       isCancelled: invoice.status === 'storniert',
-      download: true,
     })
   }
 
   function exportInvoicesCsv() {
-    const rows = getFilteredInvoices().map((invoice) => ({
-      Rechnungsnummer: invoice.invoice_number || '',
-      Kunde: invoice.customer_name || '',
-      Email: invoice.customer_email || '',
-      KundenID: invoice.customer_id || '',
-      StraÃŸe: invoice.customer_street || '',
-      Hausnummer: invoice.customer_house_number || '',
-      Zusatz: invoice.customer_address_addition || '',
-      PLZ: invoice.customer_postal_code || '',
-      Ort: invoice.customer_city || '',
-      Land: invoice.customer_country || '',
-      Adresse: getInvoiceCustomerAddress(invoice),
-      Datum: invoice.issue_date || '',
-      Faellig: invoice.due_date || '',
-      Betrag: Number(invoice.total_amount || 0).toFixed(2),
-      Testrechnung: invoice.is_test ? 'ja' : 'nein',
-      Status: invoice.status || '',
-      Typ: invoice.invoice_type || 'rechnung',
-      ArchivPDF: invoice.pdf_url || '',
-      EMailGesendet: invoice.emailed_at || '',
-      LetzteMahnung: invoice.last_reminder_at || '',
-      Mahnungen: Number(invoice.reminder_count || 0),
-      BezahltAm: invoice.paid_at || '',
-      StorniertAm: invoice.cancelled_at || '',
-      StornoGrund: invoice.cancellation_reason || '',
-      MitgliedID: invoice.member_id || '',
-      MitgliedsbeitragID: invoice.membership_fee_id || '',
-      Notizen: invoice.notes || '',
-    }))
-
-    const headers = [
-      'Rechnungsnummer',
-      'Kunde',
-      'Email',
-      'KundenID',
-      'StraÃŸe',
-      'Hausnummer',
-      'Zusatz',
-      'PLZ',
-      'Ort',
-      'Land',
-      'Adresse',
-      'Datum',
-      'Faellig',
-      'Betrag',
-      'Testrechnung',
-      'Status',
-      'Typ',
-      'ArchivPDF',
-      'EMailGesendet',
-      'LetzteMahnung',
-      'Mahnungen',
-      'BezahltAm',
-      'StorniertAm',
-      'StornoGrund',
-      'MitgliedID',
-      'MitgliedsbeitragID',
-      'Notizen',
-    ]
-
-    downloadTextFile('styrian-bastards-rechnungen.csv', rowsToCsv(headers, rows), 'text/csv;charset=utf-8')
+    return exportInvoicesCsvService({
+      filteredInvoices: getFilteredInvoices(),
+      getInvoiceCustomerAddress,
+    })
   }
 
   function exportMembersPdf() {
-    const doc = new jsPDF()
-    const filteredMembers = getFilteredMembers()
-
-    doc.text('Styrian Bastards - Mitgliederliste', 14, 15)
-
-    autoTable(doc, {
-      startY: 25,
-      head: [['Nr.', 'Name', 'Art', 'Funktion', 'Status', 'E-Mail', 'Telefon', 'Adresse', 'Geburtsdatum', 'GrÃ¶ÃŸe']],
-      body: filteredMembers.map((m) => [
-        m.member_number || '',
-        `${m.first_name || ''} ${m.last_name || ''}`,
-        m.member_type || '',
-        getRoleLabel(m.role || 'mitglied'),
-        m.status || '',
-        m.email || '',
-        m.phone || '',
-        `${m.street || ''}, ${m.postal_code || ''} ${m.city || ''}`,
-        m.birthdate || '',
-        m.clothing_size || '',
-      ]),
+    return exportMembersPdfService({
+      filteredMembers: getFilteredMembers(),
+      getRoleLabel,
     })
-
-    doc.save('styrian-bastards-mitgliederliste.pdf')
   }
 
   function exportCashPdf() {
-    const doc = new jsPDF()
-    const filteredCash = getFilteredCashEntries()
-
-    doc.text('Styrian Bastards - Kassabuch', 14, 15)
-    doc.text(`Kassastand: ${getCashBalance().toFixed(2)} EUR`, 14, 23)
-    doc.text(`Einnahmen: ${getIncomeTotal().toFixed(2)} EUR`, 14, 31)
-    doc.text(`Ausgaben: ${getExpenseTotal().toFixed(2)} EUR`, 14, 39)
-
-    autoTable(doc, {
-      startY: 48,
-      head: [['Belegnr.', 'Datum', 'Typ', 'Zahlungsart', 'Event', 'Rechnung', 'Kategorie', 'Beschreibung', 'Betrag', 'Status']],
-      body: filteredCash.map((e) => [
-        e.receipt_number || '',
-        e.entry_date || '',
-        e.type || '',
-        getPaymentMethodLabel(getPaymentMethod(e)),
-        getEventNameById(e.event_id) || '-',
-        e.invoice_id ? getInvoiceById(e.invoice_id)?.invoice_number || '-' : '-',
-        e.category || '',
-        e.description || '',
-        `${Number(e.amount || 0).toFixed(2)} EUR`,
-        e.is_cancelled ? `STORNIERT: ${e.cancellation_reason || ''}` : 'OK',
-      ]),
+    return exportCashPdfService({
+      filteredCash: getFilteredCashEntries(),
+      getCashBalance,
+      getIncomeTotal,
+      getExpenseTotal,
+      getPaymentMethodLabel,
+      getPaymentMethod,
+      getEventNameById,
+      getInvoiceById,
     })
-
-    doc.save('styrian-bastards-kassabuch.pdf')
   }
 
 
   function exportDetailedCashbookPdf() {
-    const doc = new jsPDF()
-    const summary = getCashbookDetailedSummary()
-
-    doc.text('Styrian Bastards - Kassabuch DetailÃ¼bersicht', 14, 15)
-    doc.text(`Kassastand: ${getCashBalance().toFixed(2)} EUR`, 14, 23)
-
-    autoTable(doc, {
-      startY: 32,
-      head: [[
-        'Monat',
-        'Ãœbertrag Bank netto',
-        'Ãœbertrag Bar netto',
-        'Einnahme Bank',
-        'Ausgabe Bank',
-        'Einnahme Bar',
-        'Ausgabe Bar',
-        'Einnahmen inkl. Ãœbertrag',
-        'Ausgaben inkl. Ãœbertrag',
-        'Differenz',
-        'Saldo'
-      ]],
-      body: summary.map((month) => [
-        getCashMonthLabel(month.monthKey),
-        `${month.openingBank.toFixed(2)} EUR`,
-        `${month.openingCash.toFixed(2)} EUR`,
-        `${month.incomeBank.toFixed(2)} EUR`,
-        `${month.expenseBank.toFixed(2)} EUR`,
-        `${month.incomeCash.toFixed(2)} EUR`,
-        `${month.expenseCash.toFixed(2)} EUR`,
-        `${month.totalIncomeWithOpening.toFixed(2)} EUR`,
-        `${month.totalExpenseWithOpening.toFixed(2)} EUR`,
-        `${month.differenceWithOpening.toFixed(2)} EUR`,
-        `${month.runningBalance.toFixed(2)} EUR`,
-      ]),
+    return exportDetailedCashbookPdfService({
+      summary: getCashbookDetailedSummary(),
+      getCashBalance,
+      getCashMonthLabel,
     })
-
-    doc.save('styrian-bastards-kassabuch-detail.pdf')
   }
 
   function exportOpenFeesPdf() {
-    const doc = new jsPDF()
-    const openFees = fees.filter((fee) => !fee.paid && Number(fee.amount) > 0)
-
-    doc.text('Styrian Bastards - Offene Mitgliedsbeitraege', 14, 15)
-    doc.text(`Offene Summe: ${getOpenFeesTotal().toFixed(2)} EUR`, 14, 23)
-
-    autoTable(doc, {
-      startY: 32,
-      head: [['Name', 'Mitgliedsart', 'Betrag', 'Status']],
-      body: openFees.map((fee) => {
-        const member = members.find((m) => m.id === fee.member_id)
-
-        return [
-          member ? `${member.first_name || ''} ${member.last_name || ''}` : 'Unbekannt',
-          member?.member_type || '',
-          `${Number(fee.amount || 0).toFixed(2)} EUR`,
-          'offen',
-        ]
-      }),
+    return exportOpenFeesPdfService({
+      openFees: fees.filter((fee) => !fee.paid && Number(fee.amount) > 0),
+      getOpenFeesTotal,
+      members,
     })
-
-    doc.save('styrian-bastards-offene-beitraege.pdf')
   }
 
   function exportCheckinsPdf() {
-    const doc = new jsPDF()
-    const todayCheckins = getTodayCheckins()
-    const activeEventName = getActiveEventName()
-
-    doc.text('Styrian Bastards - Anwesenheitsliste', 14, 15)
-    doc.text(`Event: ${activeEventName || '-'}`, 14, 23)
-    doc.text(`Datum: ${getTodayDate()}`, 14, 31)
-    doc.text(`Check-ins: ${todayCheckins.length}`, 14, 39)
-
-    autoTable(doc, {
-      startY: 48,
-      head: [['Name', 'Event', 'Datum', 'Uhrzeit']],
-      body: todayCheckins.map((checkin) => [
-        getMemberName(checkin.member_id),
-        checkin.event_name || '',
-        checkin.checkin_date || '',
-        checkin.checkin_time ? new Date(checkin.checkin_time).toLocaleTimeString('de-AT') : '',
-      ]),
+    return exportCheckinsPdfService({
+      todayCheckins: getTodayCheckins(),
+      activeEventName: getActiveEventName(),
+      getTodayDate,
+      getMemberName,
     })
-
-    doc.save(`anwesenheitsliste-${activeEventName || 'event'}-${getTodayDate()}.pdf`)
   }
 
 
   function exportEventFinancePdf(event) {
-    const eventCheckinsForReport = eventCheckins.filter((checkin) => checkin.event_name === event.name)
-    const eventCashEntries = getCashEntriesForEvent(event.id)
-
-    const income = getEventIncomeTotal(event.id)
-    const expenses = getEventExpenseTotal(event.id)
-    const balance = getEventBalance(event.id)
-
-    const doc = new jsPDF()
-
-    doc.text('Styrian Bastards - Event Finanzbericht', 14, 15)
-    doc.text(`Event: ${event.name || '-'}`, 14, 23)
-    doc.text(`Datum: ${event.event_date || '-'}`, 14, 31)
-    doc.text(`Ort: ${event.location || '-'}`, 14, 39)
-
-    doc.text(`Einnahmen: ${income.toFixed(2)} EUR`, 14, 51)
-    doc.text(`Ausgaben: ${expenses.toFixed(2)} EUR`, 14, 59)
-    doc.text(`Ergebnis: ${balance.toFixed(2)} EUR`, 14, 67)
-    doc.text(`Teilnehmer/Check-ins: ${eventCheckinsForReport.length}`, 14, 75)
-
-    autoTable(doc, {
-      startY: 85,
-      head: [['Datum', 'Typ', 'Kategorie', 'Beschreibung', 'Betrag']],
-      body: eventCashEntries.map((entry) => [
-        entry.entry_date || '',
-        entry.type || '',
-        entry.category || '',
-        entry.description || '',
-        `${Number(entry.amount || 0).toFixed(2)} EUR`,
-      ]),
+    return exportEventFinancePdfService({
+      event,
+      eventCheckinsForReport: eventCheckins.filter((checkin) => checkin.event_name === event.name),
+      eventCashEntries: getCashEntriesForEvent(event.id),
+      income: getEventIncomeTotal(event.id),
+      expenses: getEventExpenseTotal(event.id),
+      balance: getEventBalance(event.id),
+      getMemberName,
     })
-
-    const afterCashTableY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : 120
-
-    autoTable(doc, {
-      startY: afterCashTableY,
-      head: [['Teilnehmer', 'Check-in Datum', 'Uhrzeit']],
-      body: eventCheckinsForReport.map((checkin) => [
-        getMemberName(checkin.member_id),
-        checkin.checkin_date || '',
-        checkin.checkin_time ? new Date(checkin.checkin_time).toLocaleTimeString('de-AT') : '',
-      ]),
-    })
-
-    doc.save(`event-finanzbericht-${event.name || 'event'}.pdf`)
   }
 
   async function exportAllMemberCardsPdf() {
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
+    return exportAllMemberCardsPdfService({
+      filteredMembers: getFilteredMembers(),
+      getMemberQrValue,
     })
-
-    const membersToPrint = getFilteredMembers()
-
-    // A4 Hochformat: 2 Spalten x 5 Reihen = 10 Visitenkarten pro Seite
-    // Visitenkartenformat ca. 85 x 54 mm
-    const cardWidth = 85
-    const cardHeight = 54
-    const marginX = 15
-    const marginY = 12
-    const gapX = 10
-    const gapY = 3
-    const columns = 2
-    const rowsPerPage = 5
-    const cardsPerPage = columns * rowsPerPage
-
-    for (let index = 0; index < membersToPrint.length; index += 1) {
-      if (index > 0 && index % cardsPerPage === 0) {
-        doc.addPage()
-      }
-
-      const member = membersToPrint[index]
-      const indexOnPage = index % cardsPerPage
-      const column = indexOnPage % columns
-      const row = Math.floor(indexOnPage / columns)
-
-      const x = marginX + column * (cardWidth + gapX)
-      const y = marginY + row * (cardHeight + gapY)
-
-      const qrDataUrl = await QRCode.toDataURL(getMemberQrValue(member), {
-        width: 300,
-        margin: 1,
-      })
-
-      // Karte Hintergrund
-      doc.setFillColor(5, 5, 5)
-      doc.roundedRect(x, y, cardWidth, cardHeight, 3, 3, 'F')
-
-      // Vereins-Akzent
-      doc.setFillColor(193, 18, 31)
-      doc.rect(x, y, 4, cardHeight, 'F')
-
-      // Titel
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(13)
-      doc.text('STYRIAN BASTARDS', x + 8, y + 9)
-
-      doc.setFontSize(8)
-      doc.text('Mitgliedsausweis', x + 8, y + 15)
-
-      // Mitgliedsdaten
-      doc.setFontSize(12)
-      doc.text(`${member.first_name || ''} ${member.last_name || ''}`, x + 8, y + 27, {
-        maxWidth: 48,
-      })
-
-      doc.setFontSize(7)
-      doc.text(`Art: ${member.member_type || '-'}`, x + 8, y + 35)
-      doc.text(`Status: ${member.status || '-'}`, x + 8, y + 40)
-      doc.text(`Nr.: ${member.member_number || member.id.slice(0, 8)}`, x + 8, y + 45)
-
-      // QR-Code
-      doc.setFillColor(255, 255, 255)
-      doc.roundedRect(x + 58, y + 15, 22, 22, 1.5, 1.5, 'F')
-      doc.addImage(qrDataUrl, 'PNG', x + 59, y + 16, 20, 20)
-
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(6)
-      doc.text('QR-Code zur PrÃ¼fung', x + 57, y + 43)
-    }
-
-    doc.save('styrian-bastards-mitgliedsausweise-visitenkarten.pdf')
   }
 
   async function exportMemberCardPdf(member) {
-    const doc = new jsPDF({
-      orientation: 'landscape',
-      unit: 'mm',
-      format: [86, 54],
-    })
-
-    const qrDataUrl = await QRCode.toDataURL(getMemberQrValue(member), {
-      width: 300,
-      margin: 1,
-    })
-
-    doc.setFillColor(0, 0, 0)
-    doc.rect(0, 0, 86, 54, 'F')
-
-    doc.setTextColor(255, 255, 255)
-    doc.setFontSize(14)
-    doc.text('Styrian Bastards', 6, 9)
-
-    doc.setFontSize(9)
-    doc.text('Mitgliedsausweis', 6, 15)
-
-    doc.setFontSize(12)
-    doc.text(`${member.first_name || ''} ${member.last_name || ''}`, 6, 25)
-
-    doc.setFontSize(8)
-    doc.text(`Art: ${member.member_type || '-'}`, 6, 32)
-    doc.text(`Status: ${member.status || '-'}`, 6, 37)
-    doc.text(`Nr.: ${member.member_number || member.id.slice(0, 8)}`, 6, 42)
-
-    doc.setFillColor(255, 255, 255)
-    doc.rect(55, 12, 26, 26, 'F')
-    doc.addImage(qrDataUrl, 'PNG', 56, 13, 24, 24)
-
-    doc.setFontSize(6)
-    doc.text('QR-Code zur PrÃ¼fung', 55, 44)
-
-    doc.save(`mitgliedsausweis-${member.first_name || 'mitglied'}-${member.last_name || ''}.pdf`)
+    return exportMemberCardPdfService(member, getMemberQrValue)
   }
 
   function saveOfflineCashEntry(entry) {
