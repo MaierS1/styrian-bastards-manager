@@ -80,6 +80,13 @@ import {
   loadMembers as loadMembersService,
 } from './services/loaders/appLoaders'
 import {
+  checkInMemberRecord,
+  createEventRecord,
+  deleteEventRecord,
+  updateEventRecord,
+  updateEventStatusRecord,
+} from './services/repositories/eventsRepository'
+import {
   deleteDocumentRecord,
   uploadDocumentRecord,
 } from './services/repositories/documentsRepository'
@@ -119,6 +126,13 @@ import {
   deleteInvoiceCustomerRecord,
   saveInvoiceCustomerRecord,
 } from './services/repositories/invoicesRepository'
+import {
+  changeMemberStatusRecord,
+  deleteMemberRecord,
+  inviteMemberUserRecord,
+  markMemberAsTestRecord,
+  saveMemberRecord,
+} from './services/repositories/membersRepository'
 import { MembersPage } from './components/members/MembersPage'
 import { CashPage } from './components/cash/CashPage'
 import { DocumentsPage } from './components/documents/DocumentsPage'
@@ -1857,41 +1871,14 @@ export default function App() {
       return
     }
 
-    const confirmed = window.confirm(
-      `Benutzer einladen?\n\n${member.first_name || ''} ${member.last_name || ''}\n${email}\nRolle: ${getAppRoleLabel(selectedRole)}`
-    )
-
-    if (!confirmed) return
-
-    setInvitingMemberId(member.id)
-
-    try {
-      const { data, error } = await supabase.functions.invoke('invite-member-user', {
-        body: {
-          member_id: member.id,
-          email,
-          app_role: selectedRole,
-          redirect_to: window.location.origin,
-        },
-      })
-
-      if (error) {
-        alert(error.message)
-        return
-      }
-
-      if (data?.error) {
-        alert(data.error)
-        return
-      }
-
-      await loadMembers()
-      await loadAuditLogs()
-
-      alert('Einladung wurde versendet und das Mitglied wurde mit dem Auth-User verknÃ¼pft.')
-    } finally {
-      setInvitingMemberId(null)
-    }
+    await inviteMemberUserRecord({
+      member,
+      selectedRole,
+      getAppRoleLabel,
+      loadMembers,
+      loadAuditLogs,
+      setInvitingMemberId,
+    })
   }
 
   function normalizeInventoryDate(value) {
@@ -2206,16 +2193,11 @@ export default function App() {
 
     if (!confirmed) return
 
-    const { error } = await supabase
-      .from('members')
-      .update({ is_test: true })
-      .eq('id', member.id)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('mark_test_member', 'members', member.id, member, { is_test: true })
-    await loadMembers()
-    alert('Mitglied wurde als Testmitglied markiert.')
+    await markMemberAsTestRecord({
+      member,
+      createAuditLog,
+      loadMembers,
+    })
   }
 
   async function deleteAllTestDataForMember(member) {
@@ -3296,31 +3278,19 @@ export default function App() {
       return
     }
 
-    const { data, error } = await supabase
-      .from('events')
-      .insert({
+    await createEventRecord({
+      payload: {
         name: newEventName.trim(),
         event_date: newEventDate || getTodayDate(),
         location: newEventLocation.trim() || null,
         notes: newEventNotes.trim() || null,
-        status: 'geplant',
-      })
-      .select()
-      .single()
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('insert', 'events', data?.id, null, data)
-
-    resetEventForm()
-    await loadEvents()
-
-    if (data) {
-      setSelectedEventId(data.id)
-      setEventName(data.name)
-    }
-
-    alert('Event wurde angelegt.')
+      },
+      createAuditLog,
+      loadEvents,
+      resetEventForm,
+      setSelectedEventId,
+      setEventName,
+    })
   }
 
   async function updateEvent() {
@@ -3336,122 +3306,63 @@ export default function App() {
       return
     }
 
-    const { error } = await supabase
-      .from('events')
-      .update({
+    await updateEventRecord({
+      editingEventId,
+      payload: {
         name: newEventName.trim(),
         event_date: newEventDate || getTodayDate(),
         location: newEventLocation.trim() || null,
         notes: newEventNotes.trim() || null,
-      })
-      .eq('id', editingEventId)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('update', 'events', editingEventId, events.find((event) => event.id === editingEventId), {
-      name: newEventName.trim(),
-      event_date: newEventDate || getTodayDate(),
-      location: newEventLocation.trim() || null,
-      notes: newEventNotes.trim() || null,
+      },
+      events,
+      createAuditLog,
+      loadEvents,
+      resetEventForm,
+      selectedEventId,
+      setEventName,
     })
-
-    if (selectedEventId === editingEventId) {
-      setEventName(newEventName.trim())
-    }
-
-    resetEventForm()
-    await loadEvents()
-    alert('Event wurde aktualisiert.')
   }
 
   async function updateEventStatus(eventId, status) {
     if (!canManageEvents()) return alert('Keine Berechtigung fÃ¼r Event-Verwaltung.')
 
-    const { error } = await supabase
-      .from('events')
-      .update({ status })
-      .eq('id', eventId)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('status_change', 'events', eventId, events.find((event) => event.id === eventId), { status })
-
-    loadEvents()
+    await updateEventStatusRecord({
+      eventId,
+      status,
+      events,
+      createAuditLog,
+      loadEvents,
+    })
   }
 
   async function deleteEvent(event) {
     if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Events lÃ¶schen.')
 
-    const hasCashEntries = cashEntries.some((entry) => entry.event_id === event.id)
-    const hasCheckins = eventCheckins.some((checkin) => checkin.event_name === event.name)
-
-    const warning = [
-      `Event wirklich lÃ¶schen?`,
-      ``,
-      event.name || '',
-      ``,
-      hasCashEntries ? 'Achtung: Es gibt Kassa-EintrÃ¤ge zu diesem Event. Diese bleiben bestehen, verlieren aber die Event-Zuordnung.' : '',
-      hasCheckins ? 'Achtung: Es gibt Check-ins zu diesem Event. Diese bleiben in der Datenbank, sind aber nicht mehr in der Eventliste sichtbar.' : '',
-      ``,
-      'Das kann nicht rÃ¼ckgÃ¤ngig gemacht werden.',
-    ]
-      .filter((line) => line !== '')
-      .join('\n')
-
-    const confirmed = window.confirm(warning)
-
-    if (!confirmed) return
-
-    const { error } = await supabase
-      .from('events')
-      .delete()
-      .eq('id', event.id)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('delete', 'events', event.id, event, null)
-
-    if (selectedEventId === event.id) {
-      setSelectedEventId('')
-      setCashEventId('')
-      setEventName('')
-    }
-
-    if (editingEventId === event.id) {
-      resetEventForm()
-    }
-
-    await loadEvents()
-    await loadCashEntries()
-
-    alert('Event wurde gelÃ¶scht.')
+    await deleteEventRecord({
+      event,
+      cashEntries,
+      eventCheckins,
+      createAuditLog,
+      loadEvents,
+      loadCashEntries,
+      selectedEventId,
+      editingEventId,
+      setSelectedEventId,
+      setCashEventId,
+      setEventName,
+      resetEventForm,
+    })
   }
 
   async function checkInMember(member) {
-    if (!canUseCheckin()) return alert('Keine Berechtigung fÃ¼r Check-in.')
-
-    const activeEventName = getActiveEventName()
-
-    if (!activeEventName) {
-      alert('Bitte zuerst ein Event auswÃ¤hlen oder anlegen.')
-      return
-    }
-
-    if (isCheckedInToday(member.id)) {
-      alert(`${member.first_name} ${member.last_name} ist fÃ¼r dieses Event heute bereits eingecheckt.`)
-      return
-    }
-
-    const { error } = await supabase.from('event_checkins').insert({
-      member_id: member.id,
-      event_name: activeEventName,
-      checkin_date: getTodayDate(),
+    await checkInMemberRecord({
+      member,
+      canUseCheckin,
+      getActiveEventName,
+      isCheckedInToday,
+      getTodayDate,
+      loadEventCheckins,
     })
-
-    if (error) return alert(error.message)
-
-    await loadEventCheckins()
-    alert(`Check-in erfolgreich: ${member.first_name} ${member.last_name} fÃ¼r ${activeEventName}`)
   }
 
   async function deleteMember(member) {
@@ -3469,19 +3380,12 @@ export default function App() {
 
     if (!secondConfirm) return
 
-    const { error } = await supabase
-      .from('members')
-      .delete()
-      .eq('id', member.id)
-
-    if (error) return alert(error.message)
-
-    if (editingId === member.id) {
-      resetForm()
-    }
-
-    await loadAll()
-    alert('Mitglied wurde gelÃ¶scht.')
+    await deleteMemberRecord({
+      member,
+      editingId,
+      resetForm,
+      loadAll,
+    })
   }
 
   function resetForm() {
@@ -3557,37 +3461,28 @@ export default function App() {
       status: 'aktiv',
     }
 
-    if (editingId) {
-      const oldMember = members.find((member) => member.id === editingId)
-      const { error } = await supabase.from('members').update(payload).eq('id', editingId)
-      if (error) return alert(error.message)
-      await createAuditLog('update', 'members', editingId, oldMember, payload)
-    } else {
-      const { data, error } = await supabase.from('members').insert(payload).select().single()
-      if (error) return alert(error.message)
-      await createAuditLog('insert', 'members', data.id, null, data)
-
-      await supabase.from('membership_fees').insert({
-        member_id: data.id,
-        year: 2026,
-        amount: getAmountByType(memberType),
-        paid: false,
-        payment_method: 'bar',
-      })
-    }
-
-    resetForm()
-    loadAll()
+    await saveMemberRecord({
+      editingId,
+      payload,
+      members,
+      createAuditLog,
+      loadAll,
+      getAmountByType,
+      memberType,
+      resetForm,
+    })
   }
 
   async function changeMemberStatus(id, status) {
     if (!canManageMembers()) return alert('Keine Berechtigung fÃ¼r Mitgliederverwaltung.')
 
-    const oldMember = members.find((member) => member.id === id)
-    const { error } = await supabase.from('members').update({ status }).eq('id', id)
-    if (error) return alert(error.message)
-    await createAuditLog('status_change', 'members', id, oldMember, { status })
-    loadMembers()
+    await changeMemberStatusRecord({
+      id,
+      status,
+      members,
+      createAuditLog,
+      loadMembers,
+    })
   }
 
   async function markFeePaid(fee, paymentMethod = 'bar') {
