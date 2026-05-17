@@ -1,7 +1,5 @@
-import {
-  buttonStyle,
-  secondaryButtonStyle,
-} from '../../styles/appStyles'
+import { MemberFeeActions } from './MemberFeeActions'
+import { MemberFeeDetails } from './MemberFeeDetails'
 
 export function MemberFeeSection({
   member,
@@ -15,42 +13,20 @@ export function MemberFeeSection({
     <>
       <hr />
 
-      <strong>Mitgliedsbeitrag 2026</strong>
-      <br />
-      Betrag: {fee ? `${Number(fee.amount).toFixed(2)} €` : 'kein Beitrag angelegt'}
-      <br />
-      Status: {fee ? (fee.paid ? 'bezahlt' : 'offen') : '-'}
-      <br />
-      Zahlungsdatum: {fee?.paid_at || '-'}
-      <br />
-      Zahlungsart: {fee?.payment_method || '-'}
+      <MemberFeeDetails fee={fee} />
 
       <br />
       <br />
 
       {children}
 
-      {fee && !fee.paid && (
-        <>
-          <button onClick={() => createMembershipFeeInvoice(member, fee)} style={secondaryButtonStyle}>
-            Mitgliedsbeitrag Rechnung erstellen
-          </button>
-
-          <button onClick={() => markFeePaid(fee, 'bar')} style={buttonStyle}>
-            Beitrag bar bezahlt
-          </button>
-
-          <button onClick={() => markFeePaid(fee, 'ueberweisung')} style={buttonStyle}>
-            Beitrag per Überweisung bezahlt
-          </button>
-        </>
-      )}
-
-      {fee && fee.paid && (
-        <button onClick={() => markFeeOpen(fee)} style={buttonStyle}>
-          Beitrag wieder offen setzen
-        </button>
-      )}
+      <MemberFeeActions
+        member={member}
+        fee={fee}
+        createMembershipFeeInvoice={createMembershipFeeInvoice}
+        markFeePaid={markFeePaid}
+        markFeeOpen={markFeeOpen}
+      />
     </>
   )
 }
