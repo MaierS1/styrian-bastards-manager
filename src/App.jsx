@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { generateInvoicePdf } from './lib/invoiceGenerator'
 import jsPDF from 'jspdf'
@@ -40,6 +40,7 @@ import { MembersPage } from './components/members/MembersPage'
 import { CashPage } from './components/cash/CashPage'
 import { DocumentsPage } from './components/documents/DocumentsPage'
 import { EventsPage } from './components/events/EventsPage'
+import { AdminPage } from './components/admin/AdminPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -165,7 +166,7 @@ export default function App() {
   const [invoiceCustomerAddressAddition, setInvoiceCustomerAddressAddition] = useState('')
   const [invoiceCustomerPostalCode, setInvoiceCustomerPostalCode] = useState('')
   const [invoiceCustomerCity, setInvoiceCustomerCity] = useState('')
-  const [invoiceCustomerCountry, setInvoiceCustomerCountry] = useState('Österreich')
+  const [invoiceCustomerCountry, setInvoiceCustomerCountry] = useState('Ã–sterreich')
   const [invoiceIssueDate, setInvoiceIssueDate] = useState(new Date().toISOString().slice(0, 10))
   const [invoiceDueDate, setInvoiceDueDate] = useState('')
   const [invoiceNotes, setInvoiceNotes] = useState('')
@@ -184,7 +185,7 @@ export default function App() {
   const [customerAddressAddition, setCustomerAddressAddition] = useState('')
   const [customerPostalCode, setCustomerPostalCode] = useState('')
   const [customerCity, setCustomerCity] = useState('')
-  const [customerCountry, setCustomerCountry] = useState('Österreich')
+  const [customerCountry, setCustomerCountry] = useState('Ã–sterreich')
   const [customerNotes, setCustomerNotes] = useState('')
 
   const [portalEmail, setPortalEmail] = useState('')
@@ -628,33 +629,33 @@ export default function App() {
       (entry) =>
         getEntryYear(entry) === String(year) &&
         entry.is_opening &&
-        String(entry.description || '').toLowerCase().includes('übertrag vorjahr')
+        String(entry.description || '').toLowerCase().includes('Ã¼bertrag vorjahr')
     )
   }
 
   async function createAutomaticCarryover() {
-    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
 
     if (!carryoverFromYear || !carryoverToYear) {
-      alert('Bitte Quelljahr und Zieljahr auswählen.')
+      alert('Bitte Quelljahr und Zieljahr auswÃ¤hlen.')
       return
     }
 
     if (String(carryoverFromYear) === String(carryoverToYear)) {
-      alert('Quelljahr und Zieljahr dürfen nicht gleich sein.')
+      alert('Quelljahr und Zieljahr dÃ¼rfen nicht gleich sein.')
       return
     }
 
     if (Number(carryoverToYear) !== Number(carryoverFromYear) + 1) {
       const proceed = window.confirm(
-        'Das Zieljahr ist nicht direkt das Folgejahr. Trotzdem Übertrag erstellen?'
+        'Das Zieljahr ist nicht direkt das Folgejahr. Trotzdem Ãœbertrag erstellen?'
       )
 
       if (!proceed) return
     }
 
     if (hasOpeningForYear(carryoverToYear)) {
-      alert(`Für ${carryoverToYear} existiert bereits ein Übertrag Vorjahr.`)
+      alert(`FÃ¼r ${carryoverToYear} existiert bereits ein Ãœbertrag Vorjahr.`)
       return
     }
 
@@ -662,14 +663,14 @@ export default function App() {
 
     if (balance === 0) {
       const proceed = window.confirm(
-        `Der Endsaldo ${carryoverFromYear} ist 0,00 €. Trotzdem Übertrag erstellen?`
+        `Der Endsaldo ${carryoverFromYear} ist 0,00 â‚¬. Trotzdem Ãœbertrag erstellen?`
       )
 
       if (!proceed) return
     }
 
     const confirmed = window.confirm(
-      `Übertrag erstellen?\n\nEndsaldo ${carryoverFromYear}: ${balance.toFixed(2)} €\nZieljahr: ${carryoverToYear}\n\nDer Übertrag wird als Startsaldo am 01.01.${carryoverToYear} angelegt.`
+      `Ãœbertrag erstellen?\n\nEndsaldo ${carryoverFromYear}: ${balance.toFixed(2)} â‚¬\nZieljahr: ${carryoverToYear}\n\nDer Ãœbertrag wird als Startsaldo am 01.01.${carryoverToYear} angelegt.`
     )
 
     if (!confirmed) return
@@ -682,7 +683,7 @@ export default function App() {
       payment_method: 'bar',
       is_opening: true,
       amount: Math.abs(balance),
-      description: `Übertrag Vorjahr automatisch aus ${carryoverFromYear}`,
+      description: `Ãœbertrag Vorjahr automatisch aus ${carryoverFromYear}`,
       receipt_url: null,
       event_id: null,
     }
@@ -695,7 +696,7 @@ export default function App() {
 
     await loadCashEntries()
     setSelectedCashYear(String(carryoverToYear))
-    alert('Übertrag wurde erstellt.')
+    alert('Ãœbertrag wurde erstellt.')
   }
 
   function getUpcomingEvents(days = 14) {
@@ -742,8 +743,8 @@ export default function App() {
     if (openFeeMembers.length > 0) {
       alerts.push({
         type: 'warning',
-        title: 'Offene Mitgliedsbeiträge',
-        message: `${openFeeMembers.length} Mitglieder haben offene Beiträge. Offene Summe: ${openFeeTotal.toFixed(2)} €.`,
+        title: 'Offene MitgliedsbeitrÃ¤ge',
+        message: `${openFeeMembers.length} Mitglieder haben offene BeitrÃ¤ge. Offene Summe: ${openFeeTotal.toFixed(2)} â‚¬.`,
       })
     }
 
@@ -751,7 +752,7 @@ export default function App() {
       alerts.push({
         type: 'danger',
         title: 'Niedriger Kassastand',
-        message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} €. Bitte prüfen.`,
+        message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} â‚¬. Bitte prÃ¼fen.`,
       })
     }
 
@@ -759,7 +760,7 @@ export default function App() {
       alerts.push({
         type: 'info',
         title: 'Anstehende Events',
-        message: `${upcomingEvents.length} Event(s) in den nächsten 14 Tagen. Nächstes Event: ${upcomingEvents[0].name} am ${upcomingEvents[0].event_date}.`,
+        message: `${upcomingEvents.length} Event(s) in den nÃ¤chsten 14 Tagen. NÃ¤chstes Event: ${upcomingEvents[0].name} am ${upcomingEvents[0].event_date}.`,
       })
     }
 
@@ -775,7 +776,7 @@ export default function App() {
       alerts.push({
         type: 'warning',
         title: 'Testdaten vorhanden',
-        message: `${getTestMembers().length} Testmitglied(er), ${getTestInvoices().length} Testrechnung(en) und ${getTestCashEntries().length} Test-Kassa-Eintrag/Einträge vorhanden.`,
+        message: `${getTestMembers().length} Testmitglied(er), ${getTestInvoices().length} Testrechnung(en) und ${getTestCashEntries().length} Test-Kassa-Eintrag/EintrÃ¤ge vorhanden.`,
       })
     }
 
@@ -786,8 +787,8 @@ export default function App() {
       if (hasPreviousYearEntries) {
         alerts.push({
           type: 'info',
-          title: 'Jahresübertrag prüfen',
-          message: `Für ${selectedCashYear} ist noch kein Übertrag Vorjahr vorhanden. Du kannst ihn aus ${previousYear} automatisch erstellen.`,
+          title: 'JahresÃ¼bertrag prÃ¼fen',
+          message: `FÃ¼r ${selectedCashYear} ist noch kein Ãœbertrag Vorjahr vorhanden. Du kannst ihn aus ${previousYear} automatisch erstellen.`,
         })
       }
     }
@@ -795,7 +796,7 @@ export default function App() {
     if (alerts.length === 0) {
       alerts.push({
         type: 'success',
-        title: 'Alles im grünen Bereich',
+        title: 'Alles im grÃ¼nen Bereich',
         message: 'Keine dringenden Hinweise vorhanden.',
       })
     }
@@ -849,13 +850,13 @@ export default function App() {
     const normalized = String(value || '')
       .trim()
       .toLowerCase()
-      .replace('ö', 'oe')
-      .replace('ü', 'ue')
-      .replace('ä', 'ae')
-      .replace('ß', 'ss')
+      .replace('Ã¶', 'oe')
+      .replace('Ã¼', 'ue')
+      .replace('Ã¤', 'ae')
+      .replace('ÃŸ', 'ss')
 
     if (normalized.includes('foerder')) return 'foerdermitglied'
-    if (normalized.includes('förder')) return 'foerdermitglied'
+    if (normalized.includes('fÃ¶rder')) return 'foerdermitglied'
     if (normalized.includes('ehren')) return 'ehrenmitglied'
     if (normalized.includes('probe')) return 'probejahr'
     if (normalized.includes('voll')) return 'vollmitglied'
@@ -867,10 +868,10 @@ export default function App() {
     const normalized = String(value || '')
       .trim()
       .toLowerCase()
-      .replace('ö', 'oe')
-      .replace('ü', 'ue')
-      .replace('ä', 'ae')
-      .replace('ß', 'ss')
+      .replace('Ã¶', 'oe')
+      .replace('Ã¼', 'ue')
+      .replace('Ã¤', 'ae')
+      .replace('ÃŸ', 'ss')
       .replace(/[^a-z0-9]/g, '')
 
     if (normalized.includes('obmannstv') || normalized.includes('obmannstellvertreter')) return 'obmann_stv'
@@ -892,8 +893,8 @@ export default function App() {
       obmann_stv: 'Obmann-Stellvertreter',
       kassier: 'Kassier',
       kassier_stv: 'Kassier-Stellvertreter',
-      schriftfuehrer: 'Schriftführer',
-      schriftfuehrer_stv: 'Schriftführer-Stellvertreter',
+      schriftfuehrer: 'SchriftfÃ¼hrer',
+      schriftfuehrer_stv: 'SchriftfÃ¼hrer-Stellvertreter',
       beirat: 'Beirat',
       helfer: 'Helfer',
     }
@@ -908,10 +909,10 @@ export default function App() {
       const normalizedKey = key
         .trim()
         .toLowerCase()
-        .replace('ä', 'ae')
-        .replace('ö', 'oe')
-        .replace('ü', 'ue')
-        .replace('ß', 'ss')
+        .replace('Ã¤', 'ae')
+        .replace('Ã¶', 'oe')
+        .replace('Ã¼', 'ue')
+        .replace('ÃŸ', 'ss')
         .replace(/[^a-z0-9]/g, '')
 
       normalizedRow[normalizedKey] = row[key]
@@ -921,10 +922,10 @@ export default function App() {
       const normalizedKey = key
         .trim()
         .toLowerCase()
-        .replace('ä', 'ae')
-        .replace('ö', 'oe')
-        .replace('ü', 'ue')
-        .replace('ß', 'ss')
+        .replace('Ã¤', 'ae')
+        .replace('Ã¶', 'oe')
+        .replace('Ã¼', 'ue')
+        .replace('ÃŸ', 'ss')
         .replace(/[^a-z0-9]/g, '')
 
       if (normalizedRow[normalizedKey] !== undefined) {
@@ -989,11 +990,11 @@ export default function App() {
     const email = getCsvValue(row, ['email', 'e-mail', 'mail'])
     const phone = getCsvValue(row, ['telefon', 'phone', 'handy', 'mobil'])
     const memberType = normalizeMemberType(getCsvValue(row, ['mitgliedsart', 'member_type', 'mitgliedart', 'art']))
-    const street = getCsvValue(row, ['strasse', 'straße', 'street', 'adresse'])
+    const street = getCsvValue(row, ['strasse', 'straÃŸe', 'street', 'adresse'])
     const postalCode = getCsvValue(row, ['plz', 'postal_code', 'postcode', 'zip'])
     const city = getCsvValue(row, ['ort', 'city', 'stadt'])
     const birthdate = getCsvValue(row, ['geburtsdatum', 'birthdate', 'birthday', 'geburtstag'])
-    const clothingSize = getCsvValue(row, ['kleidergroesse', 'kleidergröße', 'clothing_size', 'groesse', 'größe'])
+    const clothingSize = getCsvValue(row, ['kleidergroesse', 'kleidergrÃ¶ÃŸe', 'clothing_size', 'groesse', 'grÃ¶ÃŸe'])
     const role = normalizeRole(getCsvValue(row, ['rolle', 'funktion', 'vereinsfunktion', 'role']))
 
     return {
@@ -1037,7 +1038,7 @@ export default function App() {
         setCsvRows(membersForPreview)
 
         if (membersForPreview.length === 0) {
-          alert('Keine gültigen Mitglieder gefunden. Mindestens Vorname und Nachname müssen vorhanden sein.')
+          alert('Keine gÃ¼ltigen Mitglieder gefunden. Mindestens Vorname und Nachname mÃ¼ssen vorhanden sein.')
         }
       } catch (error) {
         alert(`CSV konnte nicht gelesen werden: ${error.message}`)
@@ -1048,10 +1049,10 @@ export default function App() {
   }
 
   async function importCsvMembers() {
-    if (!canManageMembers()) return alert('Keine Berechtigung für Mitglieder-Import.')
+    if (!canManageMembers()) return alert('Keine Berechtigung fÃ¼r Mitglieder-Import.')
 
     if (csvRows.length === 0) {
-      alert('Bitte zuerst eine CSV-Datei auswählen.')
+      alert('Bitte zuerst eine CSV-Datei auswÃ¤hlen.')
       return
     }
 
@@ -1070,7 +1071,7 @@ export default function App() {
       })
 
       if (membersToInsert.length === 0) {
-        alert('Keine neuen Mitglieder gefunden. Möglicherweise sind alle bereits vorhanden.')
+        alert('Keine neuen Mitglieder gefunden. MÃ¶glicherweise sind alle bereits vorhanden.')
         return
       }
 
@@ -1144,9 +1145,9 @@ export default function App() {
 
     const [year, month] = monthKey.split('-')
     const names = [
-      'Jänner',
+      'JÃ¤nner',
       'Februar',
-      'März',
+      'MÃ¤rz',
       'April',
       'Mai',
       'Juni',
@@ -1181,7 +1182,7 @@ export default function App() {
   }
 
   async function closeCashMonth(year, month) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Monate abschließen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Monate abschlieÃŸen.')
 
     if (!year || !month) {
       alert('Jahr und Monat fehlen.')
@@ -1196,7 +1197,7 @@ export default function App() {
     const note = window.prompt(`Notiz zum Monatsabschluss ${String(month).padStart(2, '0')}/${year}:`, '')
 
     const confirmed = window.confirm(
-      `Monat wirklich abschließen?\n\n${String(month).padStart(2, '0')}/${year}\n\nDanach können Einträge in diesem Monat nicht mehr bearbeitet oder storniert werden.`
+      `Monat wirklich abschlieÃŸen?\n\n${String(month).padStart(2, '0')}/${year}\n\nDanach kÃ¶nnen EintrÃ¤ge in diesem Monat nicht mehr bearbeitet oder storniert werden.`
     )
 
     if (!confirmed) return
@@ -1217,7 +1218,7 @@ export default function App() {
   }
 
   async function reopenCashMonth(year, month) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Monatsabschlüsse aufheben.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen MonatsabschlÃ¼sse aufheben.')
 
     const confirmed = window.confirm(
       `Monatsabschluss wirklich aufheben?\n\n${String(month).padStart(2, '0')}/${year}`
@@ -1460,18 +1461,18 @@ export default function App() {
       setMemberSearch(member.member_number || `${member.first_name || ''} ${member.last_name || ''}`)
       editMember(member)
       setActivePage('members')
-      setLinkedMemberNotice(`Mitglied aus QR-Code geöffnet: ${member.first_name || ''} ${member.last_name || ''}`)
+      setLinkedMemberNotice(`Mitglied aus QR-Code geÃ¶ffnet: ${member.first_name || ''} ${member.last_name || ''}`)
       return
     }
 
     if (currentMember?.id === member.id) {
       setActivePage('portal')
-      setLinkedMemberNotice('Dein Mitgliederportal wurde über den QR-Code geöffnet.')
+      setLinkedMemberNotice('Dein Mitgliederportal wurde Ã¼ber den QR-Code geÃ¶ffnet.')
       return
     }
 
     setActivePage('portal')
-    setLinkedMemberNotice('Dieser Mitgliedsausweis gehört zu einem anderen Mitglied. Du hast keine Berechtigung, diese Daten zu öffnen.')
+    setLinkedMemberNotice('Dieser Mitgliedsausweis gehÃ¶rt zu einem anderen Mitglied. Du hast keine Berechtigung, diese Daten zu Ã¶ffnen.')
   }
 
   function getTodayCheckins() {
@@ -1490,7 +1491,7 @@ export default function App() {
     const months = [
       'Jan',
       'Feb',
-      'Mär',
+      'MÃ¤r',
       'Apr',
       'Mai',
       'Jun',
@@ -1537,7 +1538,7 @@ export default function App() {
   function getMemberTypeStats() {
     const types = [
       ['vollmitglied', 'Vollmitglieder'],
-      ['foerdermitglied', 'Fördermitglieder'],
+      ['foerdermitglied', 'FÃ¶rdermitglieder'],
       ['ehrenmitglied', 'Ehrenmitglieder'],
       ['probejahr', 'Probejahr'],
     ]
@@ -1710,7 +1711,7 @@ export default function App() {
       Jahr: getEntryYear(entry),
       Typ: entry.type || '',
       Zahlungsart: getPaymentMethodLabel(getPaymentMethod(entry)),
-      Kategorie: entry.is_opening ? 'Übertrag' : entry.category || '',
+      Kategorie: entry.is_opening ? 'Ãœbertrag' : entry.category || '',
       Event: getEventNameById(entry.event_id) || '',
       Rechnung: entry.invoice_id ? getInvoiceById(entry.invoice_id)?.invoice_number || entry.invoice_id : '',
       Betrag: Number(entry.amount || 0).toFixed(2),
@@ -1908,7 +1909,7 @@ export default function App() {
             Nummer: entry.receipt_number || '',
             Datum: entry.entry_date || '',
             Bezeichnung: entry.description || '',
-            Kuerzel: entry.is_opening ? 'Übertrag' : entry.category || '',
+            Kuerzel: entry.is_opening ? 'Ãœbertrag' : entry.category || '',
             EinnahmeEBanking: entry.type === 'einnahme' && paymentMethod === 'ebanking' ? amount : '',
             AusgabeEBanking: entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? amount : '',
             EinnahmeBar: entry.type === 'einnahme' && paymentMethod === 'bar' ? amount : '',
@@ -2038,7 +2039,7 @@ export default function App() {
             entry.receipt_number || '',
             entry.entry_date || '',
             entry.description || '',
-            entry.is_opening ? 'Übertrag' : entry.category || '',
+            entry.is_opening ? 'Ãœbertrag' : entry.category || '',
             entry.type === 'einnahme' && paymentMethod === 'ebanking' ? `${amount} EUR` : '',
             entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? `${amount} EUR` : '',
             entry.type === 'einnahme' && paymentMethod === 'bar' ? `${amount} EUR` : '',
@@ -2107,7 +2108,7 @@ export default function App() {
         'Nummer/Summe',
         'Datum',
         'Bezeichnung',
-        'Kürzel',
+        'KÃ¼rzel',
         'Einnahme E-Banking',
         'Ausgabe E-Banking',
         'Einnahme Bar',
@@ -2210,7 +2211,7 @@ export default function App() {
         const parsed = JSON.parse(String(reader.result || '{}'))
 
         if (!parsed || typeof parsed !== 'object') {
-          alert('Backup-Datei ist ungültig.')
+          alert('Backup-Datei ist ungÃ¼ltig.')
           return
         }
 
@@ -2243,22 +2244,22 @@ export default function App() {
   }
 
   async function restoreFullBackup() {
-    if (!isAdmin()) return alert('Nur Admins dürfen Backups wiederherstellen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Backups wiederherstellen.')
 
     if (!restoreData) {
-      alert('Bitte zuerst eine Backup-JSON-Datei auswählen.')
+      alert('Bitte zuerst eine Backup-JSON-Datei auswÃ¤hlen.')
       return
     }
 
     const confirmed = window.confirm(
       `Backup wiederherstellen?\n\n` +
         `Mitglieder: ${getRestoreCount('members')}\n` +
-        `Beiträge: ${getRestoreCount('membership_fees')}\n` +
+        `BeitrÃ¤ge: ${getRestoreCount('membership_fees')}\n` +
         `Kassa: ${getRestoreCount('cash_entries')}\n` +
         `Events: ${getRestoreCount('events')}\n` +
         `Check-ins: ${getRestoreCount('event_checkins')}\n` +
         `Dokumente: ${getRestoreCount('documents')}\n\n` +
-        `Es werden nur Datensätze mit noch nicht vorhandener ID importiert. Bestehende Daten werden nicht überschrieben.`
+        `Es werden nur DatensÃ¤tze mit noch nicht vorhandener ID importiert. Bestehende Daten werden nicht Ã¼berschrieben.`
     )
 
     if (!confirmed) return
@@ -2347,7 +2348,7 @@ export default function App() {
   }
 
   async function inviteMemberUser(member) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Benutzer einladen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Benutzer einladen.')
 
     if (!member?.id) {
       alert('Mitglied fehlt.')
@@ -2362,7 +2363,7 @@ export default function App() {
     }
 
     const selectedRole = window.prompt(
-      `App-Recht für ${member.first_name || ''} ${member.last_name || ''}:\n\nadmin\ncashier\nmembers\ncheckin\nreadonly`,
+      `App-Recht fÃ¼r ${member.first_name || ''} ${member.last_name || ''}:\n\nadmin\ncashier\nmembers\ncheckin\nreadonly`,
       member.app_role || 'readonly'
     )
 
@@ -2371,7 +2372,7 @@ export default function App() {
     const allowedRoles = ['admin', 'cashier', 'members', 'checkin', 'readonly']
 
     if (!allowedRoles.includes(selectedRole)) {
-      alert('Ungültige Rolle.')
+      alert('UngÃ¼ltige Rolle.')
       return
     }
 
@@ -2406,7 +2407,7 @@ export default function App() {
       await loadMembers()
       await loadAuditLogs()
 
-      alert('Einladung wurde versendet und das Mitglied wurde mit dem Auth-User verknüpft.')
+      alert('Einladung wurde versendet und das Mitglied wurde mit dem Auth-User verknÃ¼pft.')
     } finally {
       setInvitingMemberId(null)
     }
@@ -2436,10 +2437,10 @@ export default function App() {
       const normalizedKey = key
         .trim()
         .toLowerCase()
-        .replace('ä', 'ae')
-        .replace('ö', 'oe')
-        .replace('ü', 'ue')
-        .replace('ß', 'ss')
+        .replace('Ã¤', 'ae')
+        .replace('Ã¶', 'oe')
+        .replace('Ã¼', 'ue')
+        .replace('ÃŸ', 'ss')
         .replace(/[^a-z0-9]/g, '')
 
       normalizedRow[normalizedKey] = row[key]
@@ -2449,10 +2450,10 @@ export default function App() {
       const normalizedKey = key
         .trim()
         .toLowerCase()
-        .replace('ä', 'ae')
-        .replace('ö', 'oe')
-        .replace('ü', 'ue')
-        .replace('ß', 'ss')
+        .replace('Ã¤', 'ae')
+        .replace('Ã¶', 'oe')
+        .replace('Ã¼', 'ue')
+        .replace('ÃŸ', 'ss')
         .replace(/[^a-z0-9]/g, '')
 
       if (normalizedRow[normalizedKey] !== undefined) {
@@ -2524,8 +2525,8 @@ export default function App() {
     const purchaseDate = normalizeInventoryDate(getInventoryCsvValue(row, ['Anschaffungsdatum', 'Kaufdatum']))
     const condition = normalizeInventoryCondition(getInventoryCsvValue(row, ['Zustand']))
     const status = normalizeInventoryStatus(getInventoryCsvValue(row, ['Status']))
-    const lastCheckDate = normalizeInventoryDate(getInventoryCsvValue(row, ['Letzte Pruefung', 'Letzte Prüfung']))
-    const checkStatus = getInventoryCsvValue(row, ['Pruefstatus', 'Prüfstatus']) || 'OK'
+    const lastCheckDate = normalizeInventoryDate(getInventoryCsvValue(row, ['Letzte Pruefung', 'Letzte PrÃ¼fung']))
+    const checkStatus = getInventoryCsvValue(row, ['Pruefstatus', 'PrÃ¼fstatus']) || 'OK'
     const qrUrl = getInventoryCsvValue(row, ['QR-URL', 'QR URL']) || getInventoryCsvValue(row, [''])
     const labelLine1 = getInventoryCsvValue(row, ['Etikett Zeile 1']) || 'STYRIAN BASTARDS'
     const labelLine2 = getInventoryCsvValue(row, ['Etikett Zeile 2']) || 'VEREINSEIGENTUM'
@@ -2575,7 +2576,7 @@ export default function App() {
         setInventoryCsvRows(items)
 
         if (items.length === 0) {
-          alert('Keine gültigen Inventar-Einträge gefunden. Inventar-Nr. und Bezeichnung sind Pflicht.')
+          alert('Keine gÃ¼ltigen Inventar-EintrÃ¤ge gefunden. Inventar-Nr. und Bezeichnung sind Pflicht.')
         }
       } catch (error) {
         alert(`Inventar-CSV konnte nicht gelesen werden: ${error.message}`)
@@ -2586,10 +2587,10 @@ export default function App() {
   }
 
   async function importInventoryRows() {
-    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventar-Import.')
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Inventar-Import.')
 
     if (inventoryCsvRows.length === 0) {
-      alert('Bitte zuerst eine Inventar-CSV auswählen.')
+      alert('Bitte zuerst eine Inventar-CSV auswÃ¤hlen.')
       return
     }
 
@@ -2600,7 +2601,7 @@ export default function App() {
       const rowsToInsert = inventoryCsvRows.filter((item) => !existingNumbers.has(item.inventory_number))
 
       if (rowsToInsert.length === 0) {
-        alert('Keine neuen Inventar-Einträge gefunden. Möglicherweise sind alle bereits vorhanden.')
+        alert('Keine neuen Inventar-EintrÃ¤ge gefunden. MÃ¶glicherweise sind alle bereits vorhanden.')
         return
       }
 
@@ -2619,14 +2620,14 @@ export default function App() {
       setInventoryCsvFileName('')
       await loadInventoryItems()
 
-      alert(`${rowsToInsert.length} Inventar-Einträge wurden importiert.`)
+      alert(`${rowsToInsert.length} Inventar-EintrÃ¤ge wurden importiert.`)
     } finally {
       setInventoryImporting(false)
     }
   }
 
   function editInventoryItem(item) {
-    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventarverwaltung.')
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Inventarverwaltung.')
 
     setInventoryEditingId(item.id)
     setInventoryNumber(item.inventory_number || '')
@@ -2647,7 +2648,7 @@ export default function App() {
   }
 
   async function saveInventoryItem() {
-    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventarverwaltung.')
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Inventarverwaltung.')
 
     if (!inventoryName.trim()) {
       alert('Bezeichnung ist Pflicht.')
@@ -2705,9 +2706,9 @@ export default function App() {
   }
 
   async function retireInventoryItem(item) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Inventar ausmustern.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Inventar ausmustern.')
 
-    const reason = window.prompt(`Grund für Ausmustern von ${item.inventory_number} eingeben:`)
+    const reason = window.prompt(`Grund fÃ¼r Ausmustern von ${item.inventory_number} eingeben:`)
 
     if (!reason || !reason.trim()) return
 
@@ -2791,16 +2792,16 @@ export default function App() {
   }
 
   async function deleteInventoryItem(item) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Inventar löschen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Inventar lÃ¶schen.')
 
     const confirmed = window.confirm(
-      `Inventar-Eintrag wirklich endgültig löschen?\n\n${item.inventory_number || ''} · ${item.name || ''}\n\nEmpfohlen ist normalerweise „Ausmustern“. Löschen entfernt den Eintrag dauerhaft.`
+      `Inventar-Eintrag wirklich endgÃ¼ltig lÃ¶schen?\n\n${item.inventory_number || ''} Â· ${item.name || ''}\n\nEmpfohlen ist normalerweise â€žAusmusternâ€œ. LÃ¶schen entfernt den Eintrag dauerhaft.`
     )
 
     if (!confirmed) return
 
     const secondConfirm = window.confirm(
-      'Bitte nochmals bestätigen: Dieser Inventar-Eintrag wird endgültig gelöscht.'
+      'Bitte nochmals bestÃ¤tigen: Dieser Inventar-Eintrag wird endgÃ¼ltig gelÃ¶scht.'
     )
 
     if (!secondConfirm) return
@@ -2815,7 +2816,7 @@ export default function App() {
     await createAuditLog('delete', 'inventory_items', item.id, item, null)
     await loadInventoryItems()
 
-    alert('Inventar-Eintrag wurde gelöscht.')
+    alert('Inventar-Eintrag wurde gelÃ¶scht.')
   }
 
   function getInventoryQrValue(item) {
@@ -2872,7 +2873,7 @@ export default function App() {
 
     autoTable(doc, {
       startY: 25,
-      head: [['Inventar-Nr.', 'Bezeichnung', 'Kategorie', 'Verantwortlich', 'Standort', 'Zustand', 'Status', 'Prüfung']],
+      head: [['Inventar-Nr.', 'Bezeichnung', 'Kategorie', 'Verantwortlich', 'Standort', 'Zustand', 'Status', 'PrÃ¼fung']],
       body: items.map((item) => [
         item.inventory_number || '',
         item.name || '',
@@ -3001,7 +3002,7 @@ export default function App() {
   }
 
   async function markMemberAsTest(member) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Testmitglieder markieren.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Testmitglieder markieren.')
 
     const confirmed = window.confirm(
       `Mitglied als Testmitglied markieren?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nTestmitglieder werden im Dashboard und Kassasystem getrennt angezeigt.`
@@ -3022,20 +3023,20 @@ export default function App() {
   }
 
   async function deleteAllTestDataForMember(member) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Testdaten löschen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Testdaten lÃ¶schen.')
 
     if (!member?.is_test) {
-      alert('Dieses Mitglied ist kein Testmitglied. Aus Sicherheitsgründen wird nichts gelöscht.')
+      alert('Dieses Mitglied ist kein Testmitglied. Aus SicherheitsgrÃ¼nden wird nichts gelÃ¶scht.')
       return
     }
 
     const confirmed = window.confirm(
-      `Alle Testdaten endgültig löschen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nGelöscht werden:\n- Test-Rechnungen\n- Test-Kassa-Einträge\n- Mitgliedsbeiträge\n- Änderungsanträge\n- das Testmitglied\n\nEchte Daten werden nicht gelöscht.`
+      `Alle Testdaten endgÃ¼ltig lÃ¶schen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nGelÃ¶scht werden:\n- Test-Rechnungen\n- Test-Kassa-EintrÃ¤ge\n- MitgliedsbeitrÃ¤ge\n- Ã„nderungsantrÃ¤ge\n- das Testmitglied\n\nEchte Daten werden nicht gelÃ¶scht.`
     )
 
     if (!confirmed) return
 
-    const secondConfirm = window.confirm('Bitte nochmals bestätigen: Die Testdaten werden endgültig gelöscht.')
+    const secondConfirm = window.confirm('Bitte nochmals bestÃ¤tigen: Die Testdaten werden endgÃ¼ltig gelÃ¶scht.')
 
     if (!secondConfirm) return
 
@@ -3093,11 +3094,11 @@ export default function App() {
     })
 
     await loadAll()
-    alert('Testmitglied und zugehörige Testdaten wurden gelöscht.')
+    alert('Testmitglied und zugehÃ¶rige Testdaten wurden gelÃ¶scht.')
   }
 
   async function deleteAllTestData() {
-    if (!isAdmin()) return alert('Nur Admins dürfen Testdaten löschen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Testdaten lÃ¶schen.')
 
     const testMembers = getTestMembers()
 
@@ -3107,7 +3108,7 @@ export default function App() {
     }
 
     const confirmed = window.confirm(
-      `Alle Testdaten löschen?\n\nTestmitglieder: ${testMembers.length}\nTest-Rechnungen: ${getTestInvoices().length}\nTest-Kassa-Einträge: ${getTestCashEntries().length}\n\nDieser Vorgang ist endgültig.`
+      `Alle Testdaten lÃ¶schen?\n\nTestmitglieder: ${testMembers.length}\nTest-Rechnungen: ${getTestInvoices().length}\nTest-Kassa-EintrÃ¤ge: ${getTestCashEntries().length}\n\nDieser Vorgang ist endgÃ¼ltig.`
     )
 
     if (!confirmed) return
@@ -3125,7 +3126,7 @@ export default function App() {
     }
 
     await loadAll()
-    alert('Alle Testdaten wurden gelöscht.')
+    alert('Alle Testdaten wurden gelÃ¶scht.')
   }
 
   function getPendingMemberChangeRequests() {
@@ -3138,7 +3139,7 @@ export default function App() {
   }
 
   async function submitMemberChangeRequest() {
-    if (!currentMember) return alert('Kein Mitglied mit deinem Login verknüpft.')
+    if (!currentMember) return alert('Kein Mitglied mit deinem Login verknÃ¼pft.')
 
     const requestedData = {
       email: portalEmail,
@@ -3154,12 +3155,12 @@ export default function App() {
     })
 
     if (changedFields.length === 0) {
-      alert('Es wurden keine Änderungen erkannt.')
+      alert('Es wurden keine Ã„nderungen erkannt.')
       return
     }
 
     const confirmed = window.confirm(
-      `Änderungsantrag einreichen?\n\nGeänderte Felder: ${changedFields.join(', ')}\n\nEin Vorstandsmitglied muss die Änderung bestätigen.`
+      `Ã„nderungsantrag einreichen?\n\nGeÃ¤nderte Felder: ${changedFields.join(', ')}\n\nEin Vorstandsmitglied muss die Ã„nderung bestÃ¤tigen.`
     )
 
     if (!confirmed) return
@@ -3176,7 +3177,7 @@ export default function App() {
     await createAuditLog('request_member_change', 'members', currentMember.id, currentMember, requestedData)
     await loadMemberChangeRequests()
 
-    alert('Änderungsantrag wurde eingereicht.')
+    alert('Ã„nderungsantrag wurde eingereicht.')
   }
 
   async function approveMemberChangeRequest(request) {
@@ -3186,7 +3187,7 @@ export default function App() {
     const requestedData = request.requested_data || {}
 
     const confirmed = window.confirm(
-      `Änderungsantrag genehmigen?\n\nMitglied: ${member ? `${member.first_name || ''} ${member.last_name || ''}` : request.member_id}`
+      `Ã„nderungsantrag genehmigen?\n\nMitglied: ${member ? `${member.first_name || ''} ${member.last_name || ''}` : request.member_id}`
     )
 
     if (!confirmed) return
@@ -3214,7 +3215,7 @@ export default function App() {
     await loadCurrentMember(user.id)
     await loadMemberChangeRequests()
 
-    alert('Änderung wurde genehmigt und übernommen.')
+    alert('Ã„nderung wurde genehmigt und Ã¼bernommen.')
   }
 
   async function rejectMemberChangeRequest(request) {
@@ -3237,7 +3238,7 @@ export default function App() {
     await createAuditLog('reject_member_change', 'member_change_requests', request.id, request, { note })
     await loadMemberChangeRequests()
 
-    alert('Änderungsantrag wurde abgelehnt.')
+    alert('Ã„nderungsantrag wurde abgelehnt.')
   }
 
   function getCurrentMemberFee() {
@@ -3286,7 +3287,7 @@ export default function App() {
     const data = getFinanceDashboardData()
 
     if (data.balance < 0) return { label: 'Achtung: negatives Ergebnis', color: colors.red }
-    if (data.openFeesTotal > 0) return { label: 'Offene Beiträge vorhanden', color: '#92400e' }
+    if (data.openFeesTotal > 0) return { label: 'Offene BeitrÃ¤ge vorhanden', color: '#92400e' }
     return { label: 'Finanzen wirken stabil', color: colors.successText }
   }
 
@@ -3338,7 +3339,7 @@ export default function App() {
     setInvoiceCustomerAddressAddition(customer.address_addition || '')
     setInvoiceCustomerPostalCode(customer.postal_code || '')
     setInvoiceCustomerCity(customer.city || '')
-    setInvoiceCustomerCountry(customer.country || 'Österreich')
+    setInvoiceCustomerCountry(customer.country || 'Ã–sterreich')
   }
 
   function resetCustomerForm() {
@@ -3350,12 +3351,12 @@ export default function App() {
     setCustomerAddressAddition('')
     setCustomerPostalCode('')
     setCustomerCity('')
-    setCustomerCountry('Österreich')
+    setCustomerCountry('Ã–sterreich')
     setCustomerNotes('')
   }
 
   function editInvoiceCustomer(customer) {
-    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Kunden.')
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Kunden.')
 
     setEditingCustomerId(customer.id)
     setCustomerName(customer.name || '')
@@ -3365,12 +3366,12 @@ export default function App() {
     setCustomerAddressAddition(customer.address_addition || '')
     setCustomerPostalCode(customer.postal_code || '')
     setCustomerCity(customer.city || '')
-    setCustomerCountry(customer.country || 'Österreich')
+    setCustomerCountry(customer.country || 'Ã–sterreich')
     setCustomerNotes(customer.notes || '')
   }
 
   async function saveInvoiceCustomer() {
-    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Kunden.')
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Kunden.')
 
     if (!customerName.trim()) {
       alert('Kundenname ist Pflicht.')
@@ -3385,7 +3386,7 @@ export default function App() {
       address_addition: customerAddressAddition.trim() || null,
       postal_code: customerPostalCode.trim() || null,
       city: customerCity.trim() || null,
-      country: customerCountry.trim() || 'Österreich',
+      country: customerCountry.trim() || 'Ã–sterreich',
       notes: customerNotes.trim() || null,
     }
 
@@ -3419,16 +3420,16 @@ export default function App() {
   }
 
   async function deleteInvoiceCustomer(customer) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Kunden löschen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Kunden lÃ¶schen.')
 
     const used = invoices.some((invoice) => invoice.customer_id === customer.id)
 
     if (used) {
-      alert('Dieser Kunde wird bereits in Rechnungen verwendet und kann nicht gelöscht werden.')
+      alert('Dieser Kunde wird bereits in Rechnungen verwendet und kann nicht gelÃ¶scht werden.')
       return
     }
 
-    const confirmed = window.confirm(`Kunde wirklich löschen?\n\n${customer.name}`)
+    const confirmed = window.confirm(`Kunde wirklich lÃ¶schen?\n\n${customer.name}`)
 
     if (!confirmed) return
 
@@ -3441,7 +3442,7 @@ export default function App() {
 
     await createAuditLog('delete', 'invoice_customers', customer.id, customer, null)
     await loadInvoiceCustomers()
-    alert('Kunde wurde gelöscht.')
+    alert('Kunde wurde gelÃ¶scht.')
   }
 
   function getFilteredInvoiceCustomers() {
@@ -3507,7 +3508,7 @@ export default function App() {
   }
 
   async function archiveInvoicePdf(invoice) {
-    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungsarchiv.')
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Rechnungsarchiv.')
 
     const { blob, filename } = await buildInvoicePdfBlob(invoice)
     const filePath = getInvoiceFilePath(invoice, filename)
@@ -3539,7 +3540,7 @@ export default function App() {
 
   async function openArchivedInvoice(invoice) {
     if (!invoice.pdf_url) {
-      alert('Für diese Rechnung ist noch kein Archiv-PDF gespeichert.')
+      alert('FÃ¼r diese Rechnung ist noch kein Archiv-PDF gespeichert.')
       return
     }
 
@@ -3553,7 +3554,7 @@ export default function App() {
   }
 
   async function sendInvoiceEmail(invoice, reminder = false) {
-    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungsversand.')
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Rechnungsversand.')
 
     if (!invoice.customer_email) {
       alert('Diese Rechnung hat keine E-Mail-Adresse.')
@@ -3574,8 +3575,8 @@ export default function App() {
       : `Rechnung ${invoice.invoice_number}`
 
     const html = reminder
-      ? `<p>Hallo,</p><p>wir möchten freundlich an die offene Rechnung <strong>${invoice.invoice_number}</strong> erinnern.</p><p>Danke und sportliche Grüße<br/>Styrian Bastards Eishockey-Fanclub</p>`
-      : `<p>Hallo,</p><p>anbei senden wir die Rechnung <strong>${invoice.invoice_number}</strong>.</p><p>Danke und sportliche Grüße<br/>Styrian Bastards Eishockey-Fanclub</p>`
+      ? `<p>Hallo,</p><p>wir mÃ¶chten freundlich an die offene Rechnung <strong>${invoice.invoice_number}</strong> erinnern.</p><p>Danke und sportliche GrÃ¼ÃŸe<br/>Styrian Bastards Eishockey-Fanclub</p>`
+      : `<p>Hallo,</p><p>anbei senden wir die Rechnung <strong>${invoice.invoice_number}</strong>.</p><p>Danke und sportliche GrÃ¼ÃŸe<br/>Styrian Bastards Eishockey-Fanclub</p>`
 
     const { data, error } = await supabase.functions.invoke('send-invoice-email', {
       body: {
@@ -3619,18 +3620,18 @@ export default function App() {
   }
 
   async function createCancellationInvoice(invoice) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Stornorechnungen erstellen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Stornorechnungen erstellen.')
 
     const existingCancellation = invoices.find(
       (item) => item.original_invoice_id === invoice.id && item.invoice_type === 'storno'
     )
 
     if (existingCancellation) {
-      alert(`Für diese Rechnung existiert bereits eine Stornorechnung: ${existingCancellation.invoice_number}`)
+      alert(`FÃ¼r diese Rechnung existiert bereits eine Stornorechnung: ${existingCancellation.invoice_number}`)
       return
     }
 
-    const reason = window.prompt(`Grund für Stornorechnung zu ${invoice.invoice_number}:`)
+    const reason = window.prompt(`Grund fÃ¼r Stornorechnung zu ${invoice.invoice_number}:`)
 
     if (!reason || !reason.trim()) return
 
@@ -3651,7 +3652,7 @@ export default function App() {
         customer_address_addition: invoice.customer_address_addition || null,
         customer_postal_code: invoice.customer_postal_code || null,
         customer_city: invoice.customer_city || null,
-        customer_country: invoice.customer_country || 'Österreich',
+        customer_country: invoice.customer_country || 'Ã–sterreich',
         issue_date: new Date().toISOString().slice(0, 10),
         due_date: null,
         total_amount: -Math.abs(Number(invoice.total_amount || 0)),
@@ -3746,7 +3747,7 @@ export default function App() {
     setInvoiceCustomerAddressAddition('')
     setInvoiceCustomerPostalCode('')
     setInvoiceCustomerCity('')
-    setInvoiceCustomerCountry('Österreich')
+    setInvoiceCustomerCountry('Ã–sterreich')
     setInvoiceIssueDate(new Date().toISOString().slice(0, 10))
     setInvoiceDueDate('')
     setInvoiceNotes('')
@@ -3792,7 +3793,7 @@ export default function App() {
   }
 
   async function createMembershipFeeInvoice(member, fee) {
-    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungen.')
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Rechnungen.')
 
     if (!member || !fee) {
       alert('Mitglied oder Beitrag fehlt.')
@@ -3812,7 +3813,7 @@ export default function App() {
 
     if (existingInvoice) {
       const openExisting = window.confirm(
-        `Für diesen Beitrag gibt es bereits eine Rechnung:\n\n${existingInvoice.invoice_number}\n\nPDF jetzt öffnen?`
+        `FÃ¼r diesen Beitrag gibt es bereits eine Rechnung:\n\n${existingInvoice.invoice_number}\n\nPDF jetzt Ã¶ffnen?`
       )
 
       if (openExisting) {
@@ -3827,7 +3828,7 @@ export default function App() {
     const amount = Number(fee.amount || 0)
 
     const confirmed = window.confirm(
-      `Mitgliedsbeitrag-Rechnung erstellen?\n\n${member.first_name || ''} ${member.last_name || ''}\nBetrag: ${amount.toFixed(2)} €\nRechnungsnummer: ${invoiceNumber}`
+      `Mitgliedsbeitrag-Rechnung erstellen?\n\n${member.first_name || ''} ${member.last_name || ''}\nBetrag: ${amount.toFixed(2)} â‚¬\nRechnungsnummer: ${invoiceNumber}`
     )
 
     if (!confirmed) return
@@ -3846,7 +3847,7 @@ export default function App() {
         customer_address_addition: null,
         customer_postal_code: member.postal_code || null,
         customer_city: member.city || null,
-        customer_country: 'Österreich',
+        customer_country: 'Ã–sterreich',
         issue_date: new Date().toISOString().slice(0, 10),
         due_date: null,
         total_amount: amount,
@@ -3885,7 +3886,7 @@ export default function App() {
   }
 
   async function createInvoice() {
-    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungen.')
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Rechnungen.')
 
     if (!invoiceCustomerName.trim()) {
       alert('Kundenname ist Pflicht.')
@@ -3901,7 +3902,7 @@ export default function App() {
       .filter((row) => row.description && row.quantity > 0 && row.unit_price >= 0)
 
     if (validRows.length === 0) {
-      alert('Bitte mindestens eine gültige Rechnungsposition eingeben.')
+      alert('Bitte mindestens eine gÃ¼ltige Rechnungsposition eingeben.')
       return
     }
 
@@ -3929,7 +3930,7 @@ export default function App() {
         customer_address_addition: invoiceCustomerAddressAddition.trim() || null,
         customer_postal_code: invoiceCustomerPostalCode.trim() || null,
         customer_city: invoiceCustomerCity.trim() || null,
-        customer_country: invoiceCustomerCountry.trim() || 'Österreich',
+        customer_country: invoiceCustomerCountry.trim() || 'Ã–sterreich',
         issue_date: invoiceIssueDate || new Date().toISOString().slice(0, 10),
         due_date: invoiceDueDate || null,
         total_amount: totalAmount,
@@ -3968,7 +3969,7 @@ export default function App() {
   }
 
   async function markInvoicePaid(invoice) {
-    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Rechnungen.')
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Rechnungen.')
 
     if (invoice.status === 'bezahlt') {
       alert('Diese Rechnung ist bereits bezahlt.')
@@ -3976,7 +3977,7 @@ export default function App() {
     }
 
     const confirmed = window.confirm(
-      `Rechnung als bezahlt markieren?\n\n${invoice.invoice_number}\n${invoice.customer_name}\n${Number(invoice.total_amount || 0).toFixed(2)} €\n\n` +
+      `Rechnung als bezahlt markieren?\n\n${invoice.invoice_number}\n${invoice.customer_name}\n${Number(invoice.total_amount || 0).toFixed(2)} â‚¬\n\n` +
         (invoice.is_test ? 'Testrechnung: Es wird KEINE Kassa-Einnahme erstellt.' : 'Es wird automatisch eine Kassa-Einnahme erstellt.')
     )
 
@@ -4039,18 +4040,18 @@ export default function App() {
     await loadCashEntries()
     await loadFees()
 
-    alert('Rechnung wurde als bezahlt markiert und in die Kassa übernommen.')
+    alert('Rechnung wurde als bezahlt markiert und in die Kassa Ã¼bernommen.')
   }
 
   async function cancelInvoice(invoice) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Rechnungen stornieren.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Rechnungen stornieren.')
 
     if (invoice.status === 'storniert') {
       alert('Diese Rechnung ist bereits storniert.')
       return
     }
 
-    const reason = window.prompt(`Storno-Grund für ${invoice.invoice_number} eingeben:`)
+    const reason = window.prompt(`Storno-Grund fÃ¼r ${invoice.invoice_number} eingeben:`)
 
     if (!reason || !reason.trim()) return
 
@@ -4075,16 +4076,16 @@ export default function App() {
   }
 
   async function deleteInvoice(invoice) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Rechnungen löschen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Rechnungen lÃ¶schen.')
 
     const confirmed = window.confirm(
-      `Rechnung wirklich endgültig löschen?\n\n${invoice.invoice_number} · ${invoice.customer_name}\n\nBei echten Rechnungen ist normalerweise Storno besser. Testrechnungen können gefahrlos gelöscht werden.`
+      `Rechnung wirklich endgÃ¼ltig lÃ¶schen?\n\n${invoice.invoice_number} Â· ${invoice.customer_name}\n\nBei echten Rechnungen ist normalerweise Storno besser. Testrechnungen kÃ¶nnen gefahrlos gelÃ¶scht werden.`
     )
 
     if (!confirmed) return
 
     const secondConfirm = window.confirm(
-      'Bitte nochmals bestätigen: Die Rechnung inklusive Positionen wird endgültig gelöscht.'
+      'Bitte nochmals bestÃ¤tigen: Die Rechnung inklusive Positionen wird endgÃ¼ltig gelÃ¶scht.'
     )
 
     if (!secondConfirm) return
@@ -4100,7 +4101,7 @@ export default function App() {
     await loadInvoices()
     await loadInvoiceItems()
 
-    alert('Rechnung wurde gelöscht.')
+    alert('Rechnung wurde gelÃ¶scht.')
   }
 
   async function exportInvoicePdf(invoice) {
@@ -4120,7 +4121,7 @@ export default function App() {
       Kunde: invoice.customer_name || '',
       Email: invoice.customer_email || '',
       KundenID: invoice.customer_id || '',
-      Straße: invoice.customer_street || '',
+      StraÃŸe: invoice.customer_street || '',
       Hausnummer: invoice.customer_house_number || '',
       Zusatz: invoice.customer_address_addition || '',
       PLZ: invoice.customer_postal_code || '',
@@ -4150,7 +4151,7 @@ export default function App() {
       'Kunde',
       'Email',
       'KundenID',
-      'Straße',
+      'StraÃŸe',
       'Hausnummer',
       'Zusatz',
       'PLZ',
@@ -4186,7 +4187,7 @@ export default function App() {
 
     autoTable(doc, {
       startY: 25,
-      head: [['Nr.', 'Name', 'Art', 'Funktion', 'Status', 'E-Mail', 'Telefon', 'Adresse', 'Geburtsdatum', 'Größe']],
+      head: [['Nr.', 'Name', 'Art', 'Funktion', 'Status', 'E-Mail', 'Telefon', 'Adresse', 'Geburtsdatum', 'GrÃ¶ÃŸe']],
       body: filteredMembers.map((m) => [
         m.member_number || '',
         `${m.first_name || ''} ${m.last_name || ''}`,
@@ -4238,21 +4239,21 @@ export default function App() {
     const doc = new jsPDF()
     const summary = getCashbookDetailedSummary()
 
-    doc.text('Styrian Bastards - Kassabuch Detailübersicht', 14, 15)
+    doc.text('Styrian Bastards - Kassabuch DetailÃ¼bersicht', 14, 15)
     doc.text(`Kassastand: ${getCashBalance().toFixed(2)} EUR`, 14, 23)
 
     autoTable(doc, {
       startY: 32,
       head: [[
         'Monat',
-        'Übertrag Bank netto',
-        'Übertrag Bar netto',
+        'Ãœbertrag Bank netto',
+        'Ãœbertrag Bar netto',
         'Einnahme Bank',
         'Ausgabe Bank',
         'Einnahme Bar',
         'Ausgabe Bar',
-        'Einnahmen inkl. Übertrag',
-        'Ausgaben inkl. Übertrag',
+        'Einnahmen inkl. Ãœbertrag',
+        'Ausgaben inkl. Ãœbertrag',
         'Differenz',
         'Saldo'
       ]],
@@ -4444,7 +4445,7 @@ export default function App() {
 
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(6)
-      doc.text('QR-Code zur Prüfung', x + 57, y + 43)
+      doc.text('QR-Code zur PrÃ¼fung', x + 57, y + 43)
     }
 
     doc.save('styrian-bastards-mitgliedsausweise-visitenkarten.pdf')
@@ -4485,7 +4486,7 @@ export default function App() {
     doc.addImage(qrDataUrl, 'PNG', 56, 13, 24, 24)
 
     doc.setFontSize(6)
-    doc.text('QR-Code zur Prüfung', 55, 44)
+    doc.text('QR-Code zur PrÃ¼fung', 55, 44)
 
     doc.save(`mitgliedsausweis-${member.first_name || 'mitglied'}-${member.last_name || ''}.pdf`)
   }
@@ -4505,7 +4506,7 @@ export default function App() {
     }
 
     if (offlineCashEntries.length === 0) {
-      alert('Keine Offline-Einträge vorhanden.')
+      alert('Keine Offline-EintrÃ¤ge vorhanden.')
       return
     }
 
@@ -4523,7 +4524,7 @@ export default function App() {
     setOfflineCashEntries([])
     loadCashEntries()
 
-    alert('Offline-Einträge wurden synchronisiert.')
+    alert('Offline-EintrÃ¤ge wurden synchronisiert.')
   }
 
   function resetEventForm() {
@@ -4535,7 +4536,7 @@ export default function App() {
   }
 
   function editEvent(event) {
-    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
+    if (!canManageEvents()) return alert('Keine Berechtigung fÃ¼r Event-Verwaltung.')
 
     setEditingEventId(event.id)
     setNewEventName(event.name || '')
@@ -4547,7 +4548,7 @@ export default function App() {
   }
 
   async function createEvent() {
-    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
+    if (!canManageEvents()) return alert('Keine Berechtigung fÃ¼r Event-Verwaltung.')
 
     if (!newEventName.trim()) {
       alert('Bitte einen Eventnamen eingeben.')
@@ -4582,10 +4583,10 @@ export default function App() {
   }
 
   async function updateEvent() {
-    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
+    if (!canManageEvents()) return alert('Keine Berechtigung fÃ¼r Event-Verwaltung.')
 
     if (!editingEventId) {
-      alert('Kein Event zum Bearbeiten ausgewählt.')
+      alert('Kein Event zum Bearbeiten ausgewÃ¤hlt.')
       return
     }
 
@@ -4623,7 +4624,7 @@ export default function App() {
   }
 
   async function updateEventStatus(eventId, status) {
-    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
+    if (!canManageEvents()) return alert('Keine Berechtigung fÃ¼r Event-Verwaltung.')
 
     const { error } = await supabase
       .from('events')
@@ -4638,20 +4639,20 @@ export default function App() {
   }
 
   async function deleteEvent(event) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Events löschen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Events lÃ¶schen.')
 
     const hasCashEntries = cashEntries.some((entry) => entry.event_id === event.id)
     const hasCheckins = eventCheckins.some((checkin) => checkin.event_name === event.name)
 
     const warning = [
-      `Event wirklich löschen?`,
+      `Event wirklich lÃ¶schen?`,
       ``,
       event.name || '',
       ``,
-      hasCashEntries ? 'Achtung: Es gibt Kassa-Einträge zu diesem Event. Diese bleiben bestehen, verlieren aber die Event-Zuordnung.' : '',
+      hasCashEntries ? 'Achtung: Es gibt Kassa-EintrÃ¤ge zu diesem Event. Diese bleiben bestehen, verlieren aber die Event-Zuordnung.' : '',
       hasCheckins ? 'Achtung: Es gibt Check-ins zu diesem Event. Diese bleiben in der Datenbank, sind aber nicht mehr in der Eventliste sichtbar.' : '',
       ``,
-      'Das kann nicht rückgängig gemacht werden.',
+      'Das kann nicht rÃ¼ckgÃ¤ngig gemacht werden.',
     ]
       .filter((line) => line !== '')
       .join('\n')
@@ -4682,21 +4683,21 @@ export default function App() {
     await loadEvents()
     await loadCashEntries()
 
-    alert('Event wurde gelöscht.')
+    alert('Event wurde gelÃ¶scht.')
   }
 
   async function checkInMember(member) {
-    if (!canUseCheckin()) return alert('Keine Berechtigung für Check-in.')
+    if (!canUseCheckin()) return alert('Keine Berechtigung fÃ¼r Check-in.')
 
     const activeEventName = getActiveEventName()
 
     if (!activeEventName) {
-      alert('Bitte zuerst ein Event auswählen oder anlegen.')
+      alert('Bitte zuerst ein Event auswÃ¤hlen oder anlegen.')
       return
     }
 
     if (isCheckedInToday(member.id)) {
-      alert(`${member.first_name} ${member.last_name} ist für dieses Event heute bereits eingecheckt.`)
+      alert(`${member.first_name} ${member.last_name} ist fÃ¼r dieses Event heute bereits eingecheckt.`)
       return
     }
 
@@ -4709,20 +4710,20 @@ export default function App() {
     if (error) return alert(error.message)
 
     await loadEventCheckins()
-    alert(`Check-in erfolgreich: ${member.first_name} ${member.last_name} für ${activeEventName}`)
+    alert(`Check-in erfolgreich: ${member.first_name} ${member.last_name} fÃ¼r ${activeEventName}`)
   }
 
   async function deleteMember(member) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Mitglieder löschen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Mitglieder lÃ¶schen.')
 
     const confirmed = window.confirm(
-      `Mitglied wirklich löschen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nDas kann nicht rückgängig gemacht werden.`
+      `Mitglied wirklich lÃ¶schen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nDas kann nicht rÃ¼ckgÃ¤ngig gemacht werden.`
     )
 
     if (!confirmed) return
 
     const secondConfirm = window.confirm(
-      'Bitte nochmals bestätigen: Dieses Mitglied und verknüpfte Daten können gelöscht werden.'
+      'Bitte nochmals bestÃ¤tigen: Dieses Mitglied und verknÃ¼pfte Daten kÃ¶nnen gelÃ¶scht werden.'
     )
 
     if (!secondConfirm) return
@@ -4739,7 +4740,7 @@ export default function App() {
     }
 
     await loadAll()
-    alert('Mitglied wurde gelöscht.')
+    alert('Mitglied wurde gelÃ¶scht.')
   }
 
   function resetForm() {
@@ -4792,7 +4793,7 @@ export default function App() {
   }
 
   async function saveMember() {
-    if (!canManageMembers()) return alert('Keine Berechtigung für Mitgliederverwaltung.')
+    if (!canManageMembers()) return alert('Keine Berechtigung fÃ¼r Mitgliederverwaltung.')
 
     if (!firstName || !lastName) {
       alert('Vorname und Nachname sind Pflicht.')
@@ -4839,7 +4840,7 @@ export default function App() {
   }
 
   async function changeMemberStatus(id, status) {
-    if (!canManageMembers()) return alert('Keine Berechtigung für Mitgliederverwaltung.')
+    if (!canManageMembers()) return alert('Keine Berechtigung fÃ¼r Mitgliederverwaltung.')
 
     const oldMember = members.find((member) => member.id === id)
     const { error } = await supabase.from('members').update({ status }).eq('id', id)
@@ -4849,7 +4850,7 @@ export default function App() {
   }
 
   async function markFeePaid(fee, paymentMethod = 'bar') {
-    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
 
     const today = new Date().toISOString().slice(0, 10)
 
@@ -4885,7 +4886,7 @@ export default function App() {
   }
 
   async function markFeeOpen(fee) {
-    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
 
     const { error: feeError } = await supabase
       .from('membership_fees')
@@ -4905,7 +4906,7 @@ export default function App() {
   function parseEuroAmount(value) {
     const cleaned = String(value || '')
       .trim()
-      .replace('€', '')
+      .replace('â‚¬', '')
       .replace(/\s/g, '')
       .replace(/\./g, '')
       .replace(',', '.')
@@ -4955,12 +4956,12 @@ export default function App() {
   function cashbookRowToEntries(row) {
     const rawDate = normalizeCashDate(getCsvValue(row, ['datum']))
     const description = getCsvValue(row, ['bezeichnung', 'beschreibung', 'description'])
-    const date = rawDate || (description.toLowerCase().includes('übertrag') || description.toLowerCase().includes('uebertrag') ? row.__month_start : '')
+    const date = rawDate || (description.toLowerCase().includes('Ã¼bertrag') || description.toLowerCase().includes('uebertrag') ? row.__month_start : '')
     const note = getCsvValue(row, ['anmerkung', 'notiz', 'notes'])
     const number = getCsvValue(row, ['nummer', 'belegnummer'])
     const lowerDescription = description.toLowerCase()
-    const isOpening = lowerDescription.includes('übertrag vorjahr') || lowerDescription.includes('uebertrag vorjahr')
-    const isCarryForward = lowerDescription.includes('übertrag vormonat') || lowerDescription.includes('uebertrag vormonat')
+    const isOpening = lowerDescription.includes('Ã¼bertrag vorjahr') || lowerDescription.includes('uebertrag vorjahr')
+    const isCarryForward = lowerDescription.includes('Ã¼bertrag vormonat') || lowerDescription.includes('uebertrag vormonat')
     const importedEntries = []
 
     if (isCarryForward) return importedEntries
@@ -5047,11 +5048,11 @@ export default function App() {
     const headers = parseCsvLine(lines[0], separator).map((header) => header.trim())
 
     const monthNumbers = {
-      'jänner': '01',
+      'jÃ¤nner': '01',
       'jaenner': '01',
       'januar': '01',
       'februar': '02',
-      'märz': '03',
+      'mÃ¤rz': '03',
       'maerz': '03',
       'april': '04',
       'mai': '05',
@@ -5075,15 +5076,15 @@ export default function App() {
       })
 
       const firstCell = String(values[0] || '').trim()
-      const monthMatch = firstCell.match(/^([A-Za-zÄÖÜäöüß]+)\s+(\d{4})$/)
+      const monthMatch = firstCell.match(/^([A-Za-zÃ„Ã–ÃœÃ¤Ã¶Ã¼ÃŸ]+)\s+(\d{4})$/)
 
       if (monthMatch) {
         const monthName = monthMatch[1]
           .toLowerCase()
-          .replace('ä', 'ae')
-          .replace('ö', 'oe')
-          .replace('ü', 'ue')
-          .replace('ß', 'ss')
+          .replace('Ã¤', 'ae')
+          .replace('Ã¶', 'oe')
+          .replace('Ã¼', 'ue')
+          .replace('ÃŸ', 'ss')
 
         const month = monthNumbers[monthName]
         const year = monthMatch[2]
@@ -5119,7 +5120,7 @@ export default function App() {
         setCashbookRows(entries)
 
         if (entries.length === 0) {
-          alert('Keine gültigen Kassa-Einträge gefunden. Prüfe bitte Datum, Bezeichnung und Beträge.')
+          alert('Keine gÃ¼ltigen Kassa-EintrÃ¤ge gefunden. PrÃ¼fe bitte Datum, Bezeichnung und BetrÃ¤ge.')
         }
       } catch (error) {
         alert(`Kassabuch konnte nicht gelesen werden: ${error.message}`)
@@ -5130,10 +5131,10 @@ export default function App() {
   }
 
   async function importCashbookRows() {
-    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
 
     if (cashbookRows.length === 0) {
-      alert('Bitte zuerst eine Kassabuch-CSV auswählen.')
+      alert('Bitte zuerst eine Kassabuch-CSV auswÃ¤hlen.')
       return
     }
 
@@ -5199,8 +5200,8 @@ export default function App() {
   }
 
   function editCashEntry(entry) {
-    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
-    if (entry.is_cancelled) return alert('Stornierte Einträge können nicht bearbeitet werden.')
+    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
+    if (entry.is_cancelled) return alert('Stornierte EintrÃ¤ge kÃ¶nnen nicht bearbeitet werden.')
     if (isCashEntryMonthClosed(entry)) return alert('Dieser Monat ist abgeschlossen. Der Eintrag kann nicht bearbeitet werden.')
 
     setEditingCashId(entry.id)
@@ -5246,7 +5247,7 @@ export default function App() {
   }
 
   async function updateCashEntry() {
-    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
 
     const editingEntry = cashEntries.find((entry) => entry.id === editingCashId)
 
@@ -5256,7 +5257,7 @@ export default function App() {
     }
 
     if (!editingCashId) {
-      alert('Kein Kassa-Eintrag zum Bearbeiten ausgewählt.')
+      alert('Kein Kassa-Eintrag zum Bearbeiten ausgewÃ¤hlt.')
       return
     }
 
@@ -5264,7 +5265,7 @@ export default function App() {
     const todayMonth = Number(new Date().toISOString().slice(5, 7))
 
     if (isCashMonthClosed(todayYear, todayMonth)) {
-      alert('Der aktuelle Monat ist abgeschlossen. Es können keine neuen Kassa-Einträge angelegt werden.')
+      alert('Der aktuelle Monat ist abgeschlossen. Es kÃ¶nnen keine neuen Kassa-EintrÃ¤ge angelegt werden.')
       return
     }
 
@@ -5275,7 +5276,7 @@ export default function App() {
 
     if (cashType === 'ausgabe' && !receiptFile) {
       const proceedWithoutReceipt = window.confirm(
-        'Für Ausgaben sollte ein Beleg hochgeladen werden. Trotzdem ohne Beleg speichern?'
+        'FÃ¼r Ausgaben sollte ein Beleg hochgeladen werden. Trotzdem ohne Beleg speichern?'
       )
 
       if (!proceedWithoutReceipt) return
@@ -5312,7 +5313,7 @@ export default function App() {
   }
 
   async function addCashEntry() {
-    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
 
     if (!cashAmount || !cashDescription) {
       alert('Betrag und Beschreibung sind Pflicht.')
@@ -5346,7 +5347,7 @@ export default function App() {
       setCashDescription('')
       setReceiptFile(null)
 
-      alert('Offline gespeichert. Wird später synchronisiert.')
+      alert('Offline gespeichert. Wird spÃ¤ter synchronisiert.')
       return
     }
 
@@ -5380,7 +5381,7 @@ export default function App() {
   }
 
   async function deleteCashEntry(entry) {
-    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
 
     if (isCashEntryMonthClosed(entry)) {
       alert('Dieser Monat ist abgeschlossen. Der Eintrag kann nicht storniert werden.')
@@ -5393,7 +5394,7 @@ export default function App() {
     }
 
     const reason = window.prompt(
-      `Storno-Grund eingeben:\n\n${entry.receipt_number || 'ohne Belegnummer'} · ${entry.type === 'einnahme' ? 'Einnahme' : 'Ausgabe'} ${Number(entry.amount || 0).toFixed(2)} €\n${entry.description || ''}`
+      `Storno-Grund eingeben:\n\n${entry.receipt_number || 'ohne Belegnummer'} Â· ${entry.type === 'einnahme' ? 'Einnahme' : 'Ausgabe'} ${Number(entry.amount || 0).toFixed(2)} â‚¬\n${entry.description || ''}`
     )
 
     if (!reason || !reason.trim()) {
@@ -5432,7 +5433,7 @@ export default function App() {
 
   async function uploadDocument() {
     if (!canManageMembers() && !isAdmin()) {
-      alert('Keine Berechtigung für Dokumenten-Upload.')
+      alert('Keine Berechtigung fÃ¼r Dokumenten-Upload.')
       return
     }
 
@@ -5484,10 +5485,10 @@ export default function App() {
   }
 
   async function deleteDocument(document) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Dokumente löschen.')
+    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Dokumente lÃ¶schen.')
 
     const confirmed = window.confirm(
-      `Dokument wirklich löschen?\n\n${document.title || ''}\n\nDas kann nicht rückgängig gemacht werden.`
+      `Dokument wirklich lÃ¶schen?\n\n${document.title || ''}\n\nDas kann nicht rÃ¼ckgÃ¤ngig gemacht werden.`
     )
 
     if (!confirmed) return
@@ -5508,7 +5509,7 @@ export default function App() {
     await createAuditLog('delete', 'documents', document.id, document, null)
 
     await loadDocuments()
-    alert('Dokument wurde gelöscht.')
+    alert('Dokument wurde gelÃ¶scht.')
   }
 
   async function openReceipt(path) {
@@ -5582,7 +5583,7 @@ export default function App() {
 
         {currentMember && (
           <>
-            {' '}· Mitglied:{' '}
+            {' '}Â· Mitglied:{' '}
             <strong style={{ color: colors.white }}>
               {currentMember.first_name} {currentMember.last_name}
             </strong>
@@ -5592,9 +5593,9 @@ export default function App() {
 
       {!currentMember && (
         <div style={{ ...cardStyle, background: '#fef2f2', color: '#991b1b', borderColor: '#b91c1c' }}>
-          <strong>Kein Mitglied mit diesem Login verknüpft.</strong>
+          <strong>Kein Mitglied mit diesem Login verknÃ¼pft.</strong>
           <br />
-          Bitte in Supabase beim passenden Mitglied die Spalte auth_user_id mit deiner Supabase User ID befüllen und app_role setzen.
+          Bitte in Supabase beim passenden Mitglied die Spalte auth_user_id mit deiner Supabase User ID befÃ¼llen und app_role setzen.
         </div>
       )}
 
@@ -5628,7 +5629,7 @@ export default function App() {
           {linkedMemberNotice}
           <br />
           <button onClick={() => setLinkedMemberNotice('')} style={secondaryButtonStyle}>
-            Hinweis schließen
+            Hinweis schlieÃŸen
           </button>
         </div>
       )}
@@ -5636,204 +5637,17 @@ export default function App() {
       {activePage === 'cash' && !canManageCash() && (
         <section style={sectionStyle}>
           <h2 style={headingStyle}>Kassa</h2>
-          <p>Für diesen Bereich hast du keine Berechtigung.</p>
+          <p>FÃ¼r diesen Bereich hast du keine Berechtigung.</p>
         </section>
       )}
 
       {activePage === 'members' && !canManageMembers() && (
         <section style={sectionStyle}>
           <h2 style={headingStyle}>Mitglieder</h2>
-          <p>Für die Mitgliederverwaltung hast du keine Bearbeitungsrechte. Die Mitgliederliste bleibt weiter unten sichtbar, wenn sie freigegeben ist.</p>
+          <p>FÃ¼r die Mitgliederverwaltung hast du keine Bearbeitungsrechte. Die Mitgliederliste bleibt weiter unten sichtbar, wenn sie freigegeben ist.</p>
         </section>
       )}
 
-      {activePage === 'admin' && (
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>Schnellexporte</h2>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <button onClick={exportMembersPdf} style={secondaryButtonStyle}>
-          Mitgliederliste PDF
-        </button>
-
-        <button onClick={exportAllMemberCardsPdf} style={secondaryButtonStyle}>
-          Mitgliedsausweise Druckbogen
-        </button>
-        <button onClick={exportCashPdf} style={secondaryButtonStyle}>
-          Kassabuch PDF
-        </button>
-        <button onClick={exportDetailedCashbookPdf} style={secondaryButtonStyle}>
-          Kassabuch Detail PDF
-        </button>
-
-        <button onClick={exportTaxAdvisorCsv} style={secondaryButtonStyle}>
-          Steuerberater CSV
-        </button>
-
-        <button onClick={exportTaxAdvisorProCsv} style={secondaryButtonStyle}>
-          Steuerberater PRO CSV
-        </button>
-
-        <button onClick={exportCategorySummaryCsv} style={secondaryButtonStyle}>
-          Kategorien-Auswertung CSV
-        </button>
-
-        <button onClick={exportExcelStyleCashbookCsv} style={secondaryButtonStyle}>
-          Kassabuch wie Excel CSV
-        </button>
-
-        <button onClick={exportExcelStyleCashbookPdf} style={secondaryButtonStyle}>
-          Kassabuch wie Excel PDF
-        </button>
-        <button onClick={exportOpenFeesPdf} style={secondaryButtonStyle}>
-          Offene Beiträge PDF
-        </button>
-        <button onClick={exportCheckinsPdf} style={secondaryButtonStyle}>
-          Anwesenheitsliste PDF
-        </button>
-        </div>
-      </section>
-      )}
-
-      {activePage === 'admin' && (
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>Export & Backup</h2>
-
-        <p style={mutedTextStyle}>
-          Hier kannst du deine Vereinsdaten lokal sichern. CSV-Dateien eignen sich für Excel/LibreOffice,
-          das JSON-Backup enthält alle Hauptdaten als Sicherheitskopie.
-        </p>
-
-        <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-          <button onClick={exportMembersCsv} style={secondaryButtonStyle}>
-            Mitglieder CSV
-          </button>
-
-          <button onClick={exportCashCsv} style={secondaryButtonStyle}>
-            Kassabuch CSV
-          </button>
-
-          <button onClick={exportTaxAdvisorCsv} style={secondaryButtonStyle}>
-            Steuerberater CSV
-          </button>
-
-          <button onClick={exportTaxAdvisorProCsv} style={secondaryButtonStyle}>
-            Steuerberater PRO CSV
-          </button>
-
-          <button onClick={exportCategorySummaryCsv} style={secondaryButtonStyle}>
-            Kategorien-Auswertung CSV
-          </button>
-
-          <button onClick={exportAuditLogsCsv} style={secondaryButtonStyle}>
-            Audit Log CSV
-          </button>
-
-          <button onClick={exportExcelStyleCashbookCsv} style={secondaryButtonStyle}>
-            Kassabuch wie Excel CSV
-          </button>
-
-          <button onClick={exportExcelStyleCashbookPdf} style={secondaryButtonStyle}>
-            Kassabuch wie Excel PDF
-          </button>
-
-          <button onClick={exportEventsCsv} style={secondaryButtonStyle}>
-            Events CSV
-          </button>
-
-          <button onClick={exportCheckinsCsv} style={secondaryButtonStyle}>
-            Check-ins CSV
-          </button>
-
-          <button onClick={exportDocumentsCsv} style={secondaryButtonStyle}>
-            Dokumentenliste CSV
-          </button>
-
-          <button onClick={exportInventoryCsv} style={secondaryButtonStyle}>
-            Inventar CSV
-          </button>
-
-          <button onClick={exportInventoryPdf} style={secondaryButtonStyle}>
-            Inventarliste PDF
-          </button>
-
-          <button onClick={exportInventoryLabelsPdf} style={secondaryButtonStyle}>
-            Inventar Etiketten PDF
-          </button>
-
-          <button onClick={exportInvoicesCsv} style={secondaryButtonStyle}>
-            Rechnungen CSV
-          </button>
-
-          <button onClick={exportFullBackupJson} style={buttonStyle}>
-            Komplett-Backup JSON
-          </button>
-        </div>
-
-        <p style={mutedTextStyle}>
-          Hinweis: Das JSON-Backup enthält die Dokumenten-Metadaten, aber nicht die eigentlichen hochgeladenen Dateien.
-          Diese liegen weiterhin im Supabase Storage.
-        </p>
-
-        {isAdmin() && (
-          <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
-            <h3 style={headingStyle}>Backup wiederherstellen</h3>
-
-            <p style={mutedTextStyle}>
-              Wähle eine zuvor exportierte JSON-Backup-Datei aus. Die App importiert nur Datensätze,
-              deren ID noch nicht vorhanden ist. Bestehende Daten werden nicht überschrieben.
-            </p>
-
-            <input
-              type="file"
-              accept=".json,application/json"
-              onChange={handleRestoreFile}
-              style={inputStyle}
-            />
-
-            {restoreFileName && (
-              <p style={mutedTextStyle}>
-                Datei: <strong>{restoreFileName}</strong>
-              </p>
-            )}
-
-            {restoreData && (
-              <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
-                <strong style={{ color: colors.infoText }}>Restore-Vorschau</strong>
-                <br />
-                Exportiert am: {restoreData.exported_at || '-'}
-                <br />
-                Mitglieder: {getRestoreCount('members')}
-                <br />
-                Beiträge: {getRestoreCount('membership_fees')}
-                <br />
-                Kassa-Einträge: {getRestoreCount('cash_entries')}
-                <br />
-                Events: {getRestoreCount('events')}
-                <br />
-                Check-ins: {getRestoreCount('event_checkins')}
-                <br />
-                Dokumente: {getRestoreCount('documents')}
-              </div>
-            )}
-
-            <button onClick={restoreFullBackup} style={buttonStyle} disabled={restoreImporting || !restoreData}>
-              {restoreImporting ? 'Restore läuft...' : 'Backup wiederherstellen'}
-            </button>
-
-            <button
-              onClick={() => {
-                setRestoreData(null)
-                setRestoreFileName('')
-              }}
-              style={secondaryButtonStyle}
-              disabled={restoreImporting}
-            >
-              Restore abbrechen
-            </button>
-          </div>
-        )}
-      </section>
-      )}
 
       {activePage === 'invoices' && (
         <section style={sectionStyle}>
@@ -6338,6 +6152,7 @@ export default function App() {
           ))}
         </section>
       )}
+
 
       {activePage === 'events' && (
         <EventsPage
@@ -7295,201 +7110,73 @@ export default function App() {
         </section>
       )}
 
-      {activePage === 'admin' && isAdmin() && (
-        <section style={sectionStyle}>
-          <h2 style={headingStyle}>Benutzerverwaltung</h2>
-
-          <p style={mutedTextStyle}>
-            Hier kannst du für Mitglieder einen App-Zugang per E-Mail-Einladung erstellen.
-            Der Benutzer wird automatisch mit dem Mitglied verknüpft.
-          </p>
-
-          <h3 style={headingStyle}>Mitglieder ohne Login</h3>
-
-          {members.filter((member) => !member.auth_user_id).length === 0 && (
-            <p style={mutedTextStyle}>Alle Mitglieder sind bereits mit einem Login verknüpft.</p>
-          )}
-
-          {members
-            .filter((member) => !member.auth_user_id)
-            .map((member) => (
-              <div key={member.id} style={cardStyle}>
-                <strong>
-                  {member.first_name || ''} {member.last_name || ''}
-                </strong>
-                <br />
-                E-Mail: {member.email || '-'}
-                <br />
-                Aktuelles App-Recht: {getAppRoleLabel(member.app_role || 'readonly')}
-                <br />
-
-                <button
-                  onClick={() => inviteMemberUser(member)}
-                  style={buttonStyle}
-                  disabled={invitingMemberId === member.id || !member.email}
-                >
-                  {invitingMemberId === member.id ? 'Einladung läuft...' : 'Einladung senden'}
-                </button>
-              </div>
-            ))}
-
-          <h3 style={headingStyle}>Verknüpfte Benutzer</h3>
-
-          {members
-            .filter((member) => member.auth_user_id)
-            .map((member) => (
-              <div key={member.id} style={cardStyle}>
-                <strong>
-                  {member.first_name || ''} {member.last_name || ''}
-                </strong>
-                <br />
-                E-Mail: {member.email || '-'}
-                <br />
-                App-Recht: {getAppRoleLabel(member.app_role || 'readonly')}
-                <br />
-                Auth User ID: {member.auth_user_id}
-              </div>
-            ))}
-        </section>
+      {activePage === 'admin' && (
+        <AdminPage
+          exportsProps={{
+            exportMembersPdf,
+            exportAllMemberCardsPdf,
+            exportCashPdf,
+            exportDetailedCashbookPdf,
+            exportTaxAdvisorCsv,
+            exportTaxAdvisorProCsv,
+            exportCategorySummaryCsv,
+            exportExcelStyleCashbookCsv,
+            exportExcelStyleCashbookPdf,
+            exportOpenFeesPdf,
+            exportCheckinsPdf,
+          }}
+          backupProps={{
+            canRestore: isAdmin(),
+            exportMembersCsv,
+            exportCashCsv,
+            exportTaxAdvisorCsv,
+            exportTaxAdvisorProCsv,
+            exportCategorySummaryCsv,
+            exportAuditLogsCsv,
+            exportExcelStyleCashbookCsv,
+            exportExcelStyleCashbookPdf,
+            exportEventsCsv,
+            exportCheckinsCsv,
+            exportDocumentsCsv,
+            exportInventoryCsv,
+            exportInventoryPdf,
+            exportInventoryLabelsPdf,
+            exportInvoicesCsv,
+            exportFullBackupJson,
+            handleRestoreFile,
+            restoreFileName,
+            restoreData,
+            getRestoreCount,
+            restoreFullBackup,
+            restoreImporting,
+            setRestoreData,
+            setRestoreFileName,
+          }}
+          userInvitesProps={isAdmin() ? {
+            members,
+            getAppRoleLabel,
+            inviteMemberUser,
+            invitingMemberId,
+          } : null}
+          changeRequestsProps={(canManageMembers() || isAdmin()) ? {
+            members,
+            getPendingMemberChangeRequests,
+            approveMemberChangeRequest,
+            rejectMemberChangeRequest,
+          } : null}
+          testDataProps={isAdmin() ? {
+            getTestMembers,
+            getTestInvoices,
+            getTestCashEntries,
+            deleteAllTestData,
+            deleteAllTestDataForMember,
+          } : null}
+          auditLogProps={isAdmin() ? {
+            auditLogs,
+            exportAuditLogsCsv,
+          } : null}
+        />
       )}
-
-      {activePage === 'admin' && (canManageMembers() || isAdmin()) && (
-        <section style={sectionStyle}>
-          <h2 style={headingStyle}>Mitgliedsdaten-Freigaben</h2>
-
-          <p style={mutedTextStyle}>
-            Mitglieder können Änderungswünsche einreichen. Hier kann der Vorstand/Admin diese prüfen und freigeben.
-          </p>
-
-          {getPendingMemberChangeRequests().length === 0 && (
-            <p style={mutedTextStyle}>Keine offenen Änderungsanträge.</p>
-          )}
-
-          {getPendingMemberChangeRequests().map((request) => {
-            const member = members.find((item) => item.id === request.member_id)
-            const requestedData = request.requested_data || {}
-
-            return (
-              <div key={request.id} style={cardStyle}>
-                <strong>
-                  {member ? `${member.first_name || ''} ${member.last_name || ''}` : request.member_id}
-                </strong>
-                <br />
-                Eingereicht: {request.created_at ? new Date(request.created_at).toLocaleString('de-AT') : '-'}
-                <br />
-
-                <div style={{ overflowX: 'auto', marginTop: 10 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
-                    <thead>
-                      <tr>
-                        {['Feld', 'Aktuell', 'Neu'].map((header) => (
-                          <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
-                            {header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.keys(requestedData).map((key) => (
-                        <tr key={key}>
-                          <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{key}</td>
-                          <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{member?.[key] || '-'}</td>
-                          <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>
-                            <strong>{requestedData[key] || '-'}</strong>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <button onClick={() => approveMemberChangeRequest(request)} style={buttonStyle}>
-                  Genehmigen & übernehmen
-                </button>
-
-                <button
-                  onClick={() => rejectMemberChangeRequest(request)}
-                  style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
-                >
-                  Ablehnen
-                </button>
-              </div>
-            )
-          })}
-        </section>
-      )}
-
-      {activePage === 'admin' && isAdmin() && (
-        <section style={sectionStyle}>
-          <h2 style={headingStyle}>Testdaten / Papierkorb</h2>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            <div style={cardStyle}>
-              <strong>Testmitglieder</strong>
-              <h2 style={dashboardNumberStyle}>{getTestMembers().length}</h2>
-            </div>
-
-            <div style={cardStyle}>
-              <strong>Testrechnungen</strong>
-              <h2 style={dashboardNumberStyle}>{getTestInvoices().length}</h2>
-            </div>
-
-            <div style={cardStyle}>
-              <strong>Test-Kassa</strong>
-              <h2 style={dashboardNumberStyle}>{getTestCashEntries().length}</h2>
-            </div>
-          </div>
-
-          <button
-            onClick={deleteAllTestData}
-            style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
-          >
-            Alle Testdaten löschen
-          </button>
-
-          {getTestMembers().map((member) => (
-            <div key={member.id} style={cardStyle}>
-              <strong>{member.first_name} {member.last_name}</strong>
-              <br />
-              {member.email || '-'}
-              <br />
-              <button
-                onClick={() => deleteAllTestDataForMember(member)}
-                style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
-              >
-                Testdaten dieses Mitglieds löschen
-              </button>
-            </div>
-          ))}
-        </section>
-      )}
-
-      {activePage === 'admin' && isAdmin() && (
-        <section style={sectionStyle}>
-          <h2 style={headingStyle}>Audit Log</h2>
-
-          <p style={mutedTextStyle}>
-            Zeigt die letzten 100 protokollierten Änderungen. Der vollständige Export ist über „Audit Log CSV“ möglich.
-          </p>
-
-          <button onClick={exportAuditLogsCsv} style={secondaryButtonStyle}>
-            Audit Log CSV
-          </button>
-
-          {auditLogs.length === 0 && <p style={mutedTextStyle}>Noch keine Audit-Logs vorhanden.</p>}
-
-          {auditLogs.slice(0, 20).map((log) => (
-            <div key={log.id} style={cardStyle}>
-              <strong>{log.action}</strong> · {log.table_name}
-              <br />
-              {log.created_at ? new Date(log.created_at).toLocaleString('de-AT') : '-'} · {log.user_email || '-'}
-              <br />
-              Datensatz: {log.record_id || '-'}
-            </div>
-          ))}
-        </section>
-      )}
-
       {activePage === 'members' && (
         <MembersPage
           canManageMembers={canManageMembers}
@@ -7579,3 +7266,11 @@ export default function App() {
     </main>
   )
 }
+
+
+
+
+
+
+
+
