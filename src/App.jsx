@@ -80,6 +80,13 @@ import {
   loadMembers as loadMembersService,
 } from './services/loaders/appLoaders'
 import {
+  addCashEntryRecord,
+  deleteCashEntryRecord,
+  deleteMembershipFee,
+  saveMembershipFee,
+  updateCashEntryRecord,
+} from './services/repositories/cashRepository'
+import {
   checkInMemberRecord,
   createEventRecord,
   deleteEventRecord,
@@ -3488,55 +3495,23 @@ export default function App() {
   async function markFeePaid(fee, paymentMethod = 'bar') {
     if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
 
-    const today = new Date().toISOString().slice(0, 10)
-
-    const { error: feeError } = await supabase
-      .from('membership_fees')
-      .update({
-        paid: true,
-        paid_at: today,
-        payment_method: paymentMethod,
-      })
-      .eq('id', fee.id)
-
-    if (feeError) return alert(feeError.message)
-
-    const member = members.find((m) => m.id === fee.member_id)
-
-    const { error: cashError } = await supabase.from('cash_entries').insert({
-      entry_date: today,
-      type: 'einnahme',
-      category: 'mitgliedsbeitrag',
-      amount: fee.amount,
-      description: `Mitgliedsbeitrag 2026 - ${
-        member ? `${member.first_name} ${member.last_name}` : 'Mitglied'
-      }`,
-      is_test: Boolean(member?.is_test),
-      member_id: fee.member_id,
-      membership_fee_id: fee.id,
+    await saveMembershipFee({
+      fee,
+      paymentMethod,
+      members,
+      createAuditLog,
+      loadAll,
     })
-
-    if (cashError) return alert(cashError.message)
-    await createAuditLog('payment_mark_paid', 'membership_fees', fee.id, fee, { paid: true, paid_at: today, payment_method: paymentMethod })
-    loadAll()
   }
 
   async function markFeeOpen(fee) {
     if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
 
-    const { error: feeError } = await supabase
-      .from('membership_fees')
-      .update({
-        paid: false,
-        paid_at: null,
-      })
-      .eq('id', fee.id)
-
-    if (feeError) return alert(feeError.message)
-
-    await supabase.from('cash_entries').delete().eq('membership_fee_id', fee.id)
-    await createAuditLog('payment_mark_open', 'membership_fees', fee.id, fee, { paid: false, paid_at: null })
-    loadAll()
+    await deleteMembershipFee({
+      fee,
+      createAuditLog,
+      loadAll,
+    })
   }
 
   function parseEuroAmount(value) {
@@ -3918,34 +3893,21 @@ export default function App() {
       if (!proceedWithoutReceipt) return
     }
 
-    const oldCashEntry = cashEntries.find((entry) => entry.id === editingCashId)
-
-    const { error } = await supabase
-      .from('cash_entries')
-      .update({
+    await updateCashEntryRecord({
+      editingCashId,
+      payload: {
         type: cashType,
         category: cashCategory,
         event_id: cashEventId || null,
         payment_method: cashPaymentMethod,
         amount: Number(cashAmount),
         description: cashDescription,
-      })
-      .eq('id', editingCashId)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('update', 'cash_entries', editingCashId, oldCashEntry, {
-      type: cashType,
-      category: cashCategory,
-      event_id: cashEventId || null,
-      payment_method: cashPaymentMethod,
-      amount: Number(cashAmount),
-      description: cashDescription,
+      },
+      cashEntries,
+      createAuditLog,
+      loadCashEntries,
+      resetCashForm,
     })
-
-    resetCashForm()
-    await loadCashEntries()
-    alert('Kassa-Eintrag wurde aktualisiert.')
   }
 
   async function addCashEntry() {
@@ -4002,18 +3964,13 @@ export default function App() {
       receiptUrl = filePath
     }
 
-    const { data, error } = await supabase.from('cash_entries').insert({
-      ...baseEntry,
-      receipt_url: receiptUrl,
-    }).select().single()
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('insert', 'cash_entries', data?.id, null, data)
-
-    resetCashForm()
-
-    loadCashEntries()
+    await addCashEntryRecord({
+      baseEntry,
+      receiptUrl,
+      createAuditLog,
+      loadCashEntries,
+      resetCashForm,
+    })
   }
 
   async function deleteCashEntry(entry) {
@@ -4044,19 +4001,12 @@ export default function App() {
 
     if (!confirmed) return
 
-    const { error } = await supabase
-      .from('cash_entries')
-      .update({
-        is_cancelled: true,
-        cancelled_at: new Date().toISOString(),
-        cancellation_reason: reason.trim(),
-      })
-      .eq('id', entry.id)
-
-    if (error) return alert(error.message)
-
-    await loadCashEntries()
-    alert('Kassa-Eintrag wurde storniert.')
+    await deleteCashEntryRecord({
+      entry,
+      reason,
+      createAuditLog,
+      loadCashEntries,
+    })
   }
 
   function resetDocumentForm() {
