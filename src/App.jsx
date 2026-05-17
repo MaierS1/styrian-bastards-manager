@@ -38,6 +38,7 @@ import { fetchMembers } from './services/repositories/membersRepository'
 import { fetchMembershipFees } from './services/repositories/membershipFeesRepository'
 import { MembersPage } from './components/members/MembersPage'
 import { CashPage } from './components/cash/CashPage'
+import { DocumentsPage } from './components/documents/DocumentsPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -6884,92 +6885,28 @@ export default function App() {
       )}
 
       {activePage === 'documents' && (
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>Dokumente</h2>
-
-        {(canManageMembers() || isAdmin()) && (
-          <>
-            <h3 style={headingStyle}>Dokument hochladen</h3>
-
-            <input
-              placeholder="Titel, z.B. Statuten 2026"
-              value={documentTitle}
-              onChange={(e) => setDocumentTitle(e.target.value)}
-              style={inputStyle}
-            />
-
-            <select value={documentCategory} onChange={(e) => setDocumentCategory(e.target.value)} style={inputStyle}>
-              <option value="statuten">Statuten</option>
-              <option value="sitzung">Sitzung / Protokoll</option>
-              <option value="bescheid">Bescheid</option>
-              <option value="rechnung">Rechnung</option>
-              <option value="vertrag">Vertrag</option>
-              <option value="sonstiges">Sonstiges</option>
-            </select>
-
-            <input
-              type="date"
-              value={documentDate}
-              onChange={(e) => setDocumentDate(e.target.value)}
-              style={inputStyle}
-            />
-
-            <input
-              placeholder="Beschreibung"
-              value={documentDescription}
-              onChange={(e) => setDocumentDescription(e.target.value)}
-              style={inputStyle}
-            />
-
-            <input
-              type="file"
-              accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.csv"
-              onChange={(e) => setDocumentFile(e.target.files[0])}
-              style={inputStyle}
-            />
-
-            <button onClick={uploadDocument} style={buttonStyle}>
-              Dokument hochladen
-            </button>
-
-            <button onClick={resetDocumentForm} style={secondaryButtonStyle}>
-              Formular leeren
-            </button>
-          </>
-        )}
-
-        <h3 style={headingStyle}>Dokumentenliste</h3>
-
-        {documents.length === 0 && <p style={mutedTextStyle}>Noch keine Dokumente vorhanden.</p>}
-
-        {documents.map((document) => (
-          <div key={document.id} style={cardStyle}>
-            <strong>{document.title}</strong>
-            <br />
-            Kategorie: {document.category}
-            <br />
-            Datum: {document.document_date || '-'}
-            <br />
-            Datei: {document.file_name || document.file_path}
-            <br />
-            Beschreibung: {document.description || '-'}
-            <br />
-
-            <button onClick={() => openDocument(document.file_path)} style={buttonStyle}>
-              Öffnen / Download
-            </button>
-
-            {isAdmin() && (
-              <button
-                onClick={() => deleteDocument(document)}
-                style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
-              >
-                Dokument löschen
-              </button>
-            )}
-          </div>
-        ))}
-      </section>
+        <DocumentsPage
+          canManageDocuments={() => canManageMembers() || isAdmin()}
+          uploadFormProps={{
+            documentTitle,
+            setDocumentTitle,
+            documentCategory,
+            setDocumentCategory,
+            documentDate,
+            setDocumentDate,
+            documentDescription,
+            setDocumentDescription,
+            setDocumentFile,
+            uploadDocument,
+            resetDocumentForm,
+          }}
+          listProps={{
+            documents,
+            isAdmin,
+            openDocument,
+            deleteDocument,
+          }}
+        />
       )}
 
       {activePage === 'inventory' && (
