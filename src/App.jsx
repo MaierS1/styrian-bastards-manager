@@ -25,8 +25,6 @@ import {
   isAdminRole,
 } from './utils/permissions'
 import { navigationItems } from './app/navigation'
-import { fetchMembers } from './services/repositories/membersRepository'
-import { fetchMembershipFees } from './services/repositories/membershipFeesRepository'
 import { formatCustomerAddressFromFields as buildFormatCustomerAddressFromFields } from './utils/formatters'
 import {
   getAlertStyle as buildAlertStyle,
@@ -64,6 +62,23 @@ import {
   normalizeInventoryDate as buildNormalizeInventoryDate,
   normalizeInventoryStatus as buildNormalizeInventoryStatus,
 } from './services/helpers/inventoryHelpers'
+import {
+  loadAll as loadAllService,
+  loadAuditLogs as loadAuditLogsService,
+  loadCashEntries as loadCashEntriesService,
+  loadCashMonthClosings as loadCashMonthClosingsService,
+  loadCurrentMember as loadCurrentMemberService,
+  loadDocuments as loadDocumentsService,
+  loadEventCheckins as loadEventCheckinsService,
+  loadEvents as loadEventsService,
+  loadFees as loadFeesService,
+  loadInventoryItems as loadInventoryItemsService,
+  loadInvoiceCustomers as loadInvoiceCustomersService,
+  loadInvoiceItems as loadInvoiceItemsService,
+  loadInvoices as loadInvoicesService,
+  loadMemberChangeRequests as loadMemberChangeRequestsService,
+  loadMembers as loadMembersService,
+} from './services/loaders/appLoaders'
 import {
   exportMembersCsv as exportMembersCsvService,
   exportCashCsv as exportCashCsvService,
@@ -401,22 +416,27 @@ export default function App() {
   }
 
   async function loadCurrentMember(authUserId) {
-    const { data, error } = await supabase
-      .from('members')
-      .select('*')
-      .eq('auth_user_id', authUserId)
-      .maybeSingle()
-
-    if (error) {
-      alert(error.message)
-      return
-    }
-
-    setCurrentMember(data)
+    return loadCurrentMemberService({
+      authUserId,
+      setCurrentMember,
+    })
   }
 
   async function loadAll() {
-    await Promise.all([loadMembers(), loadFees(), loadCashEntries(), loadCashMonthClosings(), loadAuditLogs(), loadEventCheckins(), loadEvents(), loadDocuments(), loadInventoryItems(), loadInvoices(), loadInvoiceItems(), loadMemberChangeRequests()])
+    return loadAllService({
+      loadMembersFn: loadMembers,
+      loadFeesFn: loadFees,
+      loadCashEntriesFn: loadCashEntries,
+      loadCashMonthClosingsFn: loadCashMonthClosings,
+      loadAuditLogsFn: loadAuditLogs,
+      loadEventCheckinsFn: loadEventCheckins,
+      loadEventsFn: loadEvents,
+      loadDocumentsFn: loadDocuments,
+      loadInventoryItemsFn: loadInventoryItems,
+      loadInvoicesFn: loadInvoices,
+      loadInvoiceItemsFn: loadInvoiceItems,
+      loadMemberChangeRequestsFn: loadMemberChangeRequests,
+    })
   }
 
   function getAppRole() {
@@ -469,54 +489,34 @@ export default function App() {
   }
 
   async function loadMembers() {
-    const { data, error } = await fetchMembers()
-
-    if (error) return alert(error.message)
-    setMembers(data || [])
+    return loadMembersService({
+      setMembers,
+    })
   }
 
   async function loadFees() {
-    const { data, error } = await fetchMembershipFees(2026)
-
-    if (error) return alert(error.message)
-    setFees(data || [])
+    return loadFeesService({
+      year: 2026,
+      setFees,
+    })
   }
 
   async function loadCashEntries() {
-    const { data, error } = await supabase
-      .from('cash_entries')
-      .select('*')
-      .order('entry_date', { ascending: false })
-      .order('created_at', { ascending: false })
-
-    if (error) return alert(error.message)
-    setCashEntries(data || [])
+    return loadCashEntriesService({
+      setCashEntries,
+    })
   }
 
   async function loadCashMonthClosings() {
-    const { data, error } = await supabase
-      .from('cash_month_closings')
-      .select('*')
-      .order('year', { ascending: false })
-      .order('month', { ascending: false })
-
-    if (error) return alert(error.message)
-    setCashMonthClosings(data || [])
+    return loadCashMonthClosingsService({
+      setCashMonthClosings,
+    })
   }
 
   async function loadAuditLogs() {
-    const { data, error } = await supabase
-      .from('audit_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(100)
-
-    if (error) {
-      console.warn(error.message)
-      return
-    }
-
-    setAuditLogs(data || [])
+    return loadAuditLogsService({
+      setAuditLogs,
+    })
   }
 
   async function createAuditLog(action, tableName, recordId, oldData = null, newData = null) {
@@ -536,113 +536,54 @@ export default function App() {
   }
 
   async function loadEventCheckins() {
-    const { data, error } = await supabase
-      .from('event_checkins')
-      .select('*')
-      .order('checkin_time', { ascending: false })
-
-    if (error) return alert(error.message)
-    setEventCheckins(data || [])
+    return loadEventCheckinsService({
+      setEventCheckins,
+    })
   }
 
   async function loadEvents() {
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .order('event_date', { ascending: false })
-      .order('created_at', { ascending: false })
-
-    if (error) return alert(error.message)
-
-    const loadedEvents = data || []
-    setEvents(loadedEvents)
-
-    if (!selectedEventId && loadedEvents.length > 0) {
-      setSelectedEventId(loadedEvents[0].id)
-      setEventName(loadedEvents[0].name)
-    }
+    return loadEventsService({
+      setEvents,
+      selectedEventId,
+      setSelectedEventId,
+      setEventName,
+    })
   }
 
   async function loadDocuments() {
-    const { data, error } = await supabase
-      .from('documents')
-      .select('*')
-      .order('document_date', { ascending: false })
-      .order('created_at', { ascending: false })
-
-    if (error) return alert(error.message)
-    setDocuments(data || [])
+    return loadDocumentsService({
+      setDocuments,
+    })
   }
 
   async function loadInventoryItems() {
-    const { data, error } = await supabase
-      .from('inventory_items')
-      .select('*')
-      .order('inventory_number', { ascending: true })
-
-    if (error) {
-      console.warn(error.message)
-      return
-    }
-
-    setInventoryItems(data || [])
+    return loadInventoryItemsService({
+      setInventoryItems,
+    })
   }
 
   async function loadInvoices() {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .order('issue_date', { ascending: false })
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.warn(error.message)
-      return
-    }
-
-    setInvoices(data || [])
+    return loadInvoicesService({
+      setInvoices,
+    })
   }
 
   async function loadInvoiceItems() {
-    const { data, error } = await supabase
-      .from('invoice_items')
-      .select('*')
-      .order('created_at', { ascending: true })
-
-    if (error) {
-      console.warn(error.message)
-      return
-    }
-
-    setInvoiceItems(data || [])
+    return loadInvoiceItemsService({
+      setInvoiceItems,
+    })
   }
 
   async function loadInvoiceCustomers() {
-    const { data, error } = await supabase
-      .from('invoice_customers')
-      .select('*')
-      .order('name', { ascending: true })
-
-    if (error) {
-      console.warn(error.message)
-      return
-    }
-
-    setInvoiceCustomers(data || [])
+    return loadInvoiceCustomersService({
+      setInvoiceCustomers,
+    })
   }
 
   async function loadMemberChangeRequests() {
-    const { data, error } = await supabase
-      .from('member_change_requests')
-      .select('*')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.warn(error.message)
-      return
-    }
-
-    setMemberChangeRequests(data || [])
+    return loadMemberChangeRequestsService({
+      setMemberChangeRequests,
+    })
   }
 
   function getFee(memberId) {
