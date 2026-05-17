@@ -10,7 +10,6 @@ import {
   buttonStyle,
   cardStyle,
   colors,
-  dangerButtonStyle,
   dashboardLabelStyle,
   dashboardNumberStyle,
   headingStyle,
@@ -42,6 +41,7 @@ import { DocumentsPage } from './components/documents/DocumentsPage'
 import { EventsPage } from './components/events/EventsPage'
 import { AdminPage } from './components/admin/AdminPage'
 import { InventoryPage } from './components/inventory/InventoryPage'
+import { InvoicesPage } from './components/invoices/InvoicesPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -5651,507 +5651,95 @@ export default function App() {
 
 
       {activePage === 'invoices' && (
-        <section style={sectionStyle}>
-          <h2 style={headingStyle}>Vereinsrechnung PRO</h2>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
-            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.black}` }}>
-              <strong style={dashboardLabelStyle}>Rechnungen</strong>
-              <h2 style={dashboardNumberStyle}>{invoices.length}</h2>
-            </div>
-
-            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
-              <strong style={dashboardLabelStyle}>Offen</strong>
-              <h2 style={dashboardNumberStyle}>
-                {invoices.filter((invoice) => invoice.status === 'offen').reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0).toFixed(2)} €
-              </h2>
-            </div>
-
-            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
-              <strong style={dashboardLabelStyle}>Bezahlt</strong>
-              <h2 style={dashboardNumberStyle}>
-                {invoices.filter((invoice) => invoice.status === 'bezahlt').reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0).toFixed(2)} €
-              </h2>
-            </div>
-          </div>
-
-          <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
-            <strong style={dashboardLabelStyle}>Rechnungsarchiv & Zahlungserinnerungen</strong>
-            <br />
-            Archivierte PDFs: {invoices.filter((invoice) => invoice.pdf_url).length}
-            <br />
-            Überfällige offene Rechnungen: <strong>{getOverdueInvoices().length}</strong>
-            <br />
-            <span style={mutedTextStyle}>
-              PDFs können im Supabase Storage gespeichert, geöffnet und per E-Mail versendet werden.
-            </span>
-          </div>
-
-          {getOverdueInvoices().length > 0 && (
-            <div style={{ ...cardStyle, background: '#fffbeb', borderColor: '#f59e0b' }}>
-              <strong style={{ color: '#92400e' }}>Überfällige Rechnungen</strong>
-              {getOverdueInvoices().slice(0, 5).map((invoice) => (
-                <div key={invoice.id} style={{ marginTop: 8 }}>
-                  {invoice.invoice_number} · {invoice.customer_name} · fällig seit {invoice.due_date}
-                  {invoice.customer_email && (
-                    <button onClick={() => sendInvoiceEmail(invoice, true)} style={secondaryButtonStyle}>
-                      Zahlungserinnerung senden
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {(canManageCash() || isAdmin()) && (
-            <>
-              <h3 style={headingStyle}>Kunden</h3>
-
-              <div style={cardStyle}>
-                <h4>{editingCustomerId ? 'Kunde bearbeiten' : 'Neuen Kunden anlegen'}</h4>
-
-                <input
-                  placeholder="Kundenname / Firma / Verein"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <input
-                  placeholder="E-Mail"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 12 }}>
-                  <input
-                    placeholder="Straße"
-                    value={customerStreet}
-                    onChange={(e) => setCustomerStreet(e.target.value)}
-                    style={inputStyle}
-                  />
-
-                  <input
-                    placeholder="Hausnummer"
-                    value={customerHouseNumber}
-                    onChange={(e) => setCustomerHouseNumber(e.target.value)}
-                    style={inputStyle}
-                  />
-                </div>
-
-                <input
-                  placeholder="Adresszusatz, z.B. Tür, Top, Abteilung"
-                  value={customerAddressAddition}
-                  onChange={(e) => setCustomerAddressAddition(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 2fr 1fr', gap: 12 }}>
-                  <input
-                    placeholder="PLZ"
-                    value={customerPostalCode}
-                    onChange={(e) => setCustomerPostalCode(e.target.value)}
-                    style={inputStyle}
-                  />
-
-                  <input
-                    placeholder="Ort"
-                    value={customerCity}
-                    onChange={(e) => setCustomerCity(e.target.value)}
-                    style={inputStyle}
-                  />
-
-                  <input
-                    placeholder="Land"
-                    value={customerCountry}
-                    onChange={(e) => setCustomerCountry(e.target.value)}
-                    style={inputStyle}
-                  />
-                </div>
-
-                <input
-                  placeholder="Kundennotiz"
-                  value={customerNotes}
-                  onChange={(e) => setCustomerNotes(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <button onClick={saveInvoiceCustomer} style={buttonStyle}>
-                  {editingCustomerId ? 'Kunde speichern' : 'Kunde anlegen'}
-                </button>
-
-                {editingCustomerId && (
-                  <button onClick={resetCustomerForm} style={secondaryButtonStyle}>
-                    Bearbeiten abbrechen
-                  </button>
-                )}
-              </div>
-
-              <input
-                placeholder="Kunden suchen..."
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                style={inputStyle}
-              />
-
-              {getFilteredInvoiceCustomers().slice(0, 8).map((customer) => (
-                <div key={customer.id} style={cardStyle}>
-                  <strong>{customer.name}</strong>
-                  <br />
-                  {customer.email || '-'}
-                  <br />
-                  {formatCustomerAddressFromFields(customer) || '-'}
-                  <br />
-
-                  <button onClick={() => selectInvoiceCustomer(customer.id)} style={secondaryButtonStyle}>
-                    Für Rechnung auswählen
-                  </button>
-
-                  <button onClick={() => editInvoiceCustomer(customer)} style={buttonStyle}>
-                    Kunde bearbeiten
-                  </button>
-
-                  {isAdmin() && (
-                    <button
-                      onClick={() => deleteInvoiceCustomer(customer)}
-                      style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
-                    >
-                      Kunde löschen
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              <h3 style={headingStyle}>Neue Rechnung erstellen</h3>
-
-              <select value={selectedInvoiceCustomerId} onChange={(e) => selectInvoiceCustomer(e.target.value)} style={inputStyle}>
-                <option value="">Keinen gespeicherten Kunden auswählen</option>
-                {invoiceCustomers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>
-                    {customer.name} · {customer.city || '-'}
-                  </option>
-                ))}
-              </select>
-
-              {selectedInvoiceCustomerId && (
-                <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
-                  Ausgewählter Kunde:{' '}
-                  <strong>{getSelectedInvoiceCustomer()?.name}</strong>
-                  <br />
-                  {formatCustomerAddressFromFields(getSelectedInvoiceCustomer() || {}) || '-'}
-                </div>
-              )}
-
-              <input
-                placeholder="Kunde / Rechnungsempfänger"
-                value={invoiceCustomerName}
-                onChange={(e) => setInvoiceCustomerName(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="E-Mail"
-                value={invoiceCustomerEmail}
-                onChange={(e) => setInvoiceCustomerEmail(e.target.value)}
-                style={inputStyle}
-              />
-
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr', gap: 12 }}>
-                <input
-                  placeholder="Straße"
-                  value={invoiceCustomerStreet}
-                  onChange={(e) => setInvoiceCustomerStreet(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <input
-                  placeholder="Hausnummer"
-                  value={invoiceCustomerHouseNumber}
-                  onChange={(e) => setInvoiceCustomerHouseNumber(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-
-              <input
-                placeholder="Adresszusatz, z.B. Top, Tür, Abteilung"
-                value={invoiceCustomerAddressAddition}
-                onChange={(e) => setInvoiceCustomerAddressAddition(e.target.value)}
-                style={inputStyle}
-              />
-
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 2fr 1fr', gap: 12 }}>
-                <input
-                  placeholder="PLZ"
-                  value={invoiceCustomerPostalCode}
-                  onChange={(e) => setInvoiceCustomerPostalCode(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <input
-                  placeholder="Ort"
-                  value={invoiceCustomerCity}
-                  onChange={(e) => setInvoiceCustomerCity(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <input
-                  placeholder="Land"
-                  value={invoiceCustomerCountry}
-                  onChange={(e) => setInvoiceCustomerCountry(e.target.value)}
-                  style={inputStyle}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(220px, 1fr))', gap: 12 }}>
-                <div>
-                  <label style={{ fontWeight: 800, color: colors.black }}>Rechnungsdatum</label>
-                  <input
-                    type="date"
-                    value={invoiceIssueDate}
-                    onChange={(e) => setInvoiceIssueDate(e.target.value)}
-                    style={inputStyle}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontWeight: 800, color: colors.black }}>Fällig bis</label>
-                  <input
-                    type="date"
-                    value={invoiceDueDate}
-                    onChange={(e) => setInvoiceDueDate(e.target.value)}
-                    style={inputStyle}
-                  />
-                </div>
-              </div>
-
-              <h3 style={headingStyle}>Positionen</h3>
-
-              {invoiceRows.map((row, index) => (
-                <div key={index} style={cardStyle}>
-                  <input
-                    placeholder="Beschreibung"
-                    value={row.description}
-                    onChange={(e) => updateInvoiceRow(index, 'description', e.target.value)}
-                    style={inputStyle}
-                  />
-
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, minmax(160px, 1fr))', gap: 12 }}>
-                    <input
-                      type="number"
-                      placeholder="Menge"
-                      value={row.quantity}
-                      onChange={(e) => updateInvoiceRow(index, 'quantity', e.target.value)}
-                      style={inputStyle}
-                    />
-
-                    <input
-                      type="number"
-                      placeholder="Einzelpreis"
-                      value={row.unit_price}
-                      onChange={(e) => updateInvoiceRow(index, 'unit_price', e.target.value)}
-                      style={inputStyle}
-                    />
-
-                    <div style={{ ...cardStyle, marginBottom: 0 }}>
-                      Summe:{' '}
-                      <strong>
-                        {(Number(row.quantity || 0) * Number(row.unit_price || 0)).toFixed(2)} €
-                      </strong>
-                    </div>
-                  </div>
-
-                  {invoiceRows.length > 1 && (
-                    <button onClick={() => removeInvoiceRow(index)} style={dangerButtonStyle}>
-                      Position entfernen
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              <button onClick={addInvoiceRow} style={secondaryButtonStyle}>
-                Position hinzufügen
-              </button>
-
-              <input
-                placeholder="Notizen"
-                value={invoiceNotes}
-                onChange={(e) => setInvoiceNotes(e.target.value)}
-                style={inputStyle}
-              />
-
-              <label style={{ display: 'block', marginBottom: 12, fontWeight: 800, color: colors.black }}>
-                <input
-                  type="checkbox"
-                  checked={invoiceIsTest}
-                  onChange={(e) => setInvoiceIsTest(e.target.checked)}
-                  style={{ marginRight: 8 }}
-                />
-                Testrechnung erstellen
-              </label>
-
-              {invoiceIsTest && (
-                <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
-                  <strong style={{ color: colors.infoText }}>Testrechnung</strong>
-                  <br />
-                  Diese Rechnung wird mit TEST gekennzeichnet und erzeugt beim Bezahlt-Markieren keine Kassa-Einnahme.
-                </div>
-              )}
-
-              <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
-                <strong>Rechnungssumme: {getInvoiceRowsTotal().toFixed(2)} €</strong>
-                <br />
-                Nächste Rechnungsnummer: {getNextInvoiceNumber(Number(String(invoiceIssueDate || new Date().getFullYear()).slice(0, 4)), invoiceIsTest)}
-              </div>
-
-              <button onClick={createInvoice} style={buttonStyle}>
-                Rechnung erstellen
-              </button>
-
-              <button onClick={resetInvoiceForm} style={secondaryButtonStyle}>
-                Formular leeren
-              </button>
-            </>
-          )}
-
-          <h3 style={headingStyle}>Rechnungen suchen & filtern</h3>
-
-          <input
-            placeholder="Rechnung suchen..."
-            value={invoiceSearch}
-            onChange={(e) => setInvoiceSearch(e.target.value)}
-            style={inputStyle}
-          />
-
-          <select value={invoiceStatusFilter} onChange={(e) => setInvoiceStatusFilter(e.target.value)} style={inputStyle}>
-            <option value="alle">Alle Status</option>
-            <option value="offen">Offen</option>
-            <option value="bezahlt">Bezahlt</option>
-            <option value="storniert">Storniert</option>
-          </select>
-
-          <select value={invoiceTestFilter} onChange={(e) => setInvoiceTestFilter(e.target.value)} style={inputStyle}>
-            <option value="alle">Alle Rechnungen</option>
-            <option value="echt">Nur echte Rechnungen</option>
-            <option value="test">Nur Testrechnungen</option>
-          </select>
-
-          <button onClick={exportInvoicesCsv} style={secondaryButtonStyle}>
-            Rechnungen CSV
-          </button>
-
-          <p>
-            Angezeigt: <strong>{getFilteredInvoices().length}</strong> von {invoices.length} Rechnungen
-          </p>
-
-          {getFilteredInvoices().map((invoice) => (
-            <div
-              key={invoice.id}
-              style={{
-                ...cardStyle,
-                borderLeft: `6px solid ${invoice.status === 'bezahlt' ? colors.successText : invoice.status === 'storniert' ? colors.red : colors.blue}`,
-              }}
-            >
-              <strong>{invoice.invoice_number}</strong> · {invoice.customer_name}{invoice.customer_id ? ' · gespeicherter Kunde' : ''}
-              {(invoice.is_test || getMemberById(invoice.member_id)?.is_test) && (
-                <>
-                  {' '}<strong style={{ color: colors.red }}>TEST</strong>
-                </>
-              )}
-              <br />
-              Datum: {invoice.issue_date || '-'} · Fällig: {invoice.due_date || '-'}
-              <br />
-              Status: {invoice.status || '-'} · Typ: {invoice.invoice_type || 'rechnung'} · Betrag: <strong>{Number(invoice.total_amount || 0).toFixed(2)} €</strong>
-              <br />
-              Archiv: {invoice.pdf_url ? 'PDF gespeichert' : 'noch nicht gespeichert'} · Mahnungen: {Number(invoice.reminder_count || 0)}
-              <br />
-              Letzte Mahnung: {invoice.last_reminder_at ? new Date(invoice.last_reminder_at).toLocaleString('de-AT') : '-'}
-              <br />
-              E-Mail: {invoice.customer_email || '-'}
-              <br />
-              Adresse: {getInvoiceCustomerAddress(invoice)}
-              <br />
-              Notizen: {invoice.notes || '-'}
-              {invoice.membership_fee_id && (
-                <>
-                  <br />
-                  <strong>Mitgliedsbeitrag-Rechnung</strong>
-                </>
-              )}
-
-              {getItemsForInvoice(invoice.id).length > 0 && (
-                <>
-                  <h4>Positionen</h4>
-                  {getItemsForInvoice(invoice.id).map((item) => (
-                    <div key={item.id}>
-                      {item.description} · {Number(item.quantity || 0)} × {Number(item.unit_price || 0).toFixed(2)} € ={' '}
-                      <strong>{Number(item.total_price || 0).toFixed(2)} €</strong>
-                    </div>
-                  ))}
-                </>
-              )}
-
-              <button onClick={() => exportInvoicePdf(invoice)} style={buttonStyle}>
-                Rechnung PDF
-              </button>
-
-              <button onClick={() => archiveInvoicePdf(invoice)} style={secondaryButtonStyle}>
-                Im Archiv speichern
-              </button>
-
-              {invoice.pdf_url && (
-                <button onClick={() => openArchivedInvoice(invoice)} style={secondaryButtonStyle}>
-                  Archiv-PDF öffnen
-                </button>
-              )}
-
-              {invoice.customer_email && (
-                <button onClick={() => sendInvoiceEmail(invoice, false)} style={secondaryButtonStyle}>
-                  Rechnung per E-Mail senden
-                </button>
-              )}
-
-              {invoice.customer_email && invoice.status === 'offen' && (
-                <button onClick={() => sendInvoiceEmail(invoice, true)} style={secondaryButtonStyle}>
-                  Zahlungserinnerung senden
-                </button>
-              )}
-
-              {invoice.status === 'offen' && (canManageCash() || isAdmin()) && (
-                <button onClick={() => markInvoicePaid(invoice)} style={secondaryButtonStyle}>
-                  Als bezahlt markieren
-                </button>
-              )}
-
-              {invoice.status !== 'storniert' && isAdmin() && (
-                <>
-                  <button
-                    onClick={() => createCancellationInvoice(invoice)}
-                    style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
-                  >
-                    Stornorechnung erstellen
-                  </button>
-
-                  <button
-                    onClick={() => cancelInvoice(invoice)}
-                    style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
-                  >
-                    Nur Status stornieren
-                  </button>
-                </>
-              )}
-
-              {isAdmin() && (
-                <button
-                  onClick={() => deleteInvoice(invoice)}
-                  style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
-                >
-                  Rechnung löschen
-                </button>
-              )}
-            </div>
-          ))}
-        </section>
+        <InvoicesPage
+          invoices={invoices}
+          invoiceCustomers={invoiceCustomers}
+          selectedInvoiceCustomerId={selectedInvoiceCustomerId}
+          setSelectedInvoiceCustomerId={setSelectedInvoiceCustomerId}
+          invoiceCustomerName={invoiceCustomerName}
+          setInvoiceCustomerName={setInvoiceCustomerName}
+          invoiceCustomerEmail={invoiceCustomerEmail}
+          setInvoiceCustomerEmail={setInvoiceCustomerEmail}
+          invoiceCustomerStreet={invoiceCustomerStreet}
+          setInvoiceCustomerStreet={setInvoiceCustomerStreet}
+          invoiceCustomerHouseNumber={invoiceCustomerHouseNumber}
+          setInvoiceCustomerHouseNumber={setInvoiceCustomerHouseNumber}
+          invoiceCustomerAddressAddition={invoiceCustomerAddressAddition}
+          setInvoiceCustomerAddressAddition={setInvoiceCustomerAddressAddition}
+          invoiceCustomerPostalCode={invoiceCustomerPostalCode}
+          setInvoiceCustomerPostalCode={setInvoiceCustomerPostalCode}
+          invoiceCustomerCity={invoiceCustomerCity}
+          setInvoiceCustomerCity={setInvoiceCustomerCity}
+          invoiceCustomerCountry={invoiceCustomerCountry}
+          setInvoiceCustomerCountry={setInvoiceCustomerCountry}
+          invoiceIssueDate={invoiceIssueDate}
+          setInvoiceIssueDate={setInvoiceIssueDate}
+          invoiceDueDate={invoiceDueDate}
+          setInvoiceDueDate={setInvoiceDueDate}
+          invoiceRows={invoiceRows}
+          updateInvoiceRow={updateInvoiceRow}
+          addInvoiceRow={addInvoiceRow}
+          removeInvoiceRow={removeInvoiceRow}
+          invoiceNotes={invoiceNotes}
+          setInvoiceNotes={setInvoiceNotes}
+          invoiceIsTest={invoiceIsTest}
+          setInvoiceIsTest={setInvoiceIsTest}
+          getInvoiceRowsTotal={getInvoiceRowsTotal}
+          getNextInvoiceNumber={getNextInvoiceNumber}
+          createInvoice={createInvoice}
+          resetInvoiceForm={resetInvoiceForm}
+          editingCustomerId={editingCustomerId}
+          customerName={customerName}
+          setCustomerName={setCustomerName}
+          customerEmail={customerEmail}
+          setCustomerEmail={setCustomerEmail}
+          customerStreet={customerStreet}
+          setCustomerStreet={setCustomerStreet}
+          customerHouseNumber={customerHouseNumber}
+          setCustomerHouseNumber={setCustomerHouseNumber}
+          customerAddressAddition={customerAddressAddition}
+          setCustomerAddressAddition={setCustomerAddressAddition}
+          customerPostalCode={customerPostalCode}
+          setCustomerPostalCode={setCustomerPostalCode}
+          customerCity={customerCity}
+          setCustomerCity={setCustomerCity}
+          customerCountry={customerCountry}
+          setCustomerCountry={setCustomerCountry}
+          customerNotes={customerNotes}
+          setCustomerNotes={setCustomerNotes}
+          saveInvoiceCustomer={saveInvoiceCustomer}
+          resetCustomerForm={resetCustomerForm}
+          customerSearch={customerSearch}
+          setCustomerSearch={setCustomerSearch}
+          getFilteredInvoiceCustomers={getFilteredInvoiceCustomers}
+          selectInvoiceCustomer={selectInvoiceCustomer}
+          editInvoiceCustomer={editInvoiceCustomer}
+          deleteInvoiceCustomer={deleteInvoiceCustomer}
+          getSelectedInvoiceCustomer={getSelectedInvoiceCustomer}
+          formatCustomerAddressFromFields={formatCustomerAddressFromFields}
+          invoiceSearch={invoiceSearch}
+          setInvoiceSearch={setInvoiceSearch}
+          invoiceStatusFilter={invoiceStatusFilter}
+          setInvoiceStatusFilter={setInvoiceStatusFilter}
+          invoiceTestFilter={invoiceTestFilter}
+          setInvoiceTestFilter={setInvoiceTestFilter}
+          exportInvoicesCsv={exportInvoicesCsv}
+          getFilteredInvoices={getFilteredInvoices}
+          getInvoiceCustomerAddress={getInvoiceCustomerAddress}
+          getItemsForInvoice={getItemsForInvoice}
+          getMemberById={getMemberById}
+          exportInvoicePdf={exportInvoicePdf}
+          archiveInvoicePdf={archiveInvoicePdf}
+          openArchivedInvoice={openArchivedInvoice}
+          sendInvoiceEmail={sendInvoiceEmail}
+          markInvoicePaid={markInvoicePaid}
+          createCancellationInvoice={createCancellationInvoice}
+          cancelInvoice={cancelInvoice}
+          deleteInvoice={deleteInvoice}
+          getOverdueInvoices={getOverdueInvoices}
+          canManageCash={canManageCash}
+          isAdmin={isAdmin}
+        />
       )}
 
 
