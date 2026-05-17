@@ -31,6 +31,43 @@ import {
 import { navigationItems } from './app/navigation'
 import { fetchMembers } from './services/repositories/membersRepository'
 import { fetchMembershipFees } from './services/repositories/membershipFeesRepository'
+import { formatCustomerAddressFromFields as buildFormatCustomerAddressFromFields } from './utils/formatters'
+import {
+  getAlertStyle as buildAlertStyle,
+  getAmountByType as buildAmountByType,
+  getCashBalanceForYear as buildCashBalanceForYear,
+  getDashboardAlerts as buildDashboardAlerts,
+  getFinanceDashboardData as buildFinanceDashboardData,
+  getFinanceHealthStatus as buildFinanceHealthStatus,
+} from './services/helpers/dashboardHelpers'
+import {
+  getFilteredInvoiceCustomers as buildGetFilteredInvoiceCustomers,
+  getFilteredInvoices as buildGetFilteredInvoices,
+  getInvoiceById as buildGetInvoiceById,
+  getInvoiceCustomerAddress as buildGetInvoiceCustomerAddress,
+  getInvoiceFilePath as buildGetInvoiceFilePath,
+  getInvoiceRowsTotal as buildGetInvoiceRowsTotal,
+  getInvoiceYear as buildGetInvoiceYear,
+  getItemsForInvoice as buildGetItemsForInvoice,
+  getNextInvoiceNumber as buildGetNextInvoiceNumber,
+  getOverdueInvoices as buildGetOverdueInvoices,
+  getSelectedInvoiceCustomer as buildGetSelectedInvoiceCustomer,
+} from './services/helpers/invoiceHelpers'
+import {
+  getCurrentMemberFee as buildGetCurrentMemberFee,
+} from './services/helpers/memberEventHelpers'
+import {
+  getFilteredInventoryItems as buildGetFilteredInventoryItems,
+  getInventoryCategories as buildGetInventoryCategories,
+  getInventoryCsvValue as buildGetInventoryCsvValue,
+  getInventoryQrValue as buildGetInventoryQrValue,
+  getInventorySortValue as buildGetInventorySortValue,
+  getInventoryTotalValue as buildGetInventoryTotalValue,
+  getNextInventoryNumber as buildGetNextInventoryNumber,
+  normalizeInventoryCondition as buildNormalizeInventoryCondition,
+  normalizeInventoryDate as buildNormalizeInventoryDate,
+  normalizeInventoryStatus as buildNormalizeInventoryStatus,
+} from './services/helpers/inventoryHelpers'
 import { MembersPage } from './components/members/MembersPage'
 import { CashPage } from './components/cash/CashPage'
 import { DocumentsPage } from './components/documents/DocumentsPage'
@@ -608,20 +645,8 @@ export default function App() {
     return cashEntries.filter((entry) => getEntryYear(entry) === selectedCashYear)
   }
 
-  function getCashEntriesForYear(year) {
-    return cashEntries.filter((entry) => getEntryYear(entry) === String(year))
-  }
-
   function getCashBalanceForYear(year) {
-    return getCashEntriesForYear(year).filter((entry) => !entry.is_cancelled).reduce((sum, entry) => {
-      const amount = Number(entry.amount || 0)
-
-      if (entry.is_opening) {
-        return entry.type === 'einnahme' ? sum + amount : sum - amount
-      }
-
-      return entry.type === 'einnahme' ? sum + amount : sum - amount
-    }, 0)
+    return buildCashBalanceForYear(year, cashEntries)
   }
 
   function hasOpeningForYear(year) {
@@ -719,131 +744,32 @@ export default function App() {
       .sort((a, b) => new Date(a.event_date) - new Date(b.event_date))
   }
 
-  function getOpenFeeMembers() {
-    return members.filter((member) => {
-      if (member.is_test) return false
-
-      const fee = getFee(member.id)
-      return fee && !fee.paid && Number(fee.amount || 0) > 0
+  function getDashboardAlerts() {
+    return buildDashboardAlerts({
+      members,
+      documents,
+      fees,
+      cashEntries,
+      selectedCashYear,
+      hasOpeningForYear,
+      getEntryYear,
+      getUpcomingEvents,
+      getTestMembers,
+      getTestInvoices,
+      getTestCashEntries,
+      getCashBalance,
+      getFee,
+      getMemberById,
     })
   }
 
-  function getDashboardAlerts() {
-    const alerts = []
-    const openFeeMembers = getOpenFeeMembers()
-    const openFeeTotal = getOpenFeesTotal()
-    const currentBalance = getCashBalance()
-    const upcomingEvents = getUpcomingEvents(14)
-    const missingRequiredDocuments = []
-
-    if (!documents.some((document) => document.category === 'statuten')) {
-      missingRequiredDocuments.push('Statuten')
-    }
-
-    if (openFeeMembers.length > 0) {
-      alerts.push({
-        type: 'warning',
-        title: 'Offene MitgliedsbeitrÃ¤ge',
-        message: `${openFeeMembers.length} Mitglieder haben offene BeitrÃ¤ge. Offene Summe: ${openFeeTotal.toFixed(2)} â‚¬.`,
-      })
-    }
-
-    if (currentBalance < 200) {
-      alerts.push({
-        type: 'danger',
-        title: 'Niedriger Kassastand',
-        message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} â‚¬. Bitte prÃ¼fen.`,
-      })
-    }
-
-    if (upcomingEvents.length > 0) {
-      alerts.push({
-        type: 'info',
-        title: 'Anstehende Events',
-        message: `${upcomingEvents.length} Event(s) in den nÃ¤chsten 14 Tagen. NÃ¤chstes Event: ${upcomingEvents[0].name} am ${upcomingEvents[0].event_date}.`,
-      })
-    }
-
-    if (missingRequiredDocuments.length > 0) {
-      alerts.push({
-        type: 'warning',
-        title: 'Wichtige Dokumente fehlen',
-        message: `${missingRequiredDocuments.join(', ')} noch nicht im Dokumentenbereich hochgeladen.`,
-      })
-    }
-
-    if (getTestMembers().length > 0 || getTestInvoices().length > 0 || getTestCashEntries().length > 0) {
-      alerts.push({
-        type: 'warning',
-        title: 'Testdaten vorhanden',
-        message: `${getTestMembers().length} Testmitglied(er), ${getTestInvoices().length} Testrechnung(en) und ${getTestCashEntries().length} Test-Kassa-Eintrag/EintrÃ¤ge vorhanden.`,
-      })
-    }
-
-    if (!hasOpeningForYear(selectedCashYear) && selectedCashYear !== 'alle') {
-      const previousYear = Number(selectedCashYear) - 1
-      const hasPreviousYearEntries = cashEntries.some((entry) => getEntryYear(entry) === String(previousYear))
-
-      if (hasPreviousYearEntries) {
-        alerts.push({
-          type: 'info',
-          title: 'JahresÃ¼bertrag prÃ¼fen',
-          message: `FÃ¼r ${selectedCashYear} ist noch kein Ãœbertrag Vorjahr vorhanden. Du kannst ihn aus ${previousYear} automatisch erstellen.`,
-        })
-      }
-    }
-
-    if (alerts.length === 0) {
-      alerts.push({
-        type: 'success',
-        title: 'Alles im grÃ¼nen Bereich',
-        message: 'Keine dringenden Hinweise vorhanden.',
-      })
-    }
-
-    return alerts
-  }
-
   function getAlertStyle(type) {
-    if (type === 'danger') {
-      return {
-        background: colors.dangerBg,
-        borderColor: colors.red,
-        color: colors.dangerText,
-      }
-    }
-
-    if (type === 'warning') {
-      return {
-        background: '#fffbeb',
-        borderColor: '#f59e0b',
-        color: '#92400e',
-      }
-    }
-
-    if (type === 'info') {
-      return {
-        background: colors.infoBg,
-        borderColor: colors.blue,
-        color: colors.infoText,
-      }
-    }
-
-    return {
-      background: colors.successBg,
-      borderColor: colors.successText,
-      color: colors.successText,
-    }
+    return buildAlertStyle(type, colors)
   }
 
 
   function getAmountByType(type) {
-    if (type === 'vollmitglied') return 70
-    if (type === 'foerdermitglied') return 40
-    if (type === 'probejahr') return 40
-    if (type === 'ehrenmitglied') return 0
-
-    return 0
+    return buildAmountByType(type)
   }
 
   function normalizeMemberType(value) {
@@ -2414,89 +2340,23 @@ export default function App() {
   }
 
   function normalizeInventoryDate(value) {
-    const text = String(value || '').trim()
-
-    if (!text) return null
-    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text
-
-    const parts = text.split('.')
-    if (parts.length === 3) {
-      const day = parts[0].padStart(2, '0')
-      const month = parts[1].padStart(2, '0')
-      const year = parts[2]
-      return `${year}-${month}-${day}`
-    }
-
-    return null
+    return buildNormalizeInventoryDate(value)
   }
 
   function getInventoryCsvValue(row, keys) {
-    const normalizedRow = {}
-
-    Object.keys(row || {}).forEach((key) => {
-      const normalizedKey = key
-        .trim()
-        .toLowerCase()
-        .replace('Ã¤', 'ae')
-        .replace('Ã¶', 'oe')
-        .replace('Ã¼', 'ue')
-        .replace('ÃŸ', 'ss')
-        .replace(/[^a-z0-9]/g, '')
-
-      normalizedRow[normalizedKey] = row[key]
-    })
-
-    for (const key of keys) {
-      const normalizedKey = key
-        .trim()
-        .toLowerCase()
-        .replace('Ã¤', 'ae')
-        .replace('Ã¶', 'oe')
-        .replace('Ã¼', 'ue')
-        .replace('ÃŸ', 'ss')
-        .replace(/[^a-z0-9]/g, '')
-
-      if (normalizedRow[normalizedKey] !== undefined) {
-        return String(normalizedRow[normalizedKey] || '').trim()
-      }
-    }
-
-    return ''
+    return buildGetInventoryCsvValue(row, keys)
   }
 
   function normalizeInventoryCondition(value) {
-    const text = String(value || '').trim().toLowerCase()
-
-    if (text.includes('neu')) return 'neu'
-    if (text.includes('defekt')) return 'defekt'
-    if (text.includes('repar')) return 'reparatur'
-    if (text.includes('schlecht')) return 'schlecht'
-    if (text.includes('gebraucht')) return 'gebraucht'
-    if (text.includes('gut')) return 'gut'
-
-    return 'gut'
+    return buildNormalizeInventoryCondition(value)
   }
 
   function normalizeInventoryStatus(value) {
-    const text = String(value || '').trim().toLowerCase()
-
-    if (text.includes('ausgemustert')) return 'ausgemustert'
-    if (text.includes('verliehen')) return 'verliehen'
-    if (text.includes('defekt')) return 'defekt'
-    if (text.includes('aktiv')) return 'aktiv'
-
-    return 'aktiv'
+    return buildNormalizeInventoryStatus(value)
   }
 
   function getNextInventoryNumber() {
-    const maxNumber = inventoryItems.reduce((max, item) => {
-      const match = String(item.inventory_number || '').match(/^SB-(\d+)$/)
-      if (!match) return max
-
-      return Math.max(max, Number(match[1]))
-    }, 0)
-
-    return `SB-${String(maxNumber + 1).padStart(3, '0')}`
+    return buildGetNextInventoryNumber(inventoryItems)
   }
 
   function resetInventoryForm() {
@@ -2731,64 +2591,26 @@ export default function App() {
     alert('Inventar wurde ausgemustert.')
   }
 
-  function getInventorySortValue(item, key) {
-    if (key === 'inventory_number') {
-      const match = String(item.inventory_number || '').match(/(\d+)/)
-      return match ? Number(match[1]) : 0
-    }
-
-    if (key === 'purchase_date' || key === 'last_check_date') {
-      return item[key] ? new Date(item[key]).getTime() : 0
-    }
-
-    if (key === 'value') {
-      return Number(item.value || 0)
-    }
-
-    return String(item[key] || '').toLowerCase()
-  }
-
   function getFilteredInventoryItems() {
-    const search = inventorySearch.toLowerCase()
-
-    return inventoryItems
-      .filter((item) => {
-        const matchesSearch =
-          !search ||
-          (item.inventory_number || '').toLowerCase().includes(search) ||
-          (item.name || '').toLowerCase().includes(search) ||
-          (item.category || '').toLowerCase().includes(search) ||
-          (item.location || '').toLowerCase().includes(search) ||
-          (item.responsible || '').toLowerCase().includes(search)
-
-        const matchesCategory = inventoryCategoryFilter === 'alle' || item.category === inventoryCategoryFilter
-        const matchesStatus = inventoryStatusFilter === 'alle' || item.status === inventoryStatusFilter
-
-        return matchesSearch && matchesCategory && matchesStatus
-      })
-      .sort((a, b) => {
-        const valueA = getInventorySortValue(a, inventorySortBy)
-        const valueB = getInventorySortValue(b, inventorySortBy)
-
-        if (typeof valueA === 'number' && typeof valueB === 'number') {
-          return inventorySortDirection === 'asc' ? valueA - valueB : valueB - valueA
-        }
-
-        return inventorySortDirection === 'asc'
-          ? String(valueA).localeCompare(String(valueB), 'de-AT')
-          : String(valueB).localeCompare(String(valueA), 'de-AT')
-      })
+    return buildGetFilteredInventoryItems(
+      inventoryItems,
+      {
+        searchText: inventorySearch,
+        categoryFilter: inventoryCategoryFilter,
+        statusFilter: inventoryStatusFilter,
+        sortBy: inventorySortBy,
+        sortDirection: inventorySortDirection,
+      },
+      buildGetInventorySortValue
+    )
   }
 
   function getInventoryCategories() {
-    const categories = new Set(inventoryItems.map((item) => item.category).filter(Boolean))
-    return Array.from(categories).sort((a, b) => a.localeCompare(b))
+    return buildGetInventoryCategories(inventoryItems)
   }
 
   function getInventoryTotalValue(items = inventoryItems) {
-    return items
-      .filter((item) => item.status !== 'ausgemustert')
-      .reduce((sum, item) => sum + Number(item.value || 0), 0)
+    return buildGetInventoryTotalValue(items)
   }
 
   async function deleteInventoryItem(item) {
@@ -2820,7 +2642,7 @@ export default function App() {
   }
 
   function getInventoryQrValue(item) {
-    return item.qr_url || `${window.location.origin}?inventory=${encodeURIComponent(item.inventory_number || item.id)}`
+    return buildGetInventoryQrValue(item)
   }
 
   function exportInventoryCsv() {
@@ -3242,85 +3064,36 @@ export default function App() {
   }
 
   function getCurrentMemberFee() {
-    if (!currentMember) return null
-    return getFee(currentMember.id)
+    return buildGetCurrentMemberFee(currentMember, getFee)
   }
 
   function getFinanceDashboardData() {
-    const entries = getCashEntriesForSelectedYear().filter((entry) => !entry.is_cancelled)
-    const incomeEntries = entries.filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
-    const expenseEntries = entries.filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
-
-    const incomeTotal = incomeEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
-    const expenseTotal = expenseEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
-    const balance = incomeTotal - expenseTotal
-
-    const openFees = fees.filter((fee) => {
-      const member = getMemberById(fee.member_id)
-      return !member?.is_test && !fee.paid && Number(fee.amount || 0) > 0
+    return buildFinanceDashboardData({
+      cashEntriesForSelectedYear: getCashEntriesForSelectedYear(),
+      fees,
+      members,
+      events,
+      getMemberById,
+      getEventIncomeTotal,
+      getEventExpenseTotal,
+      getEventBalance,
     })
-    const openFeesTotal = openFees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0)
-
-    const eventSummaries = events
-      .map((event) => ({
-        id: event.id,
-        name: event.name,
-        date: event.event_date,
-        income: getEventIncomeTotal(event.id),
-        expense: getEventExpenseTotal(event.id),
-        balance: getEventBalance(event.id),
-      }))
-      .filter((event) => event.income > 0 || event.expense > 0)
-      .sort((a, b) => b.balance - a.balance)
-
-    return {
-      incomeTotal,
-      expenseTotal,
-      balance,
-      openFeesCount: openFees.length,
-      openFeesTotal,
-      eventSummaries,
-    }
   }
 
   function getFinanceHealthStatus() {
-    const data = getFinanceDashboardData()
-
-    if (data.balance < 0) return { label: 'Achtung: negatives Ergebnis', color: colors.red }
-    if (data.openFeesTotal > 0) return { label: 'Offene BeitrÃ¤ge vorhanden', color: '#92400e' }
-    return { label: 'Finanzen wirken stabil', color: colors.successText }
+    return buildFinanceHealthStatus(getFinanceDashboardData(), colors)
   }
 
   function formatCustomerAddressFromFields(data) {
-    const streetLine = [data.customer_street || data.street, data.customer_house_number || data.house_number]
-      .filter(Boolean)
-      .join(' ')
-
-    return [
-      streetLine,
-      data.customer_address_addition || data.address_addition,
-      [data.customer_postal_code || data.postal_code, data.customer_city || data.city]
-        .filter(Boolean)
-        .join(' '),
-      data.customer_country || data.country,
-    ]
-      .filter((line) => line && String(line).trim())
-      .join(', ')
+    return buildFormatCustomerAddressFromFields(data)
   }
 
   function getInvoiceCustomerAddress(invoice) {
-    return formatCustomerAddressFromFields({
-      customer_street: invoice.customer_street,
-      customer_house_number: invoice.customer_house_number,
-      customer_address_addition: invoice.customer_address_addition,
-      customer_postal_code: invoice.customer_postal_code,
-      customer_city: invoice.customer_city,
-      customer_country: invoice.customer_country,
-    }) || invoice.customer_address || '-'
+    return buildGetInvoiceCustomerAddress(invoice)
   }
 
   function getSelectedInvoiceCustomer() {
-    return invoiceCustomers.find((customer) => customer.id === selectedInvoiceCustomerId)
+    return buildGetSelectedInvoiceCustomer(invoiceCustomers, selectedInvoiceCustomerId)
   }
 
   function selectInvoiceCustomer(customerId) {
@@ -3446,17 +3219,7 @@ export default function App() {
   }
 
   function getFilteredInvoiceCustomers() {
-    const search = customerSearch.toLowerCase()
-
-    return invoiceCustomers.filter((customer) => {
-      return (
-        !search ||
-        (customer.name || '').toLowerCase().includes(search) ||
-        (customer.email || '').toLowerCase().includes(search) ||
-        (customer.city || '').toLowerCase().includes(search) ||
-        (customer.street || '').toLowerCase().includes(search)
-      )
-    })
+    return buildGetFilteredInvoiceCustomers(invoiceCustomers, customerSearch)
   }
 
   function blobToBase64(blob) {
@@ -3472,11 +3235,11 @@ export default function App() {
   }
 
   function getInvoiceYear(invoice) {
-    return String(invoice.issue_date || new Date().toISOString().slice(0, 10)).slice(0, 4)
+    return buildGetInvoiceYear(invoice)
   }
 
   function getInvoiceFilePath(invoice, filename) {
-    return `invoices/${getInvoiceYear(invoice)}/${filename}`
+    return buildGetInvoiceFilePath(invoice, filename)
   }
 
   function isInvoiceOverdue(invoice) {
@@ -3490,7 +3253,7 @@ export default function App() {
   }
 
   function getOverdueInvoices() {
-    return invoices.filter((invoice) => isInvoiceOverdue(invoice))
+    return buildGetOverdueInvoices(invoices, isInvoiceOverdue)
   }
 
   async function buildInvoicePdfBlob(invoice) {
@@ -3706,32 +3469,19 @@ export default function App() {
   }
 
   function getNextInvoiceNumber(year = new Date().getFullYear(), isTest = false) {
-    const prefix = isTest ? `TEST-SB-${year}-` : `SB-${year}-`
-
-    const maxNumber = invoices.reduce((max, invoice) => {
-      const invoiceNumber = String(invoice.invoice_number || '')
-
-      if (!invoiceNumber.startsWith(prefix)) return max
-
-      const numberPart = Number(invoiceNumber.replace(prefix, ''))
-      return Number.isFinite(numberPart) ? Math.max(max, numberPart) : max
-    }, 0)
-
-    return `${prefix}${String(maxNumber + 1).padStart(4, '0')}`
+    return buildGetNextInvoiceNumber(invoices, year, isTest)
   }
 
   function getInvoiceRowsTotal(rows = invoiceRows) {
-    return rows.reduce((sum, row) => {
-      return sum + Number(row.quantity || 0) * Number(row.unit_price || 0)
-    }, 0)
+    return buildGetInvoiceRowsTotal(rows)
   }
 
   function getItemsForInvoice(invoiceId) {
-    return invoiceItems.filter((item) => item.invoice_id === invoiceId)
+    return buildGetItemsForInvoice(invoiceItems, invoiceId)
   }
 
   function getInvoiceById(invoiceId) {
-    return invoices.find((invoice) => invoice.id === invoiceId)
+    return buildGetInvoiceById(invoices, invoiceId)
   }
 
   function getMemberById(memberId) {
@@ -3772,24 +3522,7 @@ export default function App() {
   }
 
   function getFilteredInvoices() {
-    const search = invoiceSearch.toLowerCase()
-
-    return invoices.filter((invoice) => {
-      const matchesSearch =
-        !search ||
-        (invoice.invoice_number || '').toLowerCase().includes(search) ||
-        (invoice.customer_name || '').toLowerCase().includes(search) ||
-        (invoice.customer_email || '').toLowerCase().includes(search) ||
-        (invoice.notes || '').toLowerCase().includes(search)
-
-      const matchesStatus = invoiceStatusFilter === 'alle' || invoice.status === invoiceStatusFilter
-      const matchesTest =
-        invoiceTestFilter === 'alle' ||
-        (invoiceTestFilter === 'test' && invoice.is_test) ||
-        (invoiceTestFilter === 'echt' && !invoice.is_test)
-
-      return matchesSearch && matchesStatus && matchesTest
-    })
+    return buildGetFilteredInvoices(invoices, invoiceSearch, invoiceStatusFilter, invoiceTestFilter)
   }
 
   async function createMembershipFeeInvoice(member, fee) {
