@@ -41,6 +41,7 @@ import { CashPage } from './components/cash/CashPage'
 import { DocumentsPage } from './components/documents/DocumentsPage'
 import { EventsPage } from './components/events/EventsPage'
 import { AdminPage } from './components/admin/AdminPage'
+import { InventoryPage } from './components/inventory/InventoryPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -6585,325 +6586,71 @@ export default function App() {
       )}
 
       {activePage === 'inventory' && (
-        <section style={sectionStyle}>
-          <h2 style={headingStyle}>Inventar PRO</h2>
-
-          <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
-            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.black}` }}>
-              <strong style={dashboardLabelStyle}>Inventar gesamt</strong>
-              <h2 style={dashboardNumberStyle}>{inventoryItems.length}</h2>
-            </div>
-
-            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.navy}` }}>
-              <strong style={dashboardLabelStyle}>Gesamtwert</strong>
-              <h2 style={dashboardNumberStyle}>{getInventoryTotalValue().toFixed(2)} €</h2>
-            </div>
-
-            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
-              <strong style={dashboardLabelStyle}>Aktiv</strong>
-              <h2 style={dashboardNumberStyle}>{inventoryItems.filter((item) => item.status === 'aktiv').length}</h2>
-            </div>
-
-            <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
-              <strong style={dashboardLabelStyle}>Defekt / Reparatur</strong>
-              <h2 style={dashboardNumberStyle}>
-                {inventoryItems.filter((item) => ['defekt', 'reparatur'].includes(item.condition) || item.status === 'defekt').length}
-              </h2>
-            </div>
-          </div>
-
-          {(canManageMembers() || isAdmin()) && (
-            <>
-              <h3 style={headingStyle}>{inventoryEditingId ? 'Inventar bearbeiten' : 'Inventar anlegen'}</h3>
-
-              <input
-                placeholder={`Inventar-Nr. leer lassen für ${getNextInventoryNumber()}`}
-                value={inventoryNumber}
-                onChange={(e) => setInventoryNumber(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="Bezeichnung"
-                value={inventoryName}
-                onChange={(e) => setInventoryName(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="Kategorie, z.B. Event, Technik, Gastro"
-                value={inventoryCategory}
-                onChange={(e) => setInventoryCategory(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="Verantwortlich"
-                value={inventoryResponsible}
-                onChange={(e) => setInventoryResponsible(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="Standort"
-                value={inventoryLocation}
-                onChange={(e) => setInventoryLocation(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                type="date"
-                value={inventoryPurchaseDate}
-                onChange={(e) => setInventoryPurchaseDate(e.target.value)}
-                style={inputStyle}
-              />
-
-              <select value={inventoryCondition} onChange={(e) => setInventoryCondition(e.target.value)} style={inputStyle}>
-                <option value="neu">Neu</option>
-                <option value="gut">Gut</option>
-                <option value="gebraucht">Gebraucht</option>
-                <option value="schlecht">Schlecht</option>
-                <option value="reparatur">Reparatur</option>
-                <option value="defekt">Defekt</option>
-              </select>
-
-              <select value={inventoryStatus} onChange={(e) => setInventoryStatus(e.target.value)} style={inputStyle}>
-                <option value="aktiv">Aktiv</option>
-                <option value="verliehen">Verliehen</option>
-                <option value="defekt">Defekt</option>
-                <option value="ausgemustert">Ausgemustert</option>
-              </select>
-
-              <input
-                type="date"
-                value={inventoryLastCheckDate}
-                onChange={(e) => setInventoryLastCheckDate(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="Prüfstatus, z.B. OK"
-                value={inventoryCheckStatus}
-                onChange={(e) => setInventoryCheckStatus(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="Seriennummer"
-                value={inventorySerialNumber}
-                onChange={(e) => setInventorySerialNumber(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                type="number"
-                placeholder="Wert"
-                value={inventoryValue}
-                onChange={(e) => setInventoryValue(e.target.value)}
-                style={inputStyle}
-              />
-
-              <input
-                placeholder="Notizen"
-                value={inventoryNotes}
-                onChange={(e) => setInventoryNotes(e.target.value)}
-                style={inputStyle}
-              />
-
-              <button onClick={saveInventoryItem} style={buttonStyle}>
-                {inventoryEditingId ? 'Änderungen speichern' : 'Inventar speichern'}
-              </button>
-
-              {inventoryEditingId && (
-                <button onClick={resetInventoryForm} style={secondaryButtonStyle}>
-                  Bearbeiten abbrechen
-                </button>
-              )}
-
-              <h3 style={headingStyle}>Inventar CSV Import</h3>
-
-              <p style={mutedTextStyle}>
-                Unterstützt deine bestehende Google-Sheets-Struktur mit Inventar-Nr., Bezeichnung,
-                Kategorie, Verantwortlich, Standort, Prüfstatus und Etikett-Zeilen.
-              </p>
-
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleInventoryCsvFile}
-                style={inputStyle}
-              />
-
-              {inventoryCsvFileName && (
-                <p style={mutedTextStyle}>
-                  Datei: <strong>{inventoryCsvFileName}</strong>
-                </p>
-              )}
-
-              {inventoryCsvRows.length > 0 && (
-                <>
-                  <h3 style={headingStyle}>Vorschau: {inventoryCsvRows.length} Inventar-Einträge</h3>
-
-                  {inventoryCsvRows.slice(0, 5).map((item) => (
-                    <div key={item.inventory_number} style={cardStyle}>
-                      <strong>{item.inventory_number}</strong> · {item.name}
-                      <br />
-                      {item.category} · {item.location || '-'} · {item.status}
-                    </div>
-                  ))}
-
-                  <button onClick={importInventoryRows} style={buttonStyle} disabled={inventoryImporting}>
-                    {inventoryImporting ? 'Import läuft...' : 'Inventar importieren'}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setInventoryCsvRows([])
-                      setInventoryCsvFileName('')
-                    }}
-                    style={secondaryButtonStyle}
-                    disabled={inventoryImporting}
-                  >
-                    Import abbrechen
-                  </button>
-                </>
-              )}
-            </>
-          )}
-
-          <h3 style={headingStyle}>Inventar Suche & Filter</h3>
-
-          <input
-            placeholder="Inventar suchen..."
-            value={inventorySearch}
-            onChange={(e) => setInventorySearch(e.target.value)}
-            style={inputStyle}
-          />
-
-          <select value={inventoryCategoryFilter} onChange={(e) => setInventoryCategoryFilter(e.target.value)} style={inputStyle}>
-            <option value="alle">Alle Kategorien</option>
-            {getInventoryCategories().map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-
-          <select value={inventoryStatusFilter} onChange={(e) => setInventoryStatusFilter(e.target.value)} style={inputStyle}>
-            <option value="alle">Alle Status</option>
-            <option value="aktiv">Aktiv</option>
-            <option value="verliehen">Verliehen</option>
-            <option value="defekt">Defekt</option>
-            <option value="ausgemustert">Ausgemustert</option>
-          </select>
-
-          <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(220px, 1fr))', gap: 12 }}>
-            <select value={inventorySortBy} onChange={(e) => setInventorySortBy(e.target.value)} style={inputStyle}>
-              <option value="inventory_number">Sortieren nach Inventar-Nr.</option>
-              <option value="name">Sortieren nach Bezeichnung</option>
-              <option value="category">Sortieren nach Kategorie</option>
-              <option value="location">Sortieren nach Standort</option>
-              <option value="responsible">Sortieren nach Verantwortlich</option>
-              <option value="condition">Sortieren nach Zustand</option>
-              <option value="status">Sortieren nach Status</option>
-              <option value="purchase_date">Sortieren nach Anschaffungsdatum</option>
-              <option value="last_check_date">Sortieren nach letzter Prüfung</option>
-              <option value="value">Sortieren nach Wert</option>
-            </select>
-
-            <select value={inventorySortDirection} onChange={(e) => setInventorySortDirection(e.target.value)} style={inputStyle}>
-              <option value="asc">Aufsteigend</option>
-              <option value="desc">Absteigend</option>
-            </select>
-          </div>
-
-          <button onClick={exportInventoryCsv} style={secondaryButtonStyle}>
-            Inventar CSV
-          </button>
-
-          <button onClick={exportInventoryPdf} style={secondaryButtonStyle}>
-            Inventarliste PDF
-          </button>
-
-          <button onClick={exportInventoryLabelsPdf} style={buttonStyle}>
-            Etiketten PDF
-          </button>
-
-          <p>
-            Angezeigt: <strong>{getFilteredInventoryItems().length}</strong> von {inventoryItems.length} Inventar-Einträgen
-            <br />
-            Wert der angezeigten aktiven Einträge:{' '}
-            <strong>{getInventoryTotalValue(getFilteredInventoryItems()).toFixed(2)} €</strong>
-          </p>
-
-          {getFilteredInventoryItems().map((item) => (
-            <div
-              key={item.id}
-              style={{
-                ...cardStyle,
-                borderLeft: `6px solid ${item.status === 'aktiv' ? colors.blue : item.status === 'ausgemustert' ? colors.muted : colors.red}`,
-                opacity: item.status === 'ausgemustert' ? 0.72 : 1,
-              }}
-            >
-              <strong>
-                {item.inventory_number} · {item.name}
-              </strong>
-              <br />
-              Kategorie: {item.category || '-'} · Standort: {item.location || '-'}
-              <br />
-              Verantwortlich: {item.responsible || '-'}
-              <br />
-              Zustand: {item.condition || '-'} · Status: {item.status || '-'}
-              <br />
-              Letzte Prüfung: {item.last_check_date || '-'} · Prüfstatus: {item.check_status || '-'}
-              <br />
-              Seriennummer: {item.serial_number || '-'} · Wert: {item.value ? `${Number(item.value).toFixed(2)} €` : '-'}
-              <br />
-              Notizen: {item.notes || '-'}
-
-              <br />
-
-              <button onClick={() => setShowInventoryQr(showInventoryQr === item.id ? null : item.id)} style={secondaryButtonStyle}>
-                QR-Code
-              </button>
-
-              <button onClick={() => exportInventoryLabelPdf(item)} style={secondaryButtonStyle}>
-                Etikett PDF
-              </button>
-
-              {(canManageMembers() || isAdmin()) && (
-                <button onClick={() => editInventoryItem(item)} style={buttonStyle}>
-                  Bearbeiten
-                </button>
-              )}
-
-              {isAdmin() && item.status !== 'ausgemustert' && (
-                <button
-                  onClick={() => retireInventoryItem(item)}
-                  style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
-                >
-                  Ausmustern
-                </button>
-              )}
-
-              {isAdmin() && (
-                <button
-                  onClick={() => deleteInventoryItem(item)}
-                  style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
-                >
-                  Inventar löschen
-                </button>
-              )}
-
-              {showInventoryQr === item.id && (
-                <div style={{ marginTop: 12 }}>
-                  <QRCodeCanvas value={getInventoryQrValue(item)} size={170} />
-                  <p style={mutedTextStyle}>{getInventoryQrValue(item)}</p>
-                </div>
-              )}
-            </div>
-          ))}
-        </section>
+        <InventoryPage
+          inventoryItems={inventoryItems}
+          getInventoryTotalValue={getInventoryTotalValue}
+          inventoryEditingId={inventoryEditingId}
+          inventoryNumber={inventoryNumber}
+          setInventoryNumber={setInventoryNumber}
+          inventoryName={inventoryName}
+          setInventoryName={setInventoryName}
+          inventoryCategory={inventoryCategory}
+          setInventoryCategory={setInventoryCategory}
+          inventoryResponsible={inventoryResponsible}
+          setInventoryResponsible={setInventoryResponsible}
+          inventoryLocation={inventoryLocation}
+          setInventoryLocation={setInventoryLocation}
+          inventoryPurchaseDate={inventoryPurchaseDate}
+          setInventoryPurchaseDate={setInventoryPurchaseDate}
+          inventoryCondition={inventoryCondition}
+          setInventoryCondition={setInventoryCondition}
+          inventoryStatus={inventoryStatus}
+          setInventoryStatus={setInventoryStatus}
+          inventoryLastCheckDate={inventoryLastCheckDate}
+          setInventoryLastCheckDate={setInventoryLastCheckDate}
+          inventoryCheckStatus={inventoryCheckStatus}
+          setInventoryCheckStatus={setInventoryCheckStatus}
+          inventorySerialNumber={inventorySerialNumber}
+          setInventorySerialNumber={setInventorySerialNumber}
+          inventoryValue={inventoryValue}
+          setInventoryValue={setInventoryValue}
+          inventoryNotes={inventoryNotes}
+          setInventoryNotes={setInventoryNotes}
+          getNextInventoryNumber={getNextInventoryNumber}
+          saveInventoryItem={saveInventoryItem}
+          resetInventoryForm={resetInventoryForm}
+          handleInventoryCsvFile={handleInventoryCsvFile}
+          inventoryCsvFileName={inventoryCsvFileName}
+          inventoryCsvRows={inventoryCsvRows}
+          importInventoryRows={importInventoryRows}
+          inventoryImporting={inventoryImporting}
+          setInventoryCsvRows={setInventoryCsvRows}
+          setInventoryCsvFileName={setInventoryCsvFileName}
+          inventorySearch={inventorySearch}
+          setInventorySearch={setInventorySearch}
+          inventoryCategoryFilter={inventoryCategoryFilter}
+          setInventoryCategoryFilter={setInventoryCategoryFilter}
+          inventoryStatusFilter={inventoryStatusFilter}
+          setInventoryStatusFilter={setInventoryStatusFilter}
+          inventorySortBy={inventorySortBy}
+          setInventorySortBy={setInventorySortBy}
+          inventorySortDirection={inventorySortDirection}
+          setInventorySortDirection={setInventorySortDirection}
+          getInventoryCategories={getInventoryCategories}
+          exportInventoryCsv={exportInventoryCsv}
+          exportInventoryPdf={exportInventoryPdf}
+          exportInventoryLabelsPdf={exportInventoryLabelsPdf}
+          getFilteredInventoryItems={getFilteredInventoryItems}
+          getInventoryQrValue={getInventoryQrValue}
+          showInventoryQr={showInventoryQr}
+          setShowInventoryQr={setShowInventoryQr}
+          exportInventoryLabelPdf={exportInventoryLabelPdf}
+          editInventoryItem={editInventoryItem}
+          retireInventoryItem={retireInventoryItem}
+          deleteInventoryItem={deleteInventoryItem}
+          canManageMembers={canManageMembers}
+          isAdmin={isAdmin}
+        />
       )}
 
       {activePage === 'portal' && (
@@ -7266,6 +7013,7 @@ export default function App() {
     </main>
   )
 }
+
 
 
 
