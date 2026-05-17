@@ -71,7 +71,9 @@ export default function App() {
   const [newEventLocation, setNewEventLocation] = useState('')
   const [newEventNotes, setNewEventNotes] = useState('')
 
-  const [offlineCashEntries, setOfflineCashEntries] = useState([])
+  const [offlineCashEntries, setOfflineCashEntries] = useState(() =>
+    JSON.parse(localStorage.getItem('offlineCashEntries') || '[]')
+  )
   const [isOnline, setIsOnline] = useState(navigator.onLine)
 
   const [editingId, setEditingId] = useState(null)
@@ -199,9 +201,6 @@ export default function App() {
 
   useEffect(() => {
     checkUser()
-
-    const savedOffline = JSON.parse(localStorage.getItem('offlineCashEntries') || '[]')
-    setOfflineCashEntries(savedOffline)
 
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
@@ -673,7 +672,7 @@ export default function App() {
 
     if (!confirmed) return
 
-    const { error } = await supabase.from('cash_entries').insert({
+    const carryoverEntry = {
       entry_date: `${carryoverToYear}-01-01`,
       entry_year: Number(carryoverToYear),
       type: balance >= 0 ? 'einnahme' : 'ausgabe',
@@ -684,14 +683,13 @@ export default function App() {
       description: `Übertrag Vorjahr automatisch aus ${carryoverFromYear}`,
       receipt_url: null,
       event_id: null,
-    })
+    }
+
+    const { error } = await supabase.from('cash_entries').insert(carryoverEntry)
 
     if (error) return alert(error.message)
 
-    await createAuditLog('cancel', 'cash_entries', entry.id, entry, {
-      is_cancelled: true,
-      cancellation_reason: reason.trim(),
-    })
+    await createAuditLog('create_carryover', 'cash_entries', null, null, carryoverEntry)
 
     await loadCashEntries()
     setSelectedCashYear(String(carryoverToYear))
@@ -1002,9 +1000,7 @@ export default function App() {
       email,
       phone,
       member_type: memberType,
-      role,
       app_role: appRole,
-      is_test: false,
       is_test: isTestMember,
       street,
       postal_code: postalCode,
@@ -1367,11 +1363,6 @@ export default function App() {
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
-  function getActiveMembersCount() {
-    return members.filter((member) => member.status === 'aktiv').length
-  }
-
-
   function getTodayDate() {
     return new Date().toISOString().slice(0, 10)
   }
@@ -1481,11 +1472,6 @@ export default function App() {
     setLinkedMemberNotice('Dieser Mitgliedsausweis gehört zu einem anderen Mitglied. Du hast keine Berechtigung, diese Daten zu öffnen.')
   }
 
-  function getCheckinsForActiveEvent() {
-    const activeEventName = getActiveEventName()
-    return eventCheckins.filter((checkin) => checkin.event_name === activeEventName)
-  }
-
   function getTodayCheckins() {
     const today = getTodayDate()
     const activeEventName = getActiveEventName()
@@ -1496,14 +1482,6 @@ export default function App() {
 
   function isCheckedInToday(memberId) {
     return getTodayCheckins().some((checkin) => checkin.member_id === memberId)
-  }
-
-  function getChartMax() {
-    return Math.max(getIncomeTotal(), getExpenseTotal(), 1)
-  }
-
-  function getBarHeight(value) {
-    return `${Math.max((value / getChartMax()) * 180, 4)}px`
   }
 
   function getMonthlyData() {
@@ -1543,15 +1521,6 @@ export default function App() {
 
       return { month, income, expense }
     })
-  }
-
-  function getMonthlyMax() {
-    const values = getMonthlyData().flatMap((item) => [item.income, item.expense])
-    return Math.max(...values, 1)
-  }
-
-  function getMonthlyBarHeight(value) {
-    return `${Math.max((value / getMonthlyMax()) * 140, 3)}px`
   }
 
   function getDashboardMonthlyMax() {
@@ -2257,7 +2226,9 @@ export default function App() {
   }
 
   function stripSystemFields(row) {
-    const { created_at, updated_at, ...cleaned } = row || {}
+    const cleaned = { ...(row || {}) }
+    delete cleaned.created_at
+    delete cleaned.updated_at
     return cleaned
   }
 
@@ -2631,10 +2602,9 @@ export default function App() {
         return
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('inventory_items')
         .insert(rowsToInsert)
-        .select()
 
       if (error) return alert(error.message)
 
@@ -2816,10 +2786,6 @@ export default function App() {
     return items
       .filter((item) => item.status !== 'ausgemustert')
       .reduce((sum, item) => sum + Number(item.value || 0), 0)
-  }
-
-  function getInventoryActiveValue() {
-    return getInventoryTotalValue(inventoryItems.filter((item) => item.status === 'aktiv'))
   }
 
   async function deleteInventoryItem(item) {
@@ -3030,10 +2996,6 @@ export default function App() {
       if (entry.member_id && getMemberById(entry.member_id)?.is_test) return true
       return false
     })
-  }
-
-  function getRealCashEntriesForSelectedYear() {
-    return getCashEntriesForSelectedYear().filter((entry) => !getTestCashEntries().some((testEntry) => testEntry.id === entry.id))
   }
 
   async function markMemberAsTest(member) {
@@ -3771,14 +3733,6 @@ export default function App() {
 
   function getMemberById(memberId) {
     return members.find((member) => member.id === memberId)
-  }
-
-  function getInvoiceTotal(invoice) {
-    const items = getItemsForInvoice(invoice.id)
-
-    if (items.length === 0) return Number(invoice.total_amount || 0)
-
-    return items.reduce((sum, item) => sum + Number(item.total_price || 0), 0)
   }
 
   function resetInvoiceForm() {
@@ -4553,7 +4507,11 @@ export default function App() {
       return
     }
 
-    const entriesToSync = offlineCashEntries.map(({ offline_id, ...entry }) => entry)
+    const entriesToSync = offlineCashEntries.map((offlineEntry) => {
+      const entry = { ...offlineEntry }
+      delete entry.offline_id
+      return entry
+    })
 
     const { error } = await supabase.from('cash_entries').insert(entriesToSync)
 
@@ -5481,7 +5439,6 @@ export default function App() {
       return
     }
 
-    const fileExt = documentFile.name.split('.').pop()
     const safeName = documentFile.name.replace(/[^a-zA-Z0-9_.-]/g, '-')
     const filePath = `${Date.now()}-${Math.random().toString(36).substring(2)}-${safeName}`
 
@@ -5563,9 +5520,6 @@ export default function App() {
 
   const filteredMembers = getFilteredMembers()
   const filteredCashEntries = getFilteredCashEntries()
-  const income = getIncomeTotal()
-  const expense = getExpenseTotal()
-  const monthlyData = getMonthlyData()
 
   if (!user) {
     return (

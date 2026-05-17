@@ -120,7 +120,7 @@ export async function generateInvoicePdf({
     try {
       logo = await imageToBase64('/styrian-bastards-logo.jpg')
     } catch {
-      logo = null
+      // Logo bleibt null; der PDF-Fallback rendert dann den Textblock.
     }
   }
 
