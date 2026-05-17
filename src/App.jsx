@@ -11,7 +11,6 @@ import {
   cardStyle,
   colors,
   dashboardLabelStyle,
-  dashboardNumberStyle,
   headingStyle,
   inputStyle,
   isMobile,
@@ -42,6 +41,7 @@ import { EventsPage } from './components/events/EventsPage'
 import { AdminPage } from './components/admin/AdminPage'
 import { InventoryPage } from './components/inventory/InventoryPage'
 import { InvoicesPage } from './components/invoices/InvoicesPage'
+import { DashboardPage } from './components/dashboard/DashboardPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -5783,288 +5783,28 @@ export default function App() {
       )}
 
       {activePage === 'dashboard' && (
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>Dashboard</h2>
-
-<div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
-  <strong style={dashboardLabelStyle}>Smart Alerts</strong>
-
-  <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 14 }}>
-    {getDashboardAlerts().map((alert, index) => (
-      <div
-        key={`${alert.title}-${index}`}
-        style={{
-          border: '2px solid',
-          borderRadius: 12,
-          padding: 14,
-          ...getAlertStyle(alert.type),
-        }}
-      >
-        <strong style={{ color: 'inherit' }}>{alert.title}</strong>
-        <br />
-        <span style={{ color: 'inherit' }}>{alert.message}</span>
-      </div>
-    ))}
-  </div>
-</div>
-
-<div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 15 }}>
-
-  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.black}` }}>
-    <strong style={dashboardLabelStyle}>Kassastand</strong>
-    <h2 style={dashboardNumberStyle}>{getCashBalance().toFixed(2)} €</h2>
-  </div>
-
-  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.blue}` }}>
-    <strong style={dashboardLabelStyle}>Einnahmen</strong>
-    <h2 style={dashboardNumberStyle}>{getIncomeTotal().toFixed(2)} €</h2>
-  </div>
-
-  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.red}` }}>
-    <strong style={dashboardLabelStyle}>Ausgaben</strong>
-    <h2 style={dashboardNumberStyle}>{getExpenseTotal().toFixed(2)} €</h2>
-  </div>
-
-  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.navy}` }}>
-    <strong style={dashboardLabelStyle}>Ergebnis</strong>
-    <h2 style={dashboardNumberStyle}>{(getIncomeTotal() - getExpenseTotal()).toFixed(2)} €</h2>
-  </div>
-
-  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.black}` }}>
-    <strong style={dashboardLabelStyle}>Inventarwert</strong>
-    <h2 style={dashboardNumberStyle}>{getInventoryTotalValue().toFixed(2)} €</h2>
-  </div>
-
-  <div style={{ ...cardStyle, background: colors.white, borderTop: `6px solid ${colors.red}` }}>
-    <strong style={dashboardLabelStyle}>Testdaten</strong>
-    <h2 style={dashboardNumberStyle}>{getTestMembers().length}</h2>
-    <p style={mutedTextStyle}>Testmitglieder vorhanden</p>
-  </div>
-
-</div>
-
-<br />
-
-<div style={cardStyle}>
-  <strong>Offene Mitgliedsbeiträge</strong>
-  <br />
-  Anzahl offen: {getOpenFeesCount()}
-  <br />
-  Summe offen: {getOpenFeesTotal().toFixed(2)} €
-</div>
-
-<br />
-
-<div style={cardStyle}>
-  <strong>Nächstes Event</strong>
-  <br />
-  {events.length > 0 ? (
-    <>
-      {events[0].name}
-      <br />
-      {events[0].event_date}
-      <br />
-      Status: {events[0].status}
-    </>
-  ) : (
-    'Kein Event vorhanden'
-  )}
-</div>
-
-<br />
-
-<div style={{ ...cardStyle, marginTop: 18 }}>
-  <strong style={dashboardLabelStyle}>Monatsdiagramm Einnahmen / Ausgaben</strong>
-
-  <div style={{ overflowX: 'auto', marginTop: 16 }}>
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 18, minWidth: 850, height: 190 }}>
-      {getMonthlyData().map((item) => (
-        <div key={item.month} style={{ textAlign: 'center', width: 62 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 5, height: 140 }}>
-            <div
-              title={`Einnahmen ${item.month}: ${item.income.toFixed(2)} €`}
-              style={{
-                width: 23,
-                height: getDashboardBarHeight(item.income),
-                background: colors.blue,
-                borderRadius: '6px 6px 0 0',
-              }}
-            />
-            <div
-              title={`Ausgaben ${item.month}: ${item.expense.toFixed(2)} €`}
-              style={{
-                width: 23,
-                height: getDashboardBarHeight(item.expense),
-                background: colors.red,
-                borderRadius: '6px 6px 0 0',
-              }}
-            />
-          </div>
-          <strong style={{ color: colors.black }}>{item.month}</strong>
-          <br />
-          <span style={{ fontSize: 11, color: colors.blue }}>{item.income.toFixed(0)}€</span>
-          {' / '}
-          <span style={{ fontSize: 11, color: colors.red }}>{item.expense.toFixed(0)}€</span>
-        </div>
-      ))}
-    </div>
-  </div>
-
-  <p style={mutedTextStyle}>
-    <strong style={{ color: colors.blue }}>Blau = Einnahmen</strong>
-    {' · '}
-    <strong style={{ color: colors.red }}>Rot = Ausgaben</strong>
-  </p>
-</div>
-
-<div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 15 }}>
-  <div style={cardStyle}>
-    <strong style={dashboardLabelStyle}>Mitglieder nach Art</strong>
-
-    <div style={{ marginTop: 14 }}>
-      {getMemberTypeStats().map((item) => (
-        <div key={item.value} style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-            <span style={{ color: colors.black }}>{item.label}</span>
-            <strong style={{ color: colors.black }}>{item.count}</strong>
-          </div>
-          <div style={{ height: 10, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
-            <div
-              style={{
-                height: '100%',
-                width: `${(item.count / getStatsMax(getMemberTypeStats())) * 100}%`,
-                background: colors.black,
-              }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-
-  <div style={cardStyle}>
-    <strong style={dashboardLabelStyle}>Beitragsstatus</strong>
-
-    <div style={{ marginTop: 14 }}>
-      {getFeeStats().map((item) => (
-        <div key={item.label} style={{ marginBottom: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-            <span style={{ color: colors.black }}>{item.label}</span>
-            <strong style={{ color: colors.black }}>{item.count}</strong>
-          </div>
-          <div style={{ height: 10, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
-            <div
-              style={{
-                height: '100%',
-                width: `${(item.count / getStatsMax(getFeeStats())) * 100}%`,
-                background: item.color,
-              }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-</div>
-
-<br />
-
-<div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
-  <strong style={dashboardLabelStyle}>Finanz-Dashboard PRO</strong>
-
-  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginTop: 14 }}>
-    <div style={cardStyle}>
-      <strong>Finanzstatus</strong>
-      <br />
-      <span style={{ color: getFinanceHealthStatus().color, fontWeight: 900 }}>
-        {getFinanceHealthStatus().label}
-      </span>
-    </div>
-
-    <div style={cardStyle}>
-      <strong>Offene Beiträge</strong>
-      <br />
-      {getFinanceDashboardData().openFeesCount} offen · {getFinanceDashboardData().openFeesTotal.toFixed(2)} €
-    </div>
-
-    <div style={cardStyle}>
-      <strong>Jahresergebnis</strong>
-      <br />
-      Einnahmen {getFinanceDashboardData().incomeTotal.toFixed(2)} € · Ausgaben {getFinanceDashboardData().expenseTotal.toFixed(2)} €
-      <br />
-      <strong>{getFinanceDashboardData().balance.toFixed(2)} €</strong>
-    </div>
-  </div>
-
-  <h3 style={headingStyle}>Top Event-Ergebnisse</h3>
-
-  {getFinanceDashboardData().eventSummaries.length === 0 && (
-    <p style={mutedTextStyle}>Noch keine Event-Finanzdaten vorhanden.</p>
-  )}
-
-  {getFinanceDashboardData().eventSummaries.slice(0, 5).map((event) => (
-    <div key={event.id} style={{ ...cardStyle, marginBottom: 8 }}>
-      <strong>{event.name}</strong> · {event.date || '-'}
-      <br />
-      Einnahmen: {event.income.toFixed(2)} € · Ausgaben: {event.expense.toFixed(2)} € · Ergebnis:{' '}
-      <strong style={{ color: event.balance >= 0 ? colors.successText : colors.red }}>
-        {event.balance.toFixed(2)} €
-      </strong>
-    </div>
-  ))}
-
-  <h3 style={headingStyle}>Kategorien kompakt</h3>
-
-  <div style={{ overflowX: 'auto' }}>
-    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
-      <thead>
-        <tr>
-          {['Kategorie', 'Einnahmen', 'Ausgaben', 'Ergebnis'].map((header) => (
-            <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
-              {header}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {getCategorySummary().map((item) => (
-          <tr key={item.category}>
-            <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.category}</td>
-            <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.income.toFixed(2)} €</td>
-            <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{item.expense.toFixed(2)} €</td>
-            <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>
-              <strong>{item.balance.toFixed(2)} €</strong>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<br />
-
-<div style={cardStyle}>
-  <strong>Letzte Aktivitäten</strong>
-  <br />
-
-  <u>Kassa:</u>
-  {cashEntries.slice(0, 3).map(e => (
-    <div key={e.id}>
-      {e.entry_date} · {e.amount} €
-    </div>
-  ))}
-
-  <br />
-
-  <u>Dokumente:</u>
-  {documents.slice(0, 3).map(d => (
-    <div key={d.id}>
-      {d.title}
-    </div>
-  ))}
-</div>
-</section>
+        <DashboardPage
+          alerts={getDashboardAlerts()}
+          getAlertStyle={getAlertStyle}
+          cashBalance={getCashBalance()}
+          incomeTotal={getIncomeTotal()}
+          expenseTotal={getExpenseTotal()}
+          inventoryTotalValue={getInventoryTotalValue()}
+          testMembersCount={getTestMembers().length}
+          openFeesCount={getOpenFeesCount()}
+          openFeesTotal={getOpenFeesTotal()}
+          nextEvent={events.length > 0 ? events[0] : null}
+          monthlyData={getMonthlyData()}
+          getDashboardBarHeight={getDashboardBarHeight}
+          memberTypeStats={getMemberTypeStats()}
+          feeStats={getFeeStats()}
+          getStatsMax={getStatsMax}
+          financeData={getFinanceDashboardData()}
+          financeHealthStatus={getFinanceHealthStatus()}
+          getCategorySummary={getCategorySummary}
+          cashEntries={cashEntries}
+          documents={documents}
+        />
       )}
 
       {activePage === 'cash' && canManageCash() && (
