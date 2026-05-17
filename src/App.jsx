@@ -80,6 +80,10 @@ import {
   loadMembers as loadMembersService,
 } from './services/loaders/appLoaders'
 import {
+  deleteDocumentRecord,
+  uploadDocumentRecord,
+} from './services/repositories/documentsRepository'
+import {
   exportMembersCsv as exportMembersCsvService,
   exportCashCsv as exportCashCsvService,
   exportTaxAdvisorCsv as exportTaxAdvisorCsvService,
@@ -111,6 +115,10 @@ import {
   exportInventoryLabelsPdf as exportInventoryLabelsPdfService,
   exportExcelStyleCashbookPdf as exportExcelStyleCashbookPdfService,
 } from './services/pdf/pdfExports'
+import {
+  deleteInvoiceCustomerRecord,
+  saveInvoiceCustomerRecord,
+} from './services/repositories/invoicesRepository'
 import { MembersPage } from './components/members/MembersPage'
 import { CashPage } from './components/cash/CashPage'
 import { DocumentsPage } from './components/documents/DocumentsPage'
@@ -121,6 +129,17 @@ import { InvoicesPage } from './components/invoices/InvoicesPage'
 import { DashboardPage } from './components/dashboard/DashboardPage'
 import { PortalPage } from './components/portal/PortalPage'
 import { MobileScannerPage } from './components/scanner/MobileScannerPage'
+import {
+  approveMemberChangeRequestRecord,
+  rejectMemberChangeRequestRecord,
+  submitMemberChangeRequestRecord,
+} from './services/repositories/memberChangeRequestsRepository'
+import {
+  deleteInventoryItemRecord,
+  importInventoryRowsRecord,
+  retireInventoryItemRecord,
+  saveInventoryItemRecord,
+} from './services/repositories/inventoryRepository'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -2001,22 +2020,14 @@ export default function App() {
         return
       }
 
-      const { error } = await supabase
-        .from('inventory_items')
-        .insert(rowsToInsert)
-
-      if (error) return alert(error.message)
-
-      await createAuditLog('bulk_import', 'inventory_items', null, null, {
-        count: rowsToInsert.length,
-        file: inventoryCsvFileName,
+      await importInventoryRowsRecord({
+        rowsToInsert,
+        inventoryCsvFileName,
+        createAuditLog,
+        loadInventoryItems,
+        setInventoryCsvRows,
+        setInventoryCsvFileName,
       })
-
-      setInventoryCsvRows([])
-      setInventoryCsvFileName('')
-      await loadInventoryItems()
-
-      alert(`${rowsToInsert.length} Inventar-EintrÃ¤ge wurden importiert.`)
     } finally {
       setInventoryImporting(false)
     }
@@ -2072,33 +2083,14 @@ export default function App() {
       label_line_4: inventoryName.trim(),
     }
 
-    if (inventoryEditingId) {
-      const oldItem = inventoryItems.find((item) => item.id === inventoryEditingId)
-
-      const { error } = await supabase
-        .from('inventory_items')
-        .update(payload)
-        .eq('id', inventoryEditingId)
-
-      if (error) return alert(error.message)
-
-      await createAuditLog('update', 'inventory_items', inventoryEditingId, oldItem, payload)
-      alert('Inventar-Eintrag wurde aktualisiert.')
-    } else {
-      const { data, error } = await supabase
-        .from('inventory_items')
-        .insert(payload)
-        .select()
-        .single()
-
-      if (error) return alert(error.message)
-
-      await createAuditLog('insert', 'inventory_items', data?.id, null, data)
-      alert('Inventar-Eintrag wurde angelegt.')
-    }
-
-    resetInventoryForm()
-    await loadInventoryItems()
+    await saveInventoryItemRecord({
+      inventoryEditingId,
+      payload,
+      inventoryItems,
+      createAuditLog,
+      loadInventoryItems,
+      resetInventoryForm,
+    })
   }
 
   async function retireInventoryItem(item) {
@@ -2108,23 +2100,12 @@ export default function App() {
 
     if (!reason || !reason.trim()) return
 
-    const { error } = await supabase
-      .from('inventory_items')
-      .update({
-        status: 'ausgemustert',
-        notes: `${item.notes || ''}\nAusgemustert: ${reason.trim()}`.trim(),
-      })
-      .eq('id', item.id)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('retire', 'inventory_items', item.id, item, {
-      status: 'ausgemustert',
-      reason: reason.trim(),
+    await retireInventoryItemRecord({
+      item,
+      reason,
+      createAuditLog,
+      loadInventoryItems,
     })
-
-    await loadInventoryItems()
-    alert('Inventar wurde ausgemustert.')
   }
 
   function getFilteredInventoryItems() {
@@ -2164,17 +2145,11 @@ export default function App() {
 
     if (!secondConfirm) return
 
-    const { error } = await supabase
-      .from('inventory_items')
-      .delete()
-      .eq('id', item.id)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('delete', 'inventory_items', item.id, item, null)
-    await loadInventoryItems()
-
-    alert('Inventar-Eintrag wurde gelÃ¶scht.')
+    await deleteInventoryItemRecord({
+      item,
+      createAuditLog,
+      loadInventoryItems,
+    })
   }
 
   function getInventoryQrValue(item) {
@@ -2386,26 +2361,19 @@ export default function App() {
 
     if (!confirmed) return
 
-    const { error } = await supabase.from('member_change_requests').insert({
-      member_id: currentMember.id,
-      requested_by: user?.id || null,
-      requested_data: requestedData,
-      status: 'offen',
+    await submitMemberChangeRequestRecord({
+      currentMember,
+      user,
+      requestedData,
+      createAuditLog,
+      loadMemberChangeRequests,
     })
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('request_member_change', 'members', currentMember.id, currentMember, requestedData)
-    await loadMemberChangeRequests()
-
-    alert('Ã„nderungsantrag wurde eingereicht.')
   }
 
   async function approveMemberChangeRequest(request) {
     if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung.')
 
     const member = members.find((item) => item.id === request.member_id)
-    const requestedData = request.requested_data || {}
 
     const confirmed = window.confirm(
       `Ã„nderungsantrag genehmigen?\n\nMitglied: ${member ? `${member.first_name || ''} ${member.last_name || ''}` : request.member_id}`
@@ -2413,30 +2381,15 @@ export default function App() {
 
     if (!confirmed) return
 
-    const { error: memberError } = await supabase
-      .from('members')
-      .update(requestedData)
-      .eq('id', request.member_id)
-
-    if (memberError) return alert(memberError.message)
-
-    const { error } = await supabase
-      .from('member_change_requests')
-      .update({
-        status: 'genehmigt',
-        reviewed_by: user?.id || null,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq('id', request.id)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('approve_member_change', 'members', request.member_id, member, requestedData)
-    await loadMembers()
-    await loadCurrentMember(user.id)
-    await loadMemberChangeRequests()
-
-    alert('Ã„nderung wurde genehmigt und Ã¼bernommen.')
+    await approveMemberChangeRequestRecord({
+      request,
+      members,
+      user,
+      createAuditLog,
+      loadMembers,
+      loadCurrentMember,
+      loadMemberChangeRequests,
+    })
   }
 
   async function rejectMemberChangeRequest(request) {
@@ -2444,22 +2397,13 @@ export default function App() {
 
     const note = window.prompt('Ablehnungsgrund / Notiz:')
 
-    const { error } = await supabase
-      .from('member_change_requests')
-      .update({
-        status: 'abgelehnt',
-        reviewed_by: user?.id || null,
-        reviewed_at: new Date().toISOString(),
-        review_note: note || null,
-      })
-      .eq('id', request.id)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('reject_member_change', 'member_change_requests', request.id, request, { note })
-    await loadMemberChangeRequests()
-
-    alert('Ã„nderungsantrag wurde abgelehnt.')
+    await rejectMemberChangeRequestRecord({
+      request,
+      user,
+      note,
+      createAuditLog,
+      loadMemberChangeRequests,
+    })
   }
 
   function getCurrentMemberFee() {
@@ -2562,33 +2506,14 @@ export default function App() {
       notes: customerNotes.trim() || null,
     }
 
-    if (editingCustomerId) {
-      const oldCustomer = invoiceCustomers.find((customer) => customer.id === editingCustomerId)
-
-      const { error } = await supabase
-        .from('invoice_customers')
-        .update(payload)
-        .eq('id', editingCustomerId)
-
-      if (error) return alert(error.message)
-
-      await createAuditLog('update', 'invoice_customers', editingCustomerId, oldCustomer, payload)
-      alert('Kunde wurde aktualisiert.')
-    } else {
-      const { data, error } = await supabase
-        .from('invoice_customers')
-        .insert(payload)
-        .select()
-        .single()
-
-      if (error) return alert(error.message)
-
-      await createAuditLog('insert', 'invoice_customers', data?.id, null, data)
-      alert('Kunde wurde angelegt.')
-    }
-
-    resetCustomerForm()
-    await loadInvoiceCustomers()
+    await saveInvoiceCustomerRecord({
+      editingCustomerId,
+      payload,
+      invoiceCustomers,
+      createAuditLog,
+      loadInvoiceCustomers,
+      resetCustomerForm,
+    })
   }
 
   async function deleteInvoiceCustomer(customer) {
@@ -2605,16 +2530,12 @@ export default function App() {
 
     if (!confirmed) return
 
-    const { error } = await supabase
-      .from('invoice_customers')
-      .delete()
-      .eq('id', customer.id)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('delete', 'invoice_customers', customer.id, customer, null)
-    await loadInvoiceCustomers()
-    alert('Kunde wurde gelÃ¶scht.')
+    await deleteInvoiceCustomerRecord({
+      customer,
+      invoices,
+      createAuditLog,
+      loadInvoiceCustomers,
+    })
   }
 
   function getFilteredInvoiceCustomers() {
@@ -4262,37 +4183,16 @@ export default function App() {
       return
     }
 
-    const safeName = documentFile.name.replace(/[^a-zA-Z0-9_.-]/g, '-')
-    const filePath = `${Date.now()}-${Math.random().toString(36).substring(2)}-${safeName}`
-
-    const { error: uploadError } = await supabase.storage
-      .from('documents')
-      .upload(filePath, documentFile)
-
-    if (uploadError) return alert(uploadError.message)
-
-    const { error } = await supabase.from('documents').insert({
-      title: documentTitle,
-      category: documentCategory,
-      document_date: documentDate || null,
-      description: documentDescription || null,
-      file_path: filePath,
-      file_name: documentFile.name,
-      mime_type: documentFile.type || null,
+    await uploadDocumentRecord({
+      documentTitle,
+      documentCategory,
+      documentDate,
+      documentDescription,
+      documentFile,
+      createAuditLog,
+      loadDocuments,
+      resetDocumentForm,
     })
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('insert', 'documents', null, null, {
-      title: documentTitle,
-      category: documentCategory,
-      file_path: filePath,
-      file_name: documentFile.name,
-    })
-
-    resetDocumentForm()
-    await loadDocuments()
-    alert('Dokument wurde hochgeladen.')
   }
 
   async function openDocument(path) {
@@ -4313,23 +4213,11 @@ export default function App() {
 
     if (!confirmed) return
 
-    const { error: storageError } = await supabase.storage
-      .from('documents')
-      .remove([document.file_path])
-
-    if (storageError) return alert(storageError.message)
-
-    const { error } = await supabase
-      .from('documents')
-      .delete()
-      .eq('id', document.id)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('delete', 'documents', document.id, document, null)
-
-    await loadDocuments()
-    alert('Dokument wurde gelÃ¶scht.')
+    await deleteDocumentRecord({
+      document,
+      createAuditLog,
+      loadDocuments,
+    })
   }
 
   async function openReceipt(path) {
