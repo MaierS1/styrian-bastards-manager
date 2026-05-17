@@ -3,14 +3,12 @@ import { supabase } from './lib/supabase'
 import { generateInvoicePdf } from './lib/invoiceGenerator'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { QRCodeCanvas } from 'qrcode.react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import QRCode from 'qrcode'
 import {
   buttonStyle,
   cardStyle,
   colors,
-  dashboardLabelStyle,
   headingStyle,
   inputStyle,
   isMobile,
@@ -42,6 +40,7 @@ import { AdminPage } from './components/admin/AdminPage'
 import { InventoryPage } from './components/inventory/InventoryPage'
 import { InvoicesPage } from './components/invoices/InvoicesPage'
 import { DashboardPage } from './components/dashboard/DashboardPage'
+import { PortalPage } from './components/portal/PortalPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -5982,163 +5981,28 @@ export default function App() {
       )}
 
       {activePage === 'portal' && (
-        <section style={sectionStyle}>
-          <h2 style={headingStyle}>Mein Mitgliederportal</h2>
-
-          {!currentMember ? (
-            <div style={{ ...cardStyle, background: colors.dangerBg, borderColor: colors.red }}>
-              <strong style={{ color: colors.dangerText }}>Kein Mitglied mit diesem Login verknüpft.</strong>
-            </div>
-          ) : (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 15 }}>
-                <div style={{ ...cardStyle, borderTop: `6px solid ${colors.black}` }}>
-                  <strong style={dashboardLabelStyle}>Meine Daten</strong>
-                  <br />
-                  {currentMember.first_name} {currentMember.last_name}
-                  <br />
-                  {currentMember.email || '-'}
-                  <br />
-                  {currentMember.phone || '-'}
-                  <br />
-                  Mitgliedsnummer: {currentMember.member_number || '-'}
-                </div>
-
-                <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
-                  <strong style={dashboardLabelStyle}>Mitgliedschaft</strong>
-                  <br />
-                  Art: {currentMember.member_type || '-'}
-                  <br />
-                  Funktion: {getRoleLabel(currentMember.role || 'mitglied')}
-                  <br />
-                  Status: {currentMember.status || '-'}
-                </div>
-
-                <div style={{ ...cardStyle, borderTop: `6px solid ${getCurrentMemberFee()?.paid ? colors.successText : colors.red}` }}>
-                  <strong style={dashboardLabelStyle}>Mein Beitrag 2026</strong>
-                  <br />
-                  Betrag: {getCurrentMemberFee() ? `${Number(getCurrentMemberFee().amount || 0).toFixed(2)} €` : '-'}
-                  <br />
-                  Status: {getCurrentMemberFee()?.paid ? 'bezahlt' : 'offen'}
-                  <br />
-                  Zahlungsdatum: {getCurrentMemberFee()?.paid_at || '-'}
-                </div>
-              </div>
-
-              <h3 style={headingStyle}>Meine Daten ändern</h3>
-
-              <div style={cardStyle}>
-                <p style={mutedTextStyle}>
-                  Änderungen werden nicht sofort übernommen. Ein Vorstandsmitglied muss sie zuerst bestätigen.
-                </p>
-
-                <input
-                  placeholder="E-Mail"
-                  value={portalEmail}
-                  onChange={(e) => setPortalEmail(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <input
-                  placeholder="Telefon"
-                  value={portalPhone}
-                  onChange={(e) => setPortalPhone(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <input
-                  placeholder="Straße"
-                  value={portalStreet}
-                  onChange={(e) => setPortalStreet(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <input
-                  placeholder="PLZ"
-                  value={portalPostalCode}
-                  onChange={(e) => setPortalPostalCode(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <input
-                  placeholder="Ort"
-                  value={portalCity}
-                  onChange={(e) => setPortalCity(e.target.value)}
-                  style={inputStyle}
-                />
-
-                <select value={portalClothingSize} onChange={(e) => setPortalClothingSize(e.target.value)} style={inputStyle}>
-                  <option value="">Kleidergröße wählen</option>
-                  <option>XXS</option>
-                  <option>XS</option>
-                  <option>S</option>
-                  <option>M</option>
-                  <option>L</option>
-                  <option>XL</option>
-                  <option>XXL</option>
-                  <option>3XL</option>
-                  <option>4XL</option>
-                  <option>5XL</option>
-                </select>
-
-                <button onClick={submitMemberChangeRequest} style={buttonStyle}>
-                  Änderung zur Freigabe einreichen
-                </button>
-              </div>
-
-              <h3 style={headingStyle}>Meine Änderungsanträge</h3>
-
-              {getMyMemberChangeRequests().length === 0 && (
-                <p style={mutedTextStyle}>Keine Änderungsanträge vorhanden.</p>
-              )}
-
-              {getMyMemberChangeRequests().slice(0, 5).map((request) => (
-                <div key={request.id} style={cardStyle}>
-                  <strong>Status: {request.status}</strong>
-                  <br />
-                  Erstellt: {request.created_at ? new Date(request.created_at).toLocaleString('de-AT') : '-'}
-                  <br />
-                  Geändert: {Object.keys(request.requested_data || {}).join(', ')}
-                  {request.review_note && (
-                    <>
-                      <br />
-                      Notiz: {request.review_note}
-                    </>
-                  )}
-                </div>
-              ))}
-
-              <h3 style={headingStyle}>Mein QR-Code</h3>
-
-              <div style={cardStyle}>
-                <QRCodeCanvas value={getMemberQrValue(currentMember)} size={190} />
-                <p style={mutedTextStyle}>
-                  Dieser QR-Code kann für Check-ins bei Events verwendet werden.
-                </p>
-
-                <button onClick={() => exportMemberCardPdf(currentMember)} style={buttonStyle}>
-                  Mitgliedsausweis PDF
-                </button>
-              </div>
-
-              <h3 style={headingStyle}>Aktuelle Events</h3>
-
-              {getUpcomingEvents(60).length === 0 && <p style={mutedTextStyle}>Keine kommenden Events in den nächsten 60 Tagen.</p>}
-
-              {getUpcomingEvents(60).map((event) => (
-                <div key={event.id} style={cardStyle}>
-                  <strong>{event.name}</strong>
-                  <br />
-                  Datum: {event.event_date || '-'}
-                  <br />
-                  Ort: {event.location || '-'}
-                  <br />
-                  Status: {event.status || '-'}
-                </div>
-              ))}
-            </>
-          )}
-        </section>
+        <PortalPage
+          currentMember={currentMember}
+          getRoleLabel={getRoleLabel}
+          currentMemberFee={getCurrentMemberFee()}
+          portalEmail={portalEmail}
+          setPortalEmail={setPortalEmail}
+          portalPhone={portalPhone}
+          setPortalPhone={setPortalPhone}
+          portalStreet={portalStreet}
+          setPortalStreet={setPortalStreet}
+          portalPostalCode={portalPostalCode}
+          setPortalPostalCode={setPortalPostalCode}
+          portalCity={portalCity}
+          setPortalCity={setPortalCity}
+          portalClothingSize={portalClothingSize}
+          setPortalClothingSize={setPortalClothingSize}
+          submitMemberChangeRequest={submitMemberChangeRequest}
+          getMyMemberChangeRequests={getMyMemberChangeRequests}
+          getMemberQrValue={getMemberQrValue}
+          exportMemberCardPdf={exportMemberCardPdf}
+          getUpcomingEvents={getUpcomingEvents}
+        />
       )}
 
       {activePage === 'scanner' && (
