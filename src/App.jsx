@@ -39,6 +39,7 @@ import { fetchMembershipFees } from './services/repositories/membershipFeesRepos
 import { MembersPage } from './components/members/MembersPage'
 import { CashPage } from './components/cash/CashPage'
 import { DocumentsPage } from './components/documents/DocumentsPage'
+import { EventsPage } from './components/events/EventsPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -6339,183 +6340,42 @@ export default function App() {
       )}
 
       {activePage === 'events' && (
-      <>
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>Event-Verwaltung</h2>
-
-        <h3 style={headingStyle}>{editingEventId ? 'Event bearbeiten' : 'Neues Event anlegen'}</h3>
-
-        <input
-          placeholder="Eventname, z.B. Cornhole Turnier 2026"
-          value={newEventName}
-          onChange={(e) => setNewEventName(e.target.value)}
-          style={inputStyle}
+        <EventsPage
+          editingEventId={editingEventId}
+          newEventName={newEventName}
+          setNewEventName={setNewEventName}
+          newEventDate={newEventDate}
+          setNewEventDate={setNewEventDate}
+          newEventLocation={newEventLocation}
+          setNewEventLocation={setNewEventLocation}
+          newEventNotes={newEventNotes}
+          setNewEventNotes={setNewEventNotes}
+          createEvent={createEvent}
+          updateEvent={updateEvent}
+          resetEventForm={resetEventForm}
+          selectedEventId={selectedEventId}
+          setSelectedEventId={setSelectedEventId}
+          setEventName={setEventName}
+          events={events}
+          getActiveEventName={getActiveEventName}
+          getSelectedEventIncomeTotal={getSelectedEventIncomeTotal}
+          getSelectedEventExpenseTotal={getSelectedEventExpenseTotal}
+          getSelectedEventBalance={getSelectedEventBalance}
+          getEventIncomeTotal={getEventIncomeTotal}
+          getEventExpenseTotal={getEventExpenseTotal}
+          getEventBalance={getEventBalance}
+          updateEventStatus={updateEventStatus}
+          editEvent={editEvent}
+          deleteEvent={deleteEvent}
+          isAdmin={isAdmin}
+          exportEventFinancePdf={exportEventFinancePdf}
+          canUseCheckin={canUseCheckin}
+          scanning={scanning}
+          setScanning={setScanning}
+          exportCheckinsPdf={exportCheckinsPdf}
+          getTodayCheckins={getTodayCheckins}
+          getMemberName={getMemberName}
         />
-
-        <input
-          type="date"
-          value={newEventDate}
-          onChange={(e) => setNewEventDate(e.target.value)}
-          style={inputStyle}
-        />
-
-        <input
-          placeholder="Ort"
-          value={newEventLocation}
-          onChange={(e) => setNewEventLocation(e.target.value)}
-          style={inputStyle}
-        />
-
-        <input
-          placeholder="Notizen"
-          value={newEventNotes}
-          onChange={(e) => setNewEventNotes(e.target.value)}
-          style={inputStyle}
-        />
-
-        {editingEventId ? (
-          <>
-            <button onClick={updateEvent} style={buttonStyle}>
-              Änderungen speichern
-            </button>
-            <button onClick={resetEventForm} style={secondaryButtonStyle}>
-              Bearbeiten abbrechen
-            </button>
-          </>
-        ) : (
-          <button onClick={createEvent} style={buttonStyle}>
-            Event anlegen
-          </button>
-        )}
-
-        <h3 style={headingStyle}>Event auswählen</h3>
-
-        <select
-          value={selectedEventId}
-          onChange={(e) => {
-            const eventId = e.target.value
-            setSelectedEventId(eventId)
-            const selectedEvent = events.find((event) => event.id === eventId)
-            setEventName(selectedEvent?.name || '')
-          }}
-          style={inputStyle}
-        >
-          <option value="">Event auswählen</option>
-          {events.map((event) => (
-            <option key={event.id} value={event.id}>
-              {event.name} · {event.event_date} · {event.status}
-            </option>
-          ))}
-        </select>
-
-        <p>
-          Aktives Event:{' '}
-          <strong>{getActiveEventName() || 'kein Event ausgewählt'}</strong>
-        </p>
-
-        {selectedEventId && (
-          <div style={{ ...cardStyle, background: '#ecfdf5', color: '#065f46' }}>
-            <strong>Finanzen für aktives Event</strong>
-            <br />
-            Einnahmen: {getSelectedEventIncomeTotal().toFixed(2)} €
-            <br />
-            Ausgaben: {getSelectedEventExpenseTotal().toFixed(2)} €
-            <br />
-            Ergebnis: {getSelectedEventBalance().toFixed(2)} €
-          </div>
-        )}
-
-        <h3 style={headingStyle}>Event-Liste</h3>
-
-        {events.length === 0 && <p>Noch keine Events angelegt.</p>}
-
-        {events.map((event) => (
-          <div key={event.id} style={cardStyle}>
-            <strong>{event.name}</strong>
-            <br />
-            Datum: {event.event_date || '-'}
-            <br />
-            Ort: {event.location || '-'}
-            <br />
-            Status: {event.status || '-'}
-            <br />
-            Notizen: {event.notes || '-'}
-            <br />
-            Einnahmen: {getEventIncomeTotal(event.id).toFixed(2)} € · Ausgaben: {getEventExpenseTotal(event.id).toFixed(2)} € · Ergebnis: {getEventBalance(event.id).toFixed(2)} €
-            <br />
-            <button onClick={() => updateEventStatus(event.id, 'geplant')} style={buttonStyle}>
-              Geplant
-            </button>
-            <button onClick={() => updateEventStatus(event.id, 'laufend')} style={buttonStyle}>
-              Laufend
-            </button>
-            <button onClick={() => updateEventStatus(event.id, 'abgeschlossen')} style={buttonStyle}>
-              Abgeschlossen
-            </button>
-            <button onClick={() => exportEventFinancePdf(event)} style={buttonStyle}>
-              Finanzbericht PDF
-            </button>
-
-            <button onClick={() => editEvent(event)} style={secondaryButtonStyle}>
-              Event bearbeiten
-            </button>
-
-            {isAdmin() && (
-              <button
-                onClick={() => deleteEvent(event)}
-                style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
-              >
-                Event löschen
-              </button>
-            )}
-          </div>
-        ))}
-      </section>
-
-{canUseCheckin() && (
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>Event Check-in / QR-Code Scanner</h2>
-
-        <p>
-          Aktives Event für Check-in:{' '}
-          <strong>{getActiveEventName() || 'kein Event ausgewählt'}</strong>
-        </p>
-
-        <button onClick={() => setScanning(true)} style={buttonStyle}>
-          QR-Code scannen & einchecken
-        </button>
-
-        <button onClick={() => setScanning(false)} style={buttonStyle}>
-          Scanner stoppen
-        </button>
-
-        <button onClick={exportCheckinsPdf} style={secondaryButtonStyle}>
-          Anwesenheitsliste PDF
-        </button>
-
-        {scanning && (
-          <div
-            id="reader"
-            style={{
-              marginTop: 20,
-              maxWidth: 400,
-              width: '100%',
-            }}
-          />
-        )}
-
-        <h3 style={headingStyle}>Heute für dieses Event eingecheckt: {getTodayCheckins().length}</h3>
-
-        {getTodayCheckins().map((checkin) => (
-          <div key={checkin.id} style={cardStyle}>
-            <strong>{getMemberName(checkin.member_id)}</strong>
-            <br />
-            {checkin.event_name} · {checkin.checkin_time ? new Date(checkin.checkin_time).toLocaleTimeString('de-AT') : ''}
-          </div>
-        ))}
-      </section>
-      )}
-      </>
       )}
 
       {activePage === 'dashboard' && (
