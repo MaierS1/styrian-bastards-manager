@@ -36,6 +36,7 @@ import {
 import { navigationItems } from './app/navigation'
 import { fetchMembers } from './services/repositories/membersRepository'
 import { fetchMembershipFees } from './services/repositories/membershipFeesRepository'
+import { MembersPage } from './components/members/MembersPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -8177,372 +8178,89 @@ export default function App() {
       )}
 
       {activePage === 'members' && (
-      <>
-      {canManageMembers() && (
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>CSV Mitglieder-Import</h2>
-
-        <p style={mutedTextStyle}>
-          CSV-Datei mit Spalten wie Vorname, Nachname, E-Mail, Telefon, Mitgliedsart, Straße, PLZ, Ort,
-          Geburtsdatum und Kleidergröße hochladen. Trennzeichen Komma oder Semikolon funktionieren.
-        </p>
-
-        <input
-          type="file"
-          accept=".csv,text/csv"
-          onChange={handleCsvFile}
-          style={inputStyle}
+        <MembersPage
+          canManageMembers={canManageMembers}
+          csvImportProps={{
+            csvRows,
+            csvFileName,
+            csvImporting,
+            getRoleLabel,
+            handleCsvFile,
+            importCsvMembers,
+            setCsvRows,
+            setCsvFileName,
+          }}
+          formProps={{
+            isAdmin,
+            editingId,
+            firstName,
+            setFirstName,
+            lastName,
+            setLastName,
+            memberEmail,
+            setMemberEmail,
+            phone,
+            setPhone,
+            memberType,
+            setMemberType,
+            role,
+            setRole,
+            appRole,
+            setAppRole,
+            isTestMember,
+            setIsTestMember,
+            street,
+            setStreet,
+            postalCode,
+            setPostalCode,
+            city,
+            setCity,
+            birthdate,
+            setBirthdate,
+            clothingSize,
+            setClothingSize,
+            saveMember,
+            resetForm,
+          }}
+          overviewProps={{
+            members,
+            filteredMembers,
+            memberSearch,
+            setMemberSearch,
+            memberStatusFilter,
+            setMemberStatusFilter,
+            memberTypeFilter,
+            setMemberTypeFilter,
+            roleFilter,
+            setRoleFilter,
+            feeFilter,
+            setFeeFilter,
+            memberTestFilter,
+            setMemberTestFilter,
+            resetMemberFilters,
+            exportAllMemberCardsPdf,
+            tableProps: {
+              getFee,
+              getRoleLabel,
+              getAppRoleLabel,
+              isAdmin,
+              editMember,
+              changeMemberStatus,
+              deleteMember,
+              markMemberAsTest,
+              deleteAllTestDataForMember,
+              checkInMember,
+              isCheckedInToday,
+              showQR,
+              setShowQR,
+              exportMemberCardPdf,
+              getMemberQrValue,
+              createMembershipFeeInvoice,
+              markFeePaid,
+              markFeeOpen,
+            },
+          }}
         />
-
-        {csvFileName && (
-          <p style={mutedTextStyle}>
-            Datei: <strong>{csvFileName}</strong>
-          </p>
-        )}
-
-        {csvRows.length > 0 && (
-          <>
-            <h3 style={headingStyle}>Vorschau: {csvRows.length} Mitglieder</h3>
-
-            {csvRows.slice(0, 5).map((member, index) => (
-              <div key={`${member.first_name}-${member.last_name}-${index}`} style={cardStyle}>
-                <strong>
-                  {member.first_name} {member.last_name}
-                </strong>
-                <br />
-                {member.email || '-'}
-                <br />
-                Mitgliedsart: {member.member_type}
-                <br />
-                Funktion: {getRoleLabel(member.role || 'mitglied')}
-                <br />
-                Adresse: {member.street || '-'}, {member.postal_code || '-'} {member.city || '-'}
-              </div>
-            ))}
-
-            {csvRows.length > 5 && (
-              <p style={mutedTextStyle}>
-                Es werden nur die ersten 5 Zeilen angezeigt. Insgesamt werden {csvRows.length} Mitglieder importiert.
-              </p>
-            )}
-
-            <button onClick={importCsvMembers} style={buttonStyle} disabled={csvImporting}>
-              {csvImporting ? 'Import läuft...' : 'CSV Mitglieder importieren'}
-            </button>
-
-            <button
-              onClick={() => {
-                setCsvRows([])
-                setCsvFileName('')
-              }}
-              style={secondaryButtonStyle}
-              disabled={csvImporting}
-            >
-              Import abbrechen
-            </button>
-          </>
-        )}
-      </section>
-      )}
-
-      {canManageMembers() && (
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>{editingId ? 'Mitglied bearbeiten' : 'Mitglied hinzufügen'}</h2>
-
-        <input placeholder="Vorname" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={inputStyle} />
-        <input placeholder="Nachname" value={lastName} onChange={(e) => setLastName(e.target.value)} style={inputStyle} />
-        <input placeholder="E-Mail" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} style={inputStyle} />
-        <input placeholder="Telefon" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
-
-        <select value={memberType} onChange={(e) => setMemberType(e.target.value)} style={inputStyle}>
-          <option value="vollmitglied">Vollmitglied</option>
-          <option value="ehrenmitglied">Ehrenmitglied</option>
-          <option value="foerdermitglied">Fördermitglied</option>
-          <option value="probejahr">Probejahr</option>
-        </select>
-
-        <select value={role} onChange={(e) => setRole(e.target.value)} style={inputStyle}>
-          <option value="mitglied">Mitglied</option>
-          <option value="obmann">Obmann</option>
-          <option value="obmann_stv">Obmann-Stellvertreter</option>
-          <option value="kassier">Kassier</option>
-          <option value="kassier_stv">Kassier-Stellvertreter</option>
-          <option value="schriftfuehrer">Schriftführer</option>
-          <option value="schriftfuehrer_stv">Schriftführer-Stellvertreter</option>
-          <option value="beirat">Beirat</option>
-          <option value="helfer">Helfer</option>
-        </select>
-
-        {isAdmin() && (
-          <>
-            <select value={appRole} onChange={(e) => setAppRole(e.target.value)} style={inputStyle}>
-              <option value="readonly">App-Recht: Nur Lesen</option>
-              <option value="checkin">App-Recht: Check-in</option>
-              <option value="cashier">App-Recht: Kassa</option>
-              <option value="members">App-Recht: Mitgliederverwaltung</option>
-              <option value="admin">App-Recht: Admin</option>
-            </select>
-
-            <label style={{ display: 'block', marginBottom: 12, fontWeight: 800, color: colors.black }}>
-              <input
-                type="checkbox"
-                checked={isTestMember}
-                onChange={(e) => setIsTestMember(e.target.checked)}
-                style={{ marginRight: 8 }}
-              />
-              Testmitglied
-            </label>
-          </>
-        )}
-
-        <input placeholder="Straße" value={street} onChange={(e) => setStreet(e.target.value)} style={inputStyle} />
-        <input placeholder="PLZ" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} style={inputStyle} />
-        <input placeholder="Ort" value={city} onChange={(e) => setCity(e.target.value)} style={inputStyle} />
-        <input type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} style={inputStyle} />
-
-        <select value={clothingSize} onChange={(e) => setClothingSize(e.target.value)} style={inputStyle}>
-          <option value="">Kleidergröße wählen</option>
-          <option>XXS</option>
-          <option>XS</option>
-          <option>S</option>
-          <option>M</option>
-          <option>L</option>
-          <option>XL</option>
-          <option>XXL</option>
-          <option>3XL</option>
-          <option>4XL</option>
-          <option>5XL</option>
-        </select>
-
-        <button onClick={saveMember} style={buttonStyle}>
-          {editingId ? 'Änderungen speichern' : 'Mitglied speichern'}
-        </button>
-
-        {editingId && (
-          <button onClick={resetForm} style={buttonStyle}>
-            Abbrechen
-          </button>
-        )}
-      </section>
-      )}
-
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>Mitglieder & Beiträge 2026</h2>
-
-        <h3 style={headingStyle}>Mitglieder Suche & Filter</h3>
-
-        <input
-          placeholder="Mitglied suchen..."
-          value={memberSearch}
-          onChange={(e) => setMemberSearch(e.target.value)}
-          style={inputStyle}
-        />
-
-        <select value={memberStatusFilter} onChange={(e) => setMemberStatusFilter(e.target.value)} style={inputStyle}>
-          <option value="alle">Alle Status</option>
-          <option value="aktiv">Aktiv</option>
-          <option value="ruhend">Ruhend</option>
-          <option value="ausgetreten">Ausgetreten</option>
-        </select>
-
-        <select value={memberTypeFilter} onChange={(e) => setMemberTypeFilter(e.target.value)} style={inputStyle}>
-          <option value="alle">Alle Arten</option>
-          <option value="vollmitglied">Vollmitglied</option>
-          <option value="ehrenmitglied">Ehrenmitglied</option>
-          <option value="foerdermitglied">Fördermitglied</option>
-          <option value="probejahr">Probejahr</option>
-        </select>
-
-        <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} style={inputStyle}>
-          <option value="alle">Alle Funktionen</option>
-          <option value="mitglied">Mitglied</option>
-          <option value="obmann">Obmann</option>
-          <option value="obmann_stv">Obmann-Stellvertreter</option>
-          <option value="kassier">Kassier</option>
-          <option value="kassier_stv">Kassier-Stellvertreter</option>
-          <option value="schriftfuehrer">Schriftführer</option>
-          <option value="schriftfuehrer_stv">Schriftführer-Stellvertreter</option>
-          <option value="beirat">Beirat</option>
-          <option value="helfer">Helfer</option>
-        </select>
-
-        <select value={feeFilter} onChange={(e) => setFeeFilter(e.target.value)} style={inputStyle}>
-          <option value="alle">Alle Beiträge</option>
-          <option value="offen">Beitrag offen</option>
-          <option value="bezahlt">Beitrag bezahlt</option>
-          <option value="gratis">Kein Beitrag</option>
-        </select>
-
-        <select value={memberTestFilter} onChange={(e) => setMemberTestFilter(e.target.value)} style={inputStyle}>
-          <option value="alle">Alle Mitglieder</option>
-          <option value="echt">Nur echte Mitglieder</option>
-          <option value="test">Nur Testmitglieder</option>
-        </select>
-
-        <button onClick={resetMemberFilters} style={buttonStyle}>
-          Filter zurücksetzen
-        </button>
-
-        <p>
-          Angezeigt: <strong>{filteredMembers.length}</strong> von {members.length} Mitgliedern
-        </p>
-
-        <button onClick={exportAllMemberCardsPdf} style={buttonStyle}>
-          Mitgliedsausweise als Druckbogen PDF
-        </button>
-
-        <p style={mutedTextStyle}>
-          Druckformat: A4 Hochformat mit 10 Karten pro Seite im Visitenkartenformat.
-          Es werden die aktuell gefilterten Mitglieder gedruckt.
-        </p>
-
-        {filteredMembers.map((member) => {
-          const fee = getFee(member.id)
-
-          return (
-            <div key={member.id} style={cardStyle}>
-              <strong>
-                {member.first_name} {member.last_name}
-              </strong>
-              <br />
-              {member.email}
-              <br />
-              {member.phone}
-              <br />
-              Mitgliedsnummer: {member.member_number || '-'}
-              <br />
-              Mitgliedsart: {member.member_type}
-              <br />
-              Vereinsfunktion: {getRoleLabel(member.role || 'mitglied')}
-              <br />
-              App-Recht: {getAppRoleLabel(member.app_role || 'readonly')}
-              {member.is_test && (
-                <>
-                  <br />
-                  <strong style={{ color: colors.red }}>TESTMITGLIED</strong>
-                </>
-              )}
-              <br />
-              Adresse: {member.street}, {member.postal_code} {member.city}
-              <br />
-              Geburtsdatum: {member.birthdate || '-'}
-              <br />
-              Größe: {member.clothing_size || '-'}
-              <br />
-              Status: {member.status}
-
-              <hr />
-
-              <strong>Mitgliedsbeitrag 2026</strong>
-              <br />
-              Betrag: {fee ? `${Number(fee.amount).toFixed(2)} €` : 'kein Beitrag angelegt'}
-              <br />
-              Status: {fee ? (fee.paid ? 'bezahlt' : 'offen') : '-'}
-              <br />
-              Zahlungsdatum: {fee?.paid_at || '-'}
-              <br />
-              Zahlungsart: {fee?.payment_method || '-'}
-
-              <br />
-              <br />
-
-              <button onClick={() => editMember(member)} style={buttonStyle}>
-                Bearbeiten
-              </button>
-
-              <button onClick={() => changeMemberStatus(member.id, 'aktiv')} style={buttonStyle}>
-                Aktiv
-              </button>
-
-              <button onClick={() => changeMemberStatus(member.id, 'ruhend')} style={buttonStyle}>
-                Ruhend
-              </button>
-
-              <button onClick={() => changeMemberStatus(member.id, 'ausgetreten')} style={buttonStyle}>
-                Ausgetreten
-              </button>
-
-              {isAdmin() && !member.is_test && (
-                <button
-                  onClick={() => deleteMember(member)}
-                  style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
-                >
-                  Mitglied löschen
-                </button>
-              )}
-
-              {isAdmin() && !member.is_test && (
-                <button
-                  onClick={() => markMemberAsTest(member)}
-                  style={{ ...secondaryButtonStyle, borderColor: colors.red, color: colors.red }}
-                >
-                  Als Testmitglied markieren
-                </button>
-              )}
-
-              {isAdmin() && member.is_test && (
-                <button
-                  onClick={() => deleteAllTestDataForMember(member)}
-                  style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
-                >
-                  Testdaten dieses Mitglieds löschen
-                </button>
-              )}
-
-              <button onClick={() => checkInMember(member)} style={buttonStyle}>
-                {isCheckedInToday(member.id) ? 'Heute eingecheckt' : 'Manuell einchecken'}
-              </button>
-
-              <button
-                onClick={() => setShowQR(showQR === member.id ? null : member.id)}
-                style={buttonStyle}
-              >
-                QR-Code
-              </button>
-
-              <button onClick={() => exportMemberCardPdf(member)} style={buttonStyle}>
-                Mitgliedsausweis PDF
-              </button>
-
-              {showQR === member.id && (
-                <div style={{ marginTop: 10 }}>
-                  <QRCodeCanvas value={getMemberQrValue(member)} size={160} />
-                  <p style={{ fontSize: 12 }}>
-                    QR-Code für {member.first_name} {member.last_name}
-                    <br />
-                    {member.member_number || 'ohne Mitgliedsnummer'}
-                    <br />
-                    App-Link QR-Code
-                  </p>
-                </div>
-              )}
-
-              {fee && !fee.paid && (
-                <>
-                  <button onClick={() => createMembershipFeeInvoice(member, fee)} style={secondaryButtonStyle}>
-                    Mitgliedsbeitrag Rechnung erstellen
-                  </button>
-
-                  <button onClick={() => markFeePaid(fee, 'bar')} style={buttonStyle}>
-                    Beitrag bar bezahlt
-                  </button>
-
-                  <button onClick={() => markFeePaid(fee, 'ueberweisung')} style={buttonStyle}>
-                    Beitrag per Überweisung bezahlt
-                  </button>
-                </>
-              )}
-
-              {fee && fee.paid && (
-                <button onClick={() => markFeeOpen(fee)} style={buttonStyle}>
-                  Beitrag wieder offen setzen
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </section>
-      </>
       )}
       </div>
     </main>
