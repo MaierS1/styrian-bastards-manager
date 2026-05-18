@@ -411,6 +411,67 @@ export default function App() {
     }
   }, [loadAll, loadCurrentMember])
 
+  const getAppRole = useCallback(() => {
+    return getMemberAppRole(currentMember)
+  }, [currentMember])
+
+  const isAdmin = useCallback(() => {
+    return isAdminRole(getAppRole())
+  }, [getAppRole])
+
+  const canManageMembers = useCallback(() => {
+    return canManageMembersRole(getAppRole())
+  }, [getAppRole])
+
+  const editMember = useCallback((member) => {
+    setEditingId(member.id)
+    setFirstName(member.first_name || '')
+    setLastName(member.last_name || '')
+    setMemberEmail(member.email || '')
+    setPhone(member.phone || '')
+    setMemberType(member.member_type || 'vollmitglied')
+    setRole(member.role || 'mitglied')
+    setAppRole(member.app_role || 'readonly')
+    setIsTestMember(Boolean(member.is_test))
+    setStreet(member.street || '')
+    setPostalCode(member.postal_code || '')
+    setCity(member.city || '')
+    setBirthdate(member.birthdate || '')
+    setClothingSize(member.clothing_size || '')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  const handleMemberDeepLink = useCallback(() => {
+    const params = new URLSearchParams(window.location.search)
+    const memberCode = params.get('member')
+
+    if (!memberCode || members.length === 0) return
+
+    const member = members.find((item) => item.member_number === memberCode || item.id === memberCode)
+
+    if (!member) {
+      setLinkedMemberNotice(`Mitglied aus QR-Code wurde nicht gefunden: ${memberCode}`)
+      return
+    }
+
+    if (canManageMembers() || isAdmin()) {
+      setMemberSearch(member.member_number || `${member.first_name || ''} ${member.last_name || ''}`)
+      editMember(member)
+      setActivePage('members')
+      setLinkedMemberNotice(`Mitglied aus QR-Code geÃ¶ffnet: ${member.first_name || ''} ${member.last_name || ''}`)
+      return
+    }
+
+    if (currentMember?.id === member.id) {
+      setActivePage('portal')
+      setLinkedMemberNotice('Dein Mitgliederportal wurde Ã¼ber den QR-Code geÃ¶ffnet.')
+      return
+    }
+
+    setActivePage('portal')
+    setLinkedMemberNotice('Dieser Mitgliedsausweis gehÃ¶rt zu einem anderen Mitglied. Du hast keine Berechtigung, diese Daten zu Ã¶ffnen.')
+  }, [canManageMembers, currentMember, editMember, isAdmin, members])
+
   useEffect(() => {
     Promise.resolve().then(() => {
       checkUser()
@@ -457,8 +518,10 @@ export default function App() {
   }, [scanning, members])
 
   useEffect(() => {
-    handleMemberDeepLink()
-  }, [members, currentMember])
+    Promise.resolve().then(() => {
+      handleMemberDeepLink()
+    })
+  }, [handleMemberDeepLink])
 
   useEffect(() => {
     if (!mobileScanning) return
@@ -521,18 +584,6 @@ export default function App() {
       scanner.clear().catch(() => {})
     }
   }, [mobileScanning, mobileScanMode, members, inventoryItems])
-
-  function getAppRole() {
-    return getMemberAppRole(currentMember)
-  }
-
-  function isAdmin() {
-    return isAdminRole(getAppRole())
-  }
-
-  function canManageMembers() {
-    return canManageMembersRole(getAppRole())
-  }
 
   function canManageCash() {
     return canManageCashRole(getAppRole())
@@ -1242,37 +1293,6 @@ export default function App() {
     }
 
     return members.find((member) => member.member_number === text || member.id === text)
-  }
-
-  function handleMemberDeepLink() {
-    const params = new URLSearchParams(window.location.search)
-    const memberCode = params.get('member')
-
-    if (!memberCode || members.length === 0) return
-
-    const member = members.find((item) => item.member_number === memberCode || item.id === memberCode)
-
-    if (!member) {
-      setLinkedMemberNotice(`Mitglied aus QR-Code wurde nicht gefunden: ${memberCode}`)
-      return
-    }
-
-    if (canManageMembers() || isAdmin()) {
-      setMemberSearch(member.member_number || `${member.first_name || ''} ${member.last_name || ''}`)
-      editMember(member)
-      setActivePage('members')
-      setLinkedMemberNotice(`Mitglied aus QR-Code geÃ¶ffnet: ${member.first_name || ''} ${member.last_name || ''}`)
-      return
-    }
-
-    if (currentMember?.id === member.id) {
-      setActivePage('portal')
-      setLinkedMemberNotice('Dein Mitgliederportal wurde Ã¼ber den QR-Code geÃ¶ffnet.')
-      return
-    }
-
-    setActivePage('portal')
-    setLinkedMemberNotice('Dieser Mitgliedsausweis gehÃ¶rt zu einem anderen Mitglied. Du hast keine Berechtigung, diese Daten zu Ã¶ffnen.')
   }
 
   function getTodayCheckins() {
@@ -2771,24 +2791,6 @@ export default function App() {
     setCashSearch('')
     setCashTypeFilter('alle')
     setCashCategoryFilter('alle')
-  }
-
-  function editMember(member) {
-    setEditingId(member.id)
-    setFirstName(member.first_name || '')
-    setLastName(member.last_name || '')
-    setMemberEmail(member.email || '')
-    setPhone(member.phone || '')
-    setMemberType(member.member_type || 'vollmitglied')
-    setRole(member.role || 'mitglied')
-    setAppRole(member.app_role || 'readonly')
-    setIsTestMember(Boolean(member.is_test))
-    setStreet(member.street || '')
-    setPostalCode(member.postal_code || '')
-    setCity(member.city || '')
-    setBirthdate(member.birthdate || '')
-    setClothingSize(member.clothing_size || '')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   async function saveMember() {
