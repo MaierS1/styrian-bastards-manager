@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import {
@@ -351,6 +351,9 @@ export default function App() {
 
   const [activePage, setActivePage] = useState('dashboard')
   const [invitingMemberId, setInvitingMemberId] = useState(null)
+  const selectedEventIdRef = useRef(selectedEventId)
+
+  selectedEventIdRef.current = selectedEventId
 
   const syncPortalFormFromMember = useCallback((member) => {
     if (!member) return
@@ -363,8 +366,55 @@ export default function App() {
     setPortalClothingSize(member.clothing_size || '')
   }, [])
 
+  const loadCurrentMember = useCallback(async (authUserId) => {
+    const loadedMember = await loadCurrentMemberService({
+      authUserId,
+      setCurrentMember,
+    })
+
+    syncPortalFormFromMember(loadedMember)
+    return loadedMember
+  }, [syncPortalFormFromMember])
+
+  const loadAll = useCallback(() => {
+    return loadAllService({
+      loadMembersFn: () => loadMembersService({ setMembers }),
+      loadFeesFn: () => loadFeesService({ year: 2026, setFees }),
+      loadCashEntriesFn: () => loadCashEntriesService({ setCashEntries }),
+      loadCashMonthClosingsFn: () => loadCashMonthClosingsService({ setCashMonthClosings }),
+      loadAuditLogsFn: () => loadAuditLogsService({ setAuditLogs }),
+      loadEventCheckinsFn: () => loadEventCheckinsService({ setEventCheckins }),
+      loadEventsFn: () => loadEventsService({
+        setEvents,
+        selectedEventId: selectedEventIdRef.current,
+        setSelectedEventId,
+        setEventName,
+      }),
+      loadDocumentsFn: () => loadDocumentsService({ setDocuments }),
+      loadInventoryItemsFn: () => loadInventoryItemsService({ setInventoryItems }),
+      loadInvoicesFn: () => loadInvoicesService({ setInvoices }),
+      loadInvoiceItemsFn: () => loadInvoiceItemsService({ setInvoiceItems }),
+      loadMemberChangeRequestsFn: () => loadMemberChangeRequestsService({ setMemberChangeRequests }),
+    })
+  }, [])
+
+  const checkUser = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    setUser(user)
+
+    if (user) {
+      await loadCurrentMember(user.id)
+      loadAll()
+    }
+  }, [loadAll, loadCurrentMember])
+
   useEffect(() => {
-    checkUser()
+    Promise.resolve().then(() => {
+      checkUser()
+    })
 
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
@@ -376,7 +426,7 @@ export default function App() {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
     }
-  }, [])
+  }, [checkUser])
 
   useEffect(() => {
     if (!scanning) return
@@ -471,46 +521,6 @@ export default function App() {
       scanner.clear().catch(() => {})
     }
   }, [mobileScanning, mobileScanMode, members, inventoryItems])
-
-  async function checkUser() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    setUser(user)
-
-    if (user) {
-      await loadCurrentMember(user.id)
-      loadAll()
-    }
-  }
-
-  async function loadCurrentMember(authUserId) {
-    const loadedMember = await loadCurrentMemberService({
-      authUserId,
-      setCurrentMember,
-    })
-
-    syncPortalFormFromMember(loadedMember)
-    return loadedMember
-  }
-
-  async function loadAll() {
-    return loadAllService({
-      loadMembersFn: loadMembers,
-      loadFeesFn: loadFees,
-      loadCashEntriesFn: loadCashEntries,
-      loadCashMonthClosingsFn: loadCashMonthClosings,
-      loadAuditLogsFn: loadAuditLogs,
-      loadEventCheckinsFn: loadEventCheckins,
-      loadEventsFn: loadEvents,
-      loadDocumentsFn: loadDocuments,
-      loadInventoryItemsFn: loadInventoryItems,
-      loadInvoicesFn: loadInvoices,
-      loadInvoiceItemsFn: loadInvoiceItems,
-      loadMemberChangeRequestsFn: loadMemberChangeRequests,
-    })
-  }
 
   function getAppRole() {
     return getMemberAppRole(currentMember)
