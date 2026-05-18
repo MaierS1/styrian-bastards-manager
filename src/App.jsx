@@ -423,6 +423,67 @@ export default function App() {
     return canManageMembersRole(getAppRole())
   }, [getAppRole])
 
+  const canUseCheckin = useCallback(() => {
+    return canUseCheckinRole(getAppRole())
+  }, [getAppRole])
+
+  const getTodayDate = useCallback(() => {
+    return new Date().toISOString().slice(0, 10)
+  }, [])
+
+  const getSelectedEvent = useCallback(() => {
+    return events.find((event) => event.id === selectedEventId)
+  }, [events, selectedEventId])
+
+  const getActiveEventName = useCallback(() => {
+    const selectedEvent = getSelectedEvent()
+    return selectedEvent?.name || String(eventName || '').trim()
+  }, [eventName, getSelectedEvent])
+
+  const getTodayCheckins = useCallback(() => {
+    const today = getTodayDate()
+    const activeEventName = getActiveEventName()
+    return eventCheckins.filter(
+      (checkin) => checkin.checkin_date === today && checkin.event_name === activeEventName
+    )
+  }, [eventCheckins, getActiveEventName, getTodayDate])
+
+  const isCheckedInToday = useCallback((memberId) => {
+    return getTodayCheckins().some((checkin) => checkin.member_id === memberId)
+  }, [getTodayCheckins])
+
+  const getMemberFromQrValue = useCallback((value) => {
+    const text = String(value || '').trim()
+
+    try {
+      const url = new URL(text)
+      const memberCode = url.searchParams.get('member')
+
+      if (memberCode) {
+        return members.find((member) => member.member_number === memberCode || member.id === memberCode)
+      }
+    } catch {
+      // kein URL-QR, weiter unten als alte Mitgliedsnummer/ID behandeln
+    }
+
+    return members.find((member) => member.member_number === text || member.id === text)
+  }, [members])
+
+  const getInventoryQrValue = useCallback((item) => {
+    return buildGetInventoryQrValue(item)
+  }, [])
+
+  const checkInMember = useCallback(async (member) => {
+    await checkInMemberRecord({
+      member,
+      canUseCheckin,
+      getActiveEventName,
+      isCheckedInToday,
+      getTodayDate,
+      loadEventCheckins: () => loadEventCheckinsService({ setEventCheckins }),
+    })
+  }, [canUseCheckin, getActiveEventName, getTodayDate, isCheckedInToday])
+
   const editMember = useCallback((member) => {
     setEditingId(member.id)
     setFirstName(member.first_name || '')
@@ -515,7 +576,7 @@ export default function App() {
     return () => {
       scanner.clear().catch(() => {})
     }
-  }, [scanning, members])
+  }, [checkInMember, getMemberFromQrValue, scanning])
 
   useEffect(() => {
     Promise.resolve().then(() => {
@@ -583,14 +644,20 @@ export default function App() {
     return () => {
       scanner.clear().catch(() => {})
     }
-  }, [mobileScanning, mobileScanMode, members, inventoryItems])
+  }, [
+    canManageMembers,
+    checkInMember,
+    editMember,
+    getInventoryQrValue,
+    getMemberFromQrValue,
+    inventoryItems,
+    isAdmin,
+    mobileScanMode,
+    mobileScanning,
+  ])
 
   function canManageCash() {
     return canManageCashRole(getAppRole())
-  }
-
-  function canUseCheckin() {
-    return canUseCheckinRole(getAppRole())
   }
 
   function canManageEvents() {
@@ -667,12 +734,6 @@ export default function App() {
     if (error) {
       console.warn('Audit Log Fehler:', error.message)
     }
-  }
-
-  async function loadEventCheckins() {
-    return loadEventCheckinsService({
-      setEventCheckins,
-    })
   }
 
   async function loadEvents() {
@@ -1217,19 +1278,6 @@ export default function App() {
       .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
   }
 
-  function getTodayDate() {
-    return new Date().toISOString().slice(0, 10)
-  }
-
-  function getSelectedEvent() {
-    return events.find((event) => event.id === selectedEventId)
-  }
-
-  function getActiveEventName() {
-    const selectedEvent = getSelectedEvent()
-    return selectedEvent?.name || String(eventName || '').trim()
-  }
-
   function getEventNameById(eventId) {
     const event = events.find((item) => item.id === eventId)
     return event ? event.name : ''
@@ -1276,35 +1324,6 @@ export default function App() {
   function getMemberQrValue(member) {
     const memberCode = member.member_number || member.id
     return `${window.location.origin}${window.location.pathname}?member=${encodeURIComponent(memberCode)}`
-  }
-
-  function getMemberFromQrValue(value) {
-    const text = String(value || '').trim()
-
-    try {
-      const url = new URL(text)
-      const memberCode = url.searchParams.get('member')
-
-      if (memberCode) {
-        return members.find((member) => member.member_number === memberCode || member.id === memberCode)
-      }
-    } catch {
-      // kein URL-QR, weiter unten als alte Mitgliedsnummer/ID behandeln
-    }
-
-    return members.find((member) => member.member_number === text || member.id === text)
-  }
-
-  function getTodayCheckins() {
-    const today = getTodayDate()
-    const activeEventName = getActiveEventName()
-    return eventCheckins.filter(
-      (checkin) => checkin.checkin_date === today && checkin.event_name === activeEventName
-    )
-  }
-
-  function isCheckedInToday(memberId) {
-    return getTodayCheckins().some((checkin) => checkin.member_id === memberId)
   }
 
   function getMonthlyData() {
@@ -1920,10 +1939,6 @@ export default function App() {
       createAuditLog,
       loadInventoryItems,
     })
-  }
-
-  function getInventoryQrValue(item) {
-    return buildGetInventoryQrValue(item)
   }
 
   function exportInventoryCsv() {
@@ -2725,17 +2740,6 @@ export default function App() {
       setCashEventId,
       setEventName,
       resetEventForm,
-    })
-  }
-
-  async function checkInMember(member) {
-    await checkInMemberRecord({
-      member,
-      canUseCheckin,
-      getActiveEventName,
-      isCheckedInToday,
-      getTodayDate,
-      loadEventCheckins,
     })
   }
 
