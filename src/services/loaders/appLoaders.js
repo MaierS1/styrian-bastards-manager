@@ -18,6 +18,7 @@ export async function loadCurrentMember({ authUserId, setCurrentMember, alertFn 
   }
 
   setCurrentMember(data)
+  return data
 }
 
 export async function loadMembers({ setMembers, alertFn = alert }) {

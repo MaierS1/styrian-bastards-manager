@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import {
@@ -352,6 +352,17 @@ export default function App() {
   const [activePage, setActivePage] = useState('dashboard')
   const [invitingMemberId, setInvitingMemberId] = useState(null)
 
+  const syncPortalFormFromMember = useCallback((member) => {
+    if (!member) return
+
+    setPortalEmail(member.email || '')
+    setPortalPhone(member.phone || '')
+    setPortalStreet(member.street || '')
+    setPortalPostalCode(member.postal_code || '')
+    setPortalCity(member.city || '')
+    setPortalClothingSize(member.clothing_size || '')
+  }, [])
+
   useEffect(() => {
     checkUser()
 
@@ -394,17 +405,6 @@ export default function App() {
       scanner.clear().catch(() => {})
     }
   }, [scanning, members])
-
-  useEffect(() => {
-    if (!currentMember) return
-
-    setPortalEmail(currentMember.email || '')
-    setPortalPhone(currentMember.phone || '')
-    setPortalStreet(currentMember.street || '')
-    setPortalPostalCode(currentMember.postal_code || '')
-    setPortalCity(currentMember.city || '')
-    setPortalClothingSize(currentMember.clothing_size || '')
-  }, [currentMember])
 
   useEffect(() => {
     handleMemberDeepLink()
@@ -486,10 +486,13 @@ export default function App() {
   }
 
   async function loadCurrentMember(authUserId) {
-    return loadCurrentMemberService({
+    const loadedMember = await loadCurrentMemberService({
       authUserId,
       setCurrentMember,
     })
+
+    syncPortalFormFromMember(loadedMember)
+    return loadedMember
   }
 
   async function loadAll() {
