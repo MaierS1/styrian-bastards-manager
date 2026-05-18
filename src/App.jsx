@@ -87,6 +87,20 @@ import {
   updateCashEntryRecord,
 } from './services/repositories/cashRepository'
 import {
+  closeCashMonthService,
+  reopenCashMonthService,
+} from './services/cash/cashMonthService'
+import { createAutomaticCarryoverService } from './services/cash/carryoverService'
+import {
+  saveOfflineCashEntryService,
+  syncOfflineCashEntriesService,
+} from './services/cash/offlineCashService'
+import { getCashbookDetailedSummaryService } from './services/cash/summary/cashbookSummary'
+import {
+  importCashbookRowsService,
+  parseCashbookEntries,
+} from './services/cash/import/cashbookImportService'
+import {
   checkInMemberRecord,
   createEventRecord,
   deleteEventRecord,
@@ -668,69 +682,16 @@ export default function App() {
   }
 
   async function createAutomaticCarryover() {
-    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
-
-    if (!carryoverFromYear || !carryoverToYear) {
-      alert('Bitte Quelljahr und Zieljahr auswÃ¤hlen.')
-      return
-    }
-
-    if (String(carryoverFromYear) === String(carryoverToYear)) {
-      alert('Quelljahr und Zieljahr dÃ¼rfen nicht gleich sein.')
-      return
-    }
-
-    if (Number(carryoverToYear) !== Number(carryoverFromYear) + 1) {
-      const proceed = window.confirm(
-        'Das Zieljahr ist nicht direkt das Folgejahr. Trotzdem Ãœbertrag erstellen?'
-      )
-
-      if (!proceed) return
-    }
-
-    if (hasOpeningForYear(carryoverToYear)) {
-      alert(`FÃ¼r ${carryoverToYear} existiert bereits ein Ãœbertrag Vorjahr.`)
-      return
-    }
-
-    const balance = getCashBalanceForYear(carryoverFromYear)
-
-    if (balance === 0) {
-      const proceed = window.confirm(
-        `Der Endsaldo ${carryoverFromYear} ist 0,00 â‚¬. Trotzdem Ãœbertrag erstellen?`
-      )
-
-      if (!proceed) return
-    }
-
-    const confirmed = window.confirm(
-      `Ãœbertrag erstellen?\n\nEndsaldo ${carryoverFromYear}: ${balance.toFixed(2)} â‚¬\nZieljahr: ${carryoverToYear}\n\nDer Ãœbertrag wird als Startsaldo am 01.01.${carryoverToYear} angelegt.`
-    )
-
-    if (!confirmed) return
-
-    const carryoverEntry = {
-      entry_date: `${carryoverToYear}-01-01`,
-      entry_year: Number(carryoverToYear),
-      type: balance >= 0 ? 'einnahme' : 'ausgabe',
-      category: 'sonstiges',
-      payment_method: 'bar',
-      is_opening: true,
-      amount: Math.abs(balance),
-      description: `Ãœbertrag Vorjahr automatisch aus ${carryoverFromYear}`,
-      receipt_url: null,
-      event_id: null,
-    }
-
-    const { error } = await supabase.from('cash_entries').insert(carryoverEntry)
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('create_carryover', 'cash_entries', null, null, carryoverEntry)
-
-    await loadCashEntries()
-    setSelectedCashYear(String(carryoverToYear))
-    alert('Ãœbertrag wurde erstellt.')
+    return createAutomaticCarryoverService({
+      canManageCash,
+      carryoverFromYear,
+      carryoverToYear,
+      hasOpeningForYear,
+      getCashBalanceForYear,
+      createAuditLog,
+      loadCashEntries,
+      setSelectedCashYear,
+    })
   }
 
   function getUpcomingEvents(days = 14) {
@@ -1117,160 +1078,35 @@ export default function App() {
   }
 
   async function closeCashMonth(year, month) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Monate abschlieÃŸen.')
-
-    if (!year || !month) {
-      alert('Jahr und Monat fehlen.')
-      return
-    }
-
-    if (isCashMonthClosed(year, month)) {
-      alert('Dieser Monat ist bereits abgeschlossen.')
-      return
-    }
-
-    const note = window.prompt(`Notiz zum Monatsabschluss ${String(month).padStart(2, '0')}/${year}:`, '')
-
-    const confirmed = window.confirm(
-      `Monat wirklich abschlieÃŸen?\n\n${String(month).padStart(2, '0')}/${year}\n\nDanach kÃ¶nnen EintrÃ¤ge in diesem Monat nicht mehr bearbeitet oder storniert werden.`
-    )
-
-    if (!confirmed) return
-
-    const { error } = await supabase.from('cash_month_closings').insert({
-      year: Number(year),
-      month: Number(month),
-      closed_by: user?.id || null,
-      note: note || null,
+    return closeCashMonthService({
+      year,
+      month,
+      isAdmin,
+      isCashMonthClosed,
+      user,
+      createAuditLog,
+      loadCashMonthClosings,
     })
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('close_month', 'cash_month_closings', null, null, { year: Number(year), month: Number(month), note: note || null })
-
-    await loadCashMonthClosings()
-    alert('Monat wurde abgeschlossen.')
   }
 
   async function reopenCashMonth(year, month) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen MonatsabschlÃ¼sse aufheben.')
-
-    const confirmed = window.confirm(
-      `Monatsabschluss wirklich aufheben?\n\n${String(month).padStart(2, '0')}/${year}`
-    )
-
-    if (!confirmed) return
-
-    const { error } = await supabase
-      .from('cash_month_closings')
-      .delete()
-      .eq('year', Number(year))
-      .eq('month', Number(month))
-
-    if (error) return alert(error.message)
-
-    await createAuditLog('reopen_month', 'cash_month_closings', null, { year: Number(year), month: Number(month) }, null)
-
-    await loadCashMonthClosings()
-    alert('Monatsabschluss wurde aufgehoben.')
+    return reopenCashMonthService({
+      year,
+      month,
+      isAdmin,
+      createAuditLog,
+      loadCashMonthClosings,
+    })
   }
 
 
   function getCashbookDetailedSummary() {
-    const grouped = {}
-
-    getCashEntriesForSelectedYear().filter((entry) => !entry.is_cancelled).forEach((entry) => {
-      const monthKey = getCashMonthKey(entry.entry_date)
-
-      if (!grouped[monthKey]) {
-        grouped[monthKey] = {
-          monthKey,
-          year: String(entry.entry_year || String(entry.entry_date || '').slice(0, 4)),
-          openingBankIncome: 0,
-          openingBankExpense: 0,
-          openingCashIncome: 0,
-          openingCashExpense: 0,
-          openingBank: 0,
-          openingCash: 0,
-          incomeBank: 0,
-          expenseBank: 0,
-          incomeCash: 0,
-          expenseCash: 0,
-          totalIncome: 0,
-          totalExpense: 0,
-          totalIncomeWithOpening: 0,
-          totalExpenseWithOpening: 0,
-          monthMovement: 0,
-          differenceWithOpening: 0,
-          runningBalance: 0,
-          entries: [],
-        }
-      }
-
-      const amount = Number(entry.amount || 0)
-      const paymentMethod = getPaymentMethod(entry)
-
-      if (entry.is_opening) {
-        if (paymentMethod === 'ebanking') {
-          if (entry.type === 'einnahme') grouped[monthKey].openingBankIncome += amount
-          if (entry.type === 'ausgabe') grouped[monthKey].openingBankExpense += amount
-        } else {
-          if (entry.type === 'einnahme') grouped[monthKey].openingCashIncome += amount
-          if (entry.type === 'ausgabe') grouped[monthKey].openingCashExpense += amount
-        }
-
-        grouped[monthKey].openingBank = grouped[monthKey].openingBankIncome - grouped[monthKey].openingBankExpense
-        grouped[monthKey].openingCash = grouped[monthKey].openingCashIncome - grouped[monthKey].openingCashExpense
-
-        grouped[monthKey].entries.push(entry)
-        return
-      }
-
-      if (entry.type === 'einnahme') {
-        grouped[monthKey].totalIncome += amount
-        if (paymentMethod === 'ebanking') grouped[monthKey].incomeBank += amount
-        else grouped[monthKey].incomeCash += amount
-      }
-
-      if (entry.type === 'ausgabe') {
-        grouped[monthKey].totalExpense += amount
-        if (paymentMethod === 'ebanking') grouped[monthKey].expenseBank += amount
-        else grouped[monthKey].expenseCash += amount
-      }
-
-      grouped[monthKey].entries.push(entry)
+    return getCashbookDetailedSummaryService({
+      entries: getCashEntriesForSelectedYear(),
+      selectedCashYear,
+      getCashMonthKey,
+      getPaymentMethod,
     })
-
-    let runningBalance = 0
-    let currentYear = null
-
-    return Object.values(grouped)
-      .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
-      .map((month) => {
-        const monthYear = String(month.year || month.monthKey.slice(0, 4))
-
-        if (selectedCashYear === 'alle' && currentYear !== monthYear) {
-          runningBalance = 0
-          currentYear = monthYear
-        }
-
-        const openingTotal = month.openingBank + month.openingCash
-        month.monthMovement = month.totalIncome - month.totalExpense
-        month.totalIncomeWithOpening =
-          month.openingBankIncome + month.openingCashIncome + month.totalIncome
-        month.totalExpenseWithOpening =
-          month.openingBankExpense + month.openingCashExpense + month.totalExpense
-        month.differenceWithOpening =
-          month.totalIncomeWithOpening - month.totalExpenseWithOpening
-
-        runningBalance += openingTotal + month.monthMovement
-
-        return {
-          ...month,
-          openingTotal,
-          runningBalance,
-        }
-      })
   }
 
   function getOpenFeesCount() {
@@ -3222,39 +3058,18 @@ export default function App() {
   }
 
   function saveOfflineCashEntry(entry) {
-    const current = JSON.parse(localStorage.getItem('offlineCashEntries') || '[]')
-    const updated = [entry, ...current]
-
-    localStorage.setItem('offlineCashEntries', JSON.stringify(updated))
-    setOfflineCashEntries(updated)
+    return saveOfflineCashEntryService({
+      entry,
+      setOfflineCashEntries,
+    })
   }
 
   async function syncOfflineCashEntries() {
-    if (!navigator.onLine) {
-      alert('Keine Internetverbindung.')
-      return
-    }
-
-    if (offlineCashEntries.length === 0) {
-      alert('Keine Offline-EintrÃ¤ge vorhanden.')
-      return
-    }
-
-    const entriesToSync = offlineCashEntries.map((offlineEntry) => {
-      const entry = { ...offlineEntry }
-      delete entry.offline_id
-      return entry
+    return syncOfflineCashEntriesService({
+      offlineCashEntries,
+      setOfflineCashEntries,
+      loadCashEntries,
     })
-
-    const { error } = await supabase.from('cash_entries').insert(entriesToSync)
-
-    if (error) return alert(error.message)
-
-    localStorage.removeItem('offlineCashEntries')
-    setOfflineCashEntries([])
-    loadCashEntries()
-
-    alert('Offline-EintrÃ¤ge wurden synchronisiert.')
   }
 
   function resetEventForm() {
@@ -3514,202 +3329,6 @@ export default function App() {
     })
   }
 
-  function parseEuroAmount(value) {
-    const cleaned = String(value || '')
-      .trim()
-      .replace('â‚¬', '')
-      .replace(/\s/g, '')
-      .replace(/\./g, '')
-      .replace(',', '.')
-
-    const amount = Number(cleaned)
-
-    if (!Number.isFinite(amount) || amount === 0) {
-      return null
-    }
-
-    return amount
-  }
-
-  function normalizeCashDate(value) {
-    const text = String(value || '').trim()
-
-    if (!text || text === '-') return ''
-
-    const parts = text.split('.')
-
-    if (parts.length === 3) {
-      const day = parts[0].padStart(2, '0')
-      const month = parts[1].padStart(2, '0')
-      const year = parts[2]
-
-      return `${year}-${month}-${day}`
-    }
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-      return text
-    }
-
-    return ''
-  }
-
-  function getCashCategoryFromText(value) {
-    const text = String(value || '').toLowerCase()
-
-    if (text.includes('mitglied') || text.includes('beitrag')) return 'mitgliedsbeitrag'
-    if (text.includes('pfand')) return 'pfandbecher'
-    if (text.includes('turnier') || text.includes('event') || text.includes('veranstaltung')) return 'veranstaltung'
-    if (text.includes('shirt') || text.includes('fanartikel') || text.includes('merch')) return 'fanartikel'
-
-    return 'sonstiges'
-  }
-
-  function cashbookRowToEntries(row) {
-    const rawDate = normalizeCashDate(getCsvValue(row, ['datum']))
-    const description = getCsvValue(row, ['bezeichnung', 'beschreibung', 'description'])
-    const date = rawDate || (description.toLowerCase().includes('Ã¼bertrag') || description.toLowerCase().includes('uebertrag') ? row.__month_start : '')
-    const note = getCsvValue(row, ['anmerkung', 'notiz', 'notes'])
-    const number = getCsvValue(row, ['nummer', 'belegnummer'])
-    const lowerDescription = description.toLowerCase()
-    const isOpening = lowerDescription.includes('Ã¼bertrag vorjahr') || lowerDescription.includes('uebertrag vorjahr')
-    const isCarryForward = lowerDescription.includes('Ã¼bertrag vormonat') || lowerDescription.includes('uebertrag vormonat')
-    const importedEntries = []
-
-    if (isCarryForward) return importedEntries
-    if (!date || !description) return importedEntries
-
-    const options = [
-      {
-        amount: parseEuroAmount(getCsvValue(row, ['einnahme e-banking', 'einnahme ebanking', 'einnahme bank'])),
-        type: 'einnahme',
-        payment: 'E-Banking',
-        payment_method: 'ebanking',
-      },
-      {
-        amount: parseEuroAmount(getCsvValue(row, ['ausgabe e-banking', 'ausgabe ebanking', 'ausgabe bank'])),
-        type: 'ausgabe',
-        payment: 'E-Banking',
-        payment_method: 'ebanking',
-      },
-      {
-        amount: parseEuroAmount(getCsvValue(row, ['einnahme bar'])),
-        type: 'einnahme',
-        payment: 'Bar',
-        payment_method: 'bar',
-      },
-      {
-        amount: parseEuroAmount(getCsvValue(row, ['ausgabe bar'])),
-        type: 'ausgabe',
-        payment: 'Bar',
-        payment_method: 'bar',
-      },
-      {
-        amount: parseEuroAmount(getCsvValue(row, ['betrag'])),
-        type: normalizeCashType(getCsvValue(row, ['typ', 'type'])),
-        payment: getCsvValue(row, ['zahlungsart', 'payment']) || '',
-      },
-    ]
-
-    options.forEach((option) => {
-      if (!option.amount || !option.type) return
-
-      const fullDescription = [
-        description,
-        note ? `Anmerkung: ${note}` : '',
-        number ? `Nr.: ${number}` : '',
-        option.payment ? `Zahlungsart: ${option.payment}` : '',
-      ]
-        .filter(Boolean)
-        .join(' | ')
-
-      importedEntries.push({
-        entry_date: date,
-        type: option.type,
-        category: getCashCategoryFromText(`${description} ${note}`),
-        amount: option.amount,
-        description: fullDescription,
-        receipt_url: null,
-        event_id: cashEventId || null,
-        payment_method: option.payment_method || 'bar',
-        entry_year: Number(String(date).slice(0, 4)),
-        is_opening: isOpening,
-      })
-    })
-
-    return importedEntries
-  }
-
-  function normalizeCashType(value) {
-    const text = String(value || '').toLowerCase()
-
-    if (text.includes('aus')) return 'ausgabe'
-    if (text.includes('ein')) return 'einnahme'
-
-    return ''
-  }
-
-  function parseCashbookTextWithMonths(rawText) {
-    const cleaned = String(rawText || '').replace(/^\uFEFF/, '').trim()
-    if (!cleaned) return []
-
-    const lines = cleaned.split(/\r?\n/).filter((line) => line.trim())
-    if (lines.length < 2) return []
-
-    const separator = lines[0].includes(';') ? ';' : ','
-    const headers = parseCsvLine(lines[0], separator).map((header) => header.trim())
-
-    const monthNumbers = {
-      'jÃ¤nner': '01',
-      'jaenner': '01',
-      'januar': '01',
-      'februar': '02',
-      'mÃ¤rz': '03',
-      'maerz': '03',
-      'april': '04',
-      'mai': '05',
-      'juni': '06',
-      'juli': '07',
-      'august': '08',
-      'september': '09',
-      'oktober': '10',
-      'november': '11',
-      'dezember': '12',
-    }
-
-    let currentMonthDate = ''
-
-    return lines.slice(1).map((line) => {
-      const values = parseCsvLine(line, separator)
-      const row = {}
-
-      headers.forEach((header, index) => {
-        row[header] = values[index] || ''
-      })
-
-      const firstCell = String(values[0] || '').trim()
-      const monthMatch = firstCell.match(/^([A-Za-zÃ„Ã–ÃœÃ¤Ã¶Ã¼ÃŸ]+)\s+(\d{4})$/)
-
-      if (monthMatch) {
-        const monthName = monthMatch[1]
-          .toLowerCase()
-          .replace('Ã¤', 'ae')
-          .replace('Ã¶', 'oe')
-          .replace('Ã¼', 'ue')
-          .replace('ÃŸ', 'ss')
-
-        const month = monthNumbers[monthName]
-        const year = monthMatch[2]
-
-        if (month) {
-          currentMonthDate = `${year}-${month}-01`
-        }
-      }
-
-      row.__month_start = currentMonthDate
-      return row
-    })
-  }
-
   function handleCashbookFile(event) {
     const file = event.target.files?.[0]
 
@@ -3725,8 +3344,7 @@ export default function App() {
 
     reader.onload = () => {
       try {
-        const rows = parseCashbookTextWithMonths(String(reader.result || ''))
-        const entries = rows.flatMap(cashbookRowToEntries)
+        const entries = parseCashbookEntries(String(reader.result || ''), cashEventId)
 
         setCashbookRows(entries)
 
@@ -3752,59 +3370,18 @@ export default function App() {
     setCashbookImporting(true)
 
     try {
-      const blockedRows = cashbookRows.filter((row) => {
-        const year = Number(row.entry_year || String(row.entry_date || '').slice(0, 4))
-        const month = Number(String(row.entry_date || '').slice(5, 7))
-        return isCashMonthClosed(year, month)
+      await importCashbookRowsService({
+        canManageCash,
+        cashbookRows,
+        cashEntries,
+        cashbookFileName,
+        isCashMonthClosed,
+        getEntryYear,
+        createAuditLog,
+        setCashbookRows,
+        setCashbookFileName,
+        loadCashEntries,
       })
-
-      if (blockedRows.length > 0) {
-        alert('Import abgebrochen: Mindestens ein Eintrag liegt in einem bereits abgeschlossenen Monat.')
-        return
-      }
-
-      const yearCounters = {}
-
-      cashEntries.forEach((entry) => {
-        const year = getEntryYear(entry)
-        const receiptNumber = String(entry.receipt_number || '')
-        const numberPart = Number(receiptNumber.replace(`${year}-`, ''))
-
-        if (receiptNumber.startsWith(`${year}-`) && Number.isFinite(numberPart)) {
-          yearCounters[year] = Math.max(yearCounters[year] || 0, numberPart)
-        }
-      })
-
-      const rowsWithReceiptNumbers = [...cashbookRows]
-        .sort((a, b) => String(a.entry_date || '').localeCompare(String(b.entry_date || '')))
-        .map((row) => {
-          const year = String(row.entry_year || String(row.entry_date || '').slice(0, 4) || new Date().getFullYear())
-          yearCounters[year] = (yearCounters[year] || 0) + 1
-
-          return {
-            ...row,
-            entry_year: Number(year),
-            receipt_number: row.receipt_number || `${year}-${String(yearCounters[year]).padStart(3, '0')}`,
-            is_cancelled: false,
-          }
-        })
-
-      const { error } = await supabase
-        .from('cash_entries')
-        .insert(rowsWithReceiptNumbers)
-
-      if (error) return alert(error.message)
-
-      await createAuditLog('bulk_import', 'cash_entries', null, null, {
-        count: rowsWithReceiptNumbers.length,
-        file: cashbookFileName,
-      })
-
-      setCashbookRows([])
-      setCashbookFileName('')
-      await loadCashEntries()
-
-      alert('Kassabuch wurde importiert.')
     } finally {
       setCashbookImporting(false)
     }
