@@ -78,6 +78,7 @@ import {
   loadInvoices as loadInvoicesService,
   loadMemberChangeRequests as loadMemberChangeRequestsService,
   loadMembers as loadMembersService,
+  loadSponsors as loadSponsorsService,
 } from './services/loaders/appLoaders'
 import {
   addCashEntryRecord,
@@ -191,6 +192,11 @@ import {
   retireInventoryItemRecord,
   saveInventoryItemRecord,
 } from './services/repositories/inventoryRepository'
+import {
+  deleteSponsorRecord,
+  saveSponsorRecord,
+} from './services/repositories/sponsorsRepository'
+import { SponsorsPage } from './components/sponsors/SponsorsPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -211,6 +217,7 @@ export default function App() {
   const [invoiceItems, setInvoiceItems] = useState([])
   const [invoiceCustomers, setInvoiceCustomers] = useState([])
   const [memberChangeRequests, setMemberChangeRequests] = useState([])
+  const [sponsors, setSponsors] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
   const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
@@ -308,6 +315,16 @@ export default function App() {
   const [mobileScanning, setMobileScanning] = useState(false)
   const [mobileScanMode, setMobileScanMode] = useState('member')
 
+  const [sponsorEditingId, setSponsorEditingId] = useState(null)
+  const [sponsorName, setSponsorName] = useState('')
+  const [sponsorContactPerson, setSponsorContactPerson] = useState('')
+  const [sponsorEmail, setSponsorEmail] = useState('')
+  const [sponsorPhone, setSponsorPhone] = useState('')
+  const [sponsorWebsite, setSponsorWebsite] = useState('')
+  const [sponsorLogoPath, setSponsorLogoPath] = useState('')
+  const [sponsorStatus, setSponsorStatus] = useState('active')
+  const [sponsorNotes, setSponsorNotes] = useState('')
+
   const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
   const [invoiceCustomerEmail, setInvoiceCustomerEmail] = useState('')
@@ -395,6 +412,7 @@ export default function App() {
       loadInvoicesFn: () => loadInvoicesService({ setInvoices }),
       loadInvoiceItemsFn: () => loadInvoiceItemsService({ setInvoiceItems }),
       loadMemberChangeRequestsFn: () => loadMemberChangeRequestsService({ setMemberChangeRequests }),
+      loadSponsorsFn: () => loadSponsorsService({ setSponsors }),
     })
   }, [])
 
@@ -778,6 +796,12 @@ export default function App() {
   async function loadMemberChangeRequests() {
     return loadMemberChangeRequestsService({
       setMemberChangeRequests,
+    })
+  }
+
+  async function loadSponsors() {
+    return loadSponsorsService({
+      setSponsors,
     })
   }
 
@@ -1701,6 +1725,87 @@ export default function App() {
 
   function getNextInventoryNumber() {
     return buildGetNextInventoryNumber(inventoryItems)
+  }
+
+  function canManageSponsors() {
+    return canManageMembers() || isAdmin()
+  }
+
+  function resetSponsorForm() {
+    setSponsorEditingId(null)
+    setSponsorName('')
+    setSponsorContactPerson('')
+    setSponsorEmail('')
+    setSponsorPhone('')
+    setSponsorWebsite('')
+    setSponsorLogoPath('')
+    setSponsorStatus('active')
+    setSponsorNotes('')
+  }
+
+  function editSponsor(sponsor) {
+    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+
+    setSponsorEditingId(sponsor.id)
+    setSponsorName(sponsor.name || '')
+    setSponsorContactPerson(sponsor.contact_person || '')
+    setSponsorEmail(sponsor.email || '')
+    setSponsorPhone(sponsor.phone || '')
+    setSponsorWebsite(sponsor.website || '')
+    setSponsorLogoPath(sponsor.logo_path || '')
+    setSponsorStatus(sponsor.status || 'active')
+    setSponsorNotes(sponsor.notes || '')
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveSponsor() {
+    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+
+    if (!sponsorName.trim()) {
+      alert('Name ist Pflicht.')
+      return
+    }
+
+    const payload = {
+      name: sponsorName.trim(),
+      contact_person: sponsorContactPerson.trim() || null,
+      email: sponsorEmail.trim() || null,
+      phone: sponsorPhone.trim() || null,
+      website: sponsorWebsite.trim() || null,
+      logo_path: sponsorLogoPath.trim() || null,
+      status: sponsorStatus || 'active',
+      notes: sponsorNotes.trim() || null,
+    }
+
+    const result = await saveSponsorRecord({
+      sponsorEditingId,
+      payload,
+      sponsors,
+      createAuditLog,
+      loadSponsors,
+      resetSponsorForm,
+    })
+
+    if (result?.error) alert(result.error.message)
+  }
+
+  async function deleteSponsor(sponsor) {
+    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+
+    const confirmed = window.confirm(
+      `Sponsor wirklich loschen?\n\n${sponsor.name || ''}\n\nBestehende Sponsor-Vertrage wurden durch die Datenbank ebenfalls geloscht.`
+    )
+
+    if (!confirmed) return
+
+    const result = await deleteSponsorRecord({
+      sponsor,
+      createAuditLog,
+      loadSponsors,
+    })
+
+    if (result?.error) alert(result.error.message)
   }
 
   function resetInventoryForm() {
@@ -3577,6 +3682,34 @@ export default function App() {
             openDocument,
             deleteDocument,
           }}
+        />
+      )}
+
+      {activePage === 'sponsors' && (
+        <SponsorsPage
+          sponsors={sponsors}
+          canManageSponsors={canManageSponsors}
+          sponsorEditingId={sponsorEditingId}
+          sponsorName={sponsorName}
+          setSponsorName={setSponsorName}
+          sponsorContactPerson={sponsorContactPerson}
+          setSponsorContactPerson={setSponsorContactPerson}
+          sponsorEmail={sponsorEmail}
+          setSponsorEmail={setSponsorEmail}
+          sponsorPhone={sponsorPhone}
+          setSponsorPhone={setSponsorPhone}
+          sponsorWebsite={sponsorWebsite}
+          setSponsorWebsite={setSponsorWebsite}
+          sponsorLogoPath={sponsorLogoPath}
+          setSponsorLogoPath={setSponsorLogoPath}
+          sponsorStatus={sponsorStatus}
+          setSponsorStatus={setSponsorStatus}
+          sponsorNotes={sponsorNotes}
+          setSponsorNotes={setSponsorNotes}
+          saveSponsor={saveSponsor}
+          resetSponsorForm={resetSponsorForm}
+          editSponsor={editSponsor}
+          deleteSponsor={deleteSponsor}
         />
       )}
 
