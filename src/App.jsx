@@ -78,6 +78,8 @@ import {
   loadInvoices as loadInvoicesService,
   loadMemberChangeRequests as loadMemberChangeRequestsService,
   loadMerchItems as loadMerchItemsService,
+  loadMerchSaleItems as loadMerchSaleItemsService,
+  loadMerchSales as loadMerchSalesService,
   loadMerchVariants as loadMerchVariantsService,
   loadMembers as loadMembersService,
   loadSponsorContracts as loadSponsorContractsService,
@@ -202,6 +204,7 @@ import {
   saveSponsorRecord,
 } from './services/repositories/sponsorsRepository'
 import {
+  createMerchSaleWithItemRecord,
   deleteMerchItemRecord,
   deleteMerchVariantRecord,
   saveMerchItemRecord,
@@ -233,6 +236,8 @@ export default function App() {
   const [sponsorContracts, setSponsorContracts] = useState([])
   const [merchItems, setMerchItems] = useState([])
   const [merchVariants, setMerchVariants] = useState([])
+  const [merchSales, setMerchSales] = useState([])
+  const [merchSaleItems, setMerchSaleItems] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
   const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
@@ -369,6 +374,13 @@ export default function App() {
   const [merchVariantStock, setMerchVariantStock] = useState('0')
   const [merchVariantReorderLevel, setMerchVariantReorderLevel] = useState('0')
   const [merchVariantStatus, setMerchVariantStatus] = useState('active')
+  const [merchSaleVariantId, setMerchSaleVariantId] = useState('')
+  const [merchSaleQuantity, setMerchSaleQuantity] = useState('1')
+  const [merchSaleDiscount, setMerchSaleDiscount] = useState('')
+  const [merchSaleMemberId, setMerchSaleMemberId] = useState('')
+  const [merchSaleBuyerName, setMerchSaleBuyerName] = useState('')
+  const [merchSaleEventId, setMerchSaleEventId] = useState('')
+  const [merchSalePaymentMethod, setMerchSalePaymentMethod] = useState('bar')
 
   const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
@@ -461,6 +473,8 @@ export default function App() {
       loadSponsorContractsFn: () => loadSponsorContractsService({ setSponsorContracts }),
       loadMerchItemsFn: () => loadMerchItemsService({ setMerchItems }),
       loadMerchVariantsFn: () => loadMerchVariantsService({ setMerchVariants }),
+      loadMerchSalesFn: () => loadMerchSalesService({ setMerchSales }),
+      loadMerchSaleItemsFn: () => loadMerchSaleItemsService({ setMerchSaleItems }),
     })
   }, [])
 
@@ -868,6 +882,18 @@ export default function App() {
   async function loadMerchVariants() {
     return loadMerchVariantsService({
       setMerchVariants,
+    })
+  }
+
+  async function loadMerchSales() {
+    return loadMerchSalesService({
+      setMerchSales,
+    })
+  }
+
+  async function loadMerchSaleItems() {
+    return loadMerchSaleItemsService({
+      setMerchSaleItems,
     })
   }
 
@@ -1825,6 +1851,113 @@ export default function App() {
     setMerchVariantStock('0')
     setMerchVariantReorderLevel('0')
     setMerchVariantStatus('active')
+  }
+
+  function resetMerchSaleForm() {
+    setMerchSaleVariantId('')
+    setMerchSaleQuantity('1')
+    setMerchSaleDiscount('')
+    setMerchSaleMemberId('')
+    setMerchSaleBuyerName('')
+    setMerchSaleEventId('')
+    setMerchSalePaymentMethod('bar')
+  }
+
+  function getMerchSaleUnitPriceCents(variantId = merchSaleVariantId) {
+    const variant = merchVariants.find((item) => item.id === variantId)
+
+    if (!variant) return 0
+    if (variant.price_cents !== null && variant.price_cents !== undefined) return Number(variant.price_cents || 0)
+
+    const item = merchItems.find((merchItem) => merchItem.id === variant.merch_item_id)
+    return Number(item?.base_price_cents || 0)
+  }
+
+  function getMerchSaleSelectedVariant() {
+    return merchVariants.find((variant) => variant.id === merchSaleVariantId) || null
+  }
+
+  function getMerchSaleTotals() {
+    const quantity = merchSaleQuantity ? Number(merchSaleQuantity) : 0
+    const discount = merchSaleDiscount ? Number(String(merchSaleDiscount).replace(',', '.')) : 0
+    const unitPriceCents = getMerchSaleUnitPriceCents()
+    const subtotalCents = Number.isFinite(quantity) ? quantity * unitPriceCents : 0
+    const discountCents = Number.isFinite(discount) ? Math.round(discount * 100) : 0
+
+    return {
+      unitPriceCents,
+      subtotalCents,
+      discountCents,
+      totalCents: Math.max(0, subtotalCents - discountCents),
+    }
+  }
+
+  async function saveMerchSale() {
+    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverkauf.')
+
+    const variant = getMerchSaleSelectedVariant()
+
+    if (!variant) {
+      alert('Variante ist Pflicht.')
+      return
+    }
+
+    const quantity = merchSaleQuantity ? Number(merchSaleQuantity) : 0
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      alert('Menge muss eine ganze positive Zahl sein.')
+      return
+    }
+
+    const discount = merchSaleDiscount ? Number(String(merchSaleDiscount).replace(',', '.')) : 0
+
+    if (Number.isNaN(discount) || discount < 0) {
+      alert('Rabatt muss eine positive Zahl sein.')
+      return
+    }
+
+    const totals = getMerchSaleTotals()
+
+    if (totals.discountCents > totals.subtotalCents) {
+      alert('Rabatt darf nicht hoher als die Zwischensumme sein.')
+      return
+    }
+
+    const salePayload = {
+      sale_date: new Date().toISOString().slice(0, 10),
+      member_id: merchSaleMemberId || null,
+      event_id: merchSaleEventId || null,
+      cash_entry_id: null,
+      status: 'completed',
+      payment_method: merchSalePaymentMethod || 'bar',
+      currency: 'EUR',
+      subtotal_cents: totals.subtotalCents,
+      discount_cents: totals.discountCents,
+      total_cents: totals.totalCents,
+      buyer_name: merchSaleBuyerName.trim() || null,
+      notes: null,
+    }
+
+    const itemPayload = {
+      merch_variant_id: variant.id,
+      quantity,
+      unit_price_cents: totals.unitPriceCents,
+      subtotal_cents: totals.subtotalCents,
+      discount_cents: totals.discountCents,
+      total_cents: totals.totalCents,
+      notes: null,
+    }
+
+    const result = await createMerchSaleWithItemRecord({
+      salePayload,
+      itemPayload,
+      createAuditLog,
+      loadMerchSales,
+      loadMerchSaleItems,
+      resetMerchSaleForm,
+    })
+
+    if (result?.error) alert(result.error.message)
   }
 
   function editMerchItem(item) {
@@ -4128,6 +4261,10 @@ export default function App() {
         <MerchPage
           merchItems={merchItems}
           merchVariants={merchVariants}
+          merchSales={merchSales}
+          merchSaleItems={merchSaleItems}
+          members={members}
+          events={events}
           canManageMerch={canManageMerch}
           merchItemEditingId={merchItemEditingId}
           merchItemNumber={merchItemNumber}
@@ -4175,6 +4312,24 @@ export default function App() {
           resetMerchVariantForm={resetMerchVariantForm}
           editMerchVariant={editMerchVariant}
           deleteMerchVariant={deleteMerchVariant}
+          merchSaleVariantId={merchSaleVariantId}
+          setMerchSaleVariantId={setMerchSaleVariantId}
+          merchSaleQuantity={merchSaleQuantity}
+          setMerchSaleQuantity={setMerchSaleQuantity}
+          merchSaleDiscount={merchSaleDiscount}
+          setMerchSaleDiscount={setMerchSaleDiscount}
+          merchSaleMemberId={merchSaleMemberId}
+          setMerchSaleMemberId={setMerchSaleMemberId}
+          merchSaleBuyerName={merchSaleBuyerName}
+          setMerchSaleBuyerName={setMerchSaleBuyerName}
+          merchSaleEventId={merchSaleEventId}
+          setMerchSaleEventId={setMerchSaleEventId}
+          merchSalePaymentMethod={merchSalePaymentMethod}
+          setMerchSalePaymentMethod={setMerchSalePaymentMethod}
+          saveMerchSale={saveMerchSale}
+          resetMerchSaleForm={resetMerchSaleForm}
+          getMerchSaleUnitPriceCents={getMerchSaleUnitPriceCents}
+          getMerchSaleTotals={getMerchSaleTotals}
         />
       )}
 

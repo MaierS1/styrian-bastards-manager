@@ -12,6 +12,10 @@ import {
 export function MerchPage({
   merchItems,
   merchVariants,
+  merchSales,
+  merchSaleItems,
+  members,
+  events,
   canManageMerch,
   merchItemEditingId,
   merchItemNumber,
@@ -59,7 +63,27 @@ export function MerchPage({
   resetMerchVariantForm,
   editMerchVariant,
   deleteMerchVariant,
+  merchSaleVariantId,
+  setMerchSaleVariantId,
+  merchSaleQuantity,
+  setMerchSaleQuantity,
+  merchSaleDiscount,
+  setMerchSaleDiscount,
+  merchSaleMemberId,
+  setMerchSaleMemberId,
+  merchSaleBuyerName,
+  setMerchSaleBuyerName,
+  merchSaleEventId,
+  setMerchSaleEventId,
+  merchSalePaymentMethod,
+  setMerchSalePaymentMethod,
+  saveMerchSale,
+  resetMerchSaleForm,
+  getMerchSaleUnitPriceCents,
+  getMerchSaleTotals,
 }) {
+  const saleTotals = getMerchSaleTotals()
+
   return (
     <section style={sectionStyle}>
       <h2 style={headingStyle}>Fanartikel</h2>
@@ -232,6 +256,95 @@ export function MerchPage({
               Bearbeiten abbrechen
             </button>
           )}
+
+          <h3 style={headingStyle}>Verkauf erfassen</h3>
+
+          <select value={merchSaleVariantId} onChange={(event) => setMerchSaleVariantId(event.target.value)} style={inputStyle}>
+            <option value="">Variante auswahlen</option>
+            {merchVariants.map((variant) => {
+              const item = merchItems.find((merchItem) => merchItem.id === variant.merch_item_id)
+              const variantLabel = [variant.variant_name, variant.size, variant.color, variant.sku]
+                .filter(Boolean)
+                .join(' / ')
+
+              return (
+                <option key={variant.id} value={variant.id}>
+                  {item?.name || 'Fanartikel'} - {variantLabel || 'Variante'}
+                </option>
+              )
+            })}
+          </select>
+
+          <input
+            type="number"
+            min="1"
+            step="1"
+            placeholder="Menge"
+            value={merchSaleQuantity}
+            onChange={(event) => setMerchSaleQuantity(event.target.value)}
+            style={inputStyle}
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Rabatt in EUR"
+            value={merchSaleDiscount}
+            onChange={(event) => setMerchSaleDiscount(event.target.value)}
+            style={inputStyle}
+          />
+
+          <select value={merchSaleMemberId} onChange={(event) => setMerchSaleMemberId(event.target.value)} style={inputStyle}>
+            <option value="">Kein Mitglied zuordnen</option>
+            {members.map((member) => (
+              <option key={member.id} value={member.id}>
+                {`${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email || member.id}
+              </option>
+            ))}
+          </select>
+
+          <input
+            placeholder="Kaufer Freitext"
+            value={merchSaleBuyerName}
+            onChange={(event) => setMerchSaleBuyerName(event.target.value)}
+            style={inputStyle}
+          />
+
+          <select value={merchSaleEventId} onChange={(event) => setMerchSaleEventId(event.target.value)} style={inputStyle}>
+            <option value="">Kein Event zuordnen</option>
+            {events.map((event) => (
+              <option key={event.id} value={event.id}>
+                {event.name}
+              </option>
+            ))}
+          </select>
+
+          <select value={merchSalePaymentMethod} onChange={(event) => setMerchSalePaymentMethod(event.target.value)} style={inputStyle}>
+            <option value="bar">Bar</option>
+            <option value="karte">Karte</option>
+            <option value="ueberweisung">Ueberweisung</option>
+            <option value="ebanking">E-Banking</option>
+            <option value="sonstiges">Sonstiges</option>
+          </select>
+
+          <p style={mutedTextStyle}>
+            Preis: <strong>{formatAmount(getMerchSaleUnitPriceCents())}</strong>
+            <br />
+            Zwischensumme: <strong>{formatAmount(saleTotals.subtotalCents)}</strong>
+            <br />
+            Rabatt: <strong>{formatAmount(saleTotals.discountCents)}</strong>
+            <br />
+            Gesamt: <strong>{formatAmount(saleTotals.totalCents)}</strong>
+          </p>
+
+          <button onClick={saveMerchSale} style={buttonStyle}>
+            Verkauf speichern
+          </button>
+
+          <button onClick={resetMerchSaleForm} style={secondaryButtonStyle}>
+            Verkauf zurucksetzen
+          </button>
         </>
       )}
 
@@ -239,6 +352,8 @@ export function MerchPage({
         Fanartikel: <strong>{merchItems.length}</strong>
         <br />
         Varianten: <strong>{merchVariants.length}</strong>
+        <br />
+        Verkaeufe: <strong>{merchSales.length}</strong>
       </p>
 
       {merchItems.length === 0 && <p style={mutedTextStyle}>Noch keine Fanartikel angelegt.</p>}
@@ -255,6 +370,15 @@ export function MerchPage({
           deleteMerchVariant={deleteMerchVariant}
         />
       ))}
+
+      <MerchSalesList
+        merchSales={merchSales}
+        merchSaleItems={merchSaleItems}
+        merchVariants={merchVariants}
+        merchItems={merchItems}
+        members={members}
+        events={events}
+      />
     </section>
   )
 }
@@ -389,6 +513,88 @@ function getVariantStatusLabel(status) {
   if (status === 'sold_out') return 'Ausverkauft'
   if (status === 'archived') return 'Archiviert'
   return status || '-'
+}
+
+function MerchSalesList({
+  merchSales,
+  merchSaleItems,
+  merchVariants,
+  merchItems,
+  members,
+  events,
+}) {
+  if (merchSales.length === 0) {
+    return <p style={mutedTextStyle}>Noch keine Fanartikel-Verkaeufe erfasst.</p>
+  }
+
+  return (
+    <>
+      <h3 style={headingStyle}>Verkaeufe</h3>
+      {merchSales.map((sale) => {
+        const member = members.find((item) => item.id === sale.member_id)
+        const event = events.find((item) => item.id === sale.event_id)
+        const saleItems = merchSaleItems.filter((item) => item.merch_sale_id === sale.id)
+
+        return (
+          <div key={sale.id} style={cardStyle}>
+            <strong>{sale.sale_date}</strong> - {formatAmount(sale.total_cents)}
+            <br />
+            Zahlung: {getPaymentMethodLabel(sale.payment_method)} - Status: {sale.status || '-'}
+            <br />
+            Kaufer: {getBuyerLabel(sale, member)}
+            <br />
+            Event: {event?.name || '-'}
+            <br />
+            Rabatt: {formatAmount(sale.discount_cents)}
+            <MerchSaleItemsList
+              saleItems={saleItems}
+              merchVariants={merchVariants}
+              merchItems={merchItems}
+            />
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+function MerchSaleItemsList({
+  saleItems,
+  merchVariants,
+  merchItems,
+}) {
+  if (saleItems.length === 0) return null
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      {saleItems.map((item) => {
+        const variant = merchVariants.find((variantItem) => variantItem.id === item.merch_variant_id)
+        const merchItem = merchItems.find((candidate) => candidate.id === variant?.merch_item_id)
+
+        return (
+          <div key={item.id} style={{ borderTop: `1px solid ${colors.border}`, marginTop: 8, paddingTop: 8 }}>
+            {merchItem?.name || 'Fanartikel'} - {variant?.variant_name || variant?.sku || 'Variante'}
+            <br />
+            Menge: {item.quantity} - Einzelpreis: {formatAmount(item.unit_price_cents)} - Summe: {formatAmount(item.total_cents)}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function getBuyerLabel(sale, member) {
+  const memberName = member ? `${member.first_name || ''} ${member.last_name || ''}`.trim() : ''
+  return memberName || sale.buyer_name || '-'
+}
+
+function getPaymentMethodLabel(paymentMethod) {
+  if (paymentMethod === 'bar') return 'Bar'
+  if (paymentMethod === 'karte') return 'Karte'
+  if (paymentMethod === 'ueberweisung') return 'Ueberweisung'
+  if (paymentMethod === 'ebanking') return 'E-Banking'
+  if (paymentMethod === 'sonstiges') return 'Sonstiges'
+  return paymentMethod || '-'
 }
 
 function formatAmount(amountCents) {

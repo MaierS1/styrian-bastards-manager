@@ -190,6 +190,49 @@ export async function saveMerchSaleRecord({
   return { ok: true }
 }
 
+export async function createMerchSaleWithItemRecord({
+  salePayload,
+  itemPayload,
+  createAuditLog,
+  loadMerchSales,
+  loadMerchSaleItems,
+  resetMerchSaleForm,
+  alertFn = alert,
+}) {
+  const { data: sale, error: saleError } = await supabase
+    .from('merch_sales')
+    .insert(salePayload)
+    .select()
+    .single()
+
+  if (saleError) return { error: saleError }
+
+  const saleItemPayload = {
+    ...itemPayload,
+    merch_sale_id: sale.id,
+  }
+
+  const { data: saleItem, error: itemError } = await supabase
+    .from('merch_sale_items')
+    .insert(saleItemPayload)
+    .select()
+    .single()
+
+  if (itemError) return { error: itemError }
+
+  await createAuditLog('insert', 'merch_sales', sale.id, null, {
+    sale,
+    item: saleItem,
+  })
+
+  resetMerchSaleForm()
+  await loadMerchSales()
+  await loadMerchSaleItems()
+  alertFn('Fanartikel-Verkauf wurde gespeichert.')
+
+  return { ok: true, sale, item: saleItem }
+}
+
 export async function deleteMerchSaleRecord({
   sale,
   createAuditLog,
