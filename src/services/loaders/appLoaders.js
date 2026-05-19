@@ -8,6 +8,8 @@ import { fetchDocuments } from '../repositories/documentsRepository'
 import { fetchInventoryItems } from '../repositories/inventoryRepository'
 import { fetchInvoiceCustomers, fetchInvoiceItems, fetchInvoices } from '../repositories/invoicesRepository'
 import { fetchMemberChangeRequests } from '../repositories/memberChangeRequestsRepository'
+import { fetchMerchItems, fetchMerchVariants } from '../repositories/merchRepository'
+import { fetchSponsorContracts, fetchSponsors } from '../repositories/sponsorsRepository'
 
 export async function loadCurrentMember({ authUserId, setCurrentMember, alertFn = alert }) {
   const { data, error } = await fetchCurrentMemberByAuthUserId(authUserId)
@@ -143,6 +145,50 @@ export async function loadMemberChangeRequests({ setMemberChangeRequests }) {
   setMemberChangeRequests(data || [])
 }
 
+export async function loadSponsors({ setSponsors }) {
+  const { data, error } = await fetchSponsors()
+
+  if (error) {
+    console.warn(error.message)
+    return
+  }
+
+  setSponsors(data || [])
+}
+
+export async function loadSponsorContracts({ setSponsorContracts }) {
+  const { data, error } = await fetchSponsorContracts()
+
+  if (error) {
+    console.warn(error.message)
+    return
+  }
+
+  setSponsorContracts(data || [])
+}
+
+export async function loadMerchItems({ setMerchItems }) {
+  const { data, error } = await fetchMerchItems()
+
+  if (error) {
+    console.warn(error.message)
+    return
+  }
+
+  setMerchItems(data || [])
+}
+
+export async function loadMerchVariants({ setMerchVariants }) {
+  const { data, error } = await fetchMerchVariants()
+
+  if (error) {
+    console.warn(error.message)
+    return
+  }
+
+  setMerchVariants(data || [])
+}
+
 export async function loadAll({
   loadMembersFn,
   loadFeesFn,
@@ -156,8 +202,12 @@ export async function loadAll({
   loadInvoicesFn,
   loadInvoiceItemsFn,
   loadMemberChangeRequestsFn,
+  loadSponsorsFn,
+  loadSponsorContractsFn,
+  loadMerchItemsFn,
+  loadMerchVariantsFn,
 }) {
-  await Promise.all([
+  const loaders = [
     loadMembersFn(),
     loadFeesFn(),
     loadCashEntriesFn(),
@@ -170,5 +220,12 @@ export async function loadAll({
     loadInvoicesFn(),
     loadInvoiceItemsFn(),
     loadMemberChangeRequestsFn(),
-  ])
+  ]
+
+  if (loadSponsorsFn) loaders.push(loadSponsorsFn())
+  if (loadSponsorContractsFn) loaders.push(loadSponsorContractsFn())
+  if (loadMerchItemsFn) loaders.push(loadMerchItemsFn())
+  if (loadMerchVariantsFn) loaders.push(loadMerchVariantsFn())
+
+  await Promise.all(loaders)
 }
