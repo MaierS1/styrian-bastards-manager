@@ -8,6 +8,7 @@ export const navigationItems = [
   ['events', 'Events'],
   ['documents', 'Dokumente'],
   ['sponsors', 'Sponsoren'],
+  ['merch', 'Fanartikel'],
   ['inventory', 'Inventar'],
   ['admin', 'Admin / Export'],
 ]

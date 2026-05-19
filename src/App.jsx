@@ -77,6 +77,8 @@ import {
   loadInvoiceItems as loadInvoiceItemsService,
   loadInvoices as loadInvoicesService,
   loadMemberChangeRequests as loadMemberChangeRequestsService,
+  loadMerchItems as loadMerchItemsService,
+  loadMerchVariants as loadMerchVariantsService,
   loadMembers as loadMembersService,
   loadSponsorContracts as loadSponsorContractsService,
   loadSponsors as loadSponsorsService,
@@ -199,7 +201,14 @@ import {
   saveSponsorContractRecord,
   saveSponsorRecord,
 } from './services/repositories/sponsorsRepository'
+import {
+  deleteMerchItemRecord,
+  deleteMerchVariantRecord,
+  saveMerchItemRecord,
+  saveMerchVariantRecord,
+} from './services/repositories/merchRepository'
 import { SponsorsPage } from './components/sponsors/SponsorsPage'
+import { MerchPage } from './components/merch/MerchPage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -222,6 +231,8 @@ export default function App() {
   const [memberChangeRequests, setMemberChangeRequests] = useState([])
   const [sponsors, setSponsors] = useState([])
   const [sponsorContracts, setSponsorContracts] = useState([])
+  const [merchItems, setMerchItems] = useState([])
+  const [merchVariants, setMerchVariants] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
   const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
@@ -338,6 +349,26 @@ export default function App() {
   const [contractAmount, setContractAmount] = useState('')
   const [contractBillingCycle, setContractBillingCycle] = useState('one_time')
   const [contractNotes, setContractNotes] = useState('')
+  const [merchItemEditingId, setMerchItemEditingId] = useState(null)
+  const [merchItemNumber, setMerchItemNumber] = useState('')
+  const [merchItemName, setMerchItemName] = useState('')
+  const [merchItemCategory, setMerchItemCategory] = useState('other')
+  const [merchItemImagePath, setMerchItemImagePath] = useState('')
+  const [merchItemStatus, setMerchItemStatus] = useState('active')
+  const [merchItemBasePrice, setMerchItemBasePrice] = useState('')
+  const [merchItemTaxRate, setMerchItemTaxRate] = useState('0')
+  const [merchItemSkuPrefix, setMerchItemSkuPrefix] = useState('')
+  const [merchItemDescription, setMerchItemDescription] = useState('')
+  const [merchVariantEditingId, setMerchVariantEditingId] = useState(null)
+  const [merchVariantItemId, setMerchVariantItemId] = useState('')
+  const [merchVariantSku, setMerchVariantSku] = useState('')
+  const [merchVariantName, setMerchVariantName] = useState('')
+  const [merchVariantSize, setMerchVariantSize] = useState('')
+  const [merchVariantColor, setMerchVariantColor] = useState('')
+  const [merchVariantPrice, setMerchVariantPrice] = useState('')
+  const [merchVariantStock, setMerchVariantStock] = useState('0')
+  const [merchVariantReorderLevel, setMerchVariantReorderLevel] = useState('0')
+  const [merchVariantStatus, setMerchVariantStatus] = useState('active')
 
   const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
@@ -428,6 +459,8 @@ export default function App() {
       loadMemberChangeRequestsFn: () => loadMemberChangeRequestsService({ setMemberChangeRequests }),
       loadSponsorsFn: () => loadSponsorsService({ setSponsors }),
       loadSponsorContractsFn: () => loadSponsorContractsService({ setSponsorContracts }),
+      loadMerchItemsFn: () => loadMerchItemsService({ setMerchItems }),
+      loadMerchVariantsFn: () => loadMerchVariantsService({ setMerchVariants }),
     })
   }, [])
 
@@ -823,6 +856,18 @@ export default function App() {
   async function loadSponsorContracts() {
     return loadSponsorContractsService({
       setSponsorContracts,
+    })
+  }
+
+  async function loadMerchItems() {
+    return loadMerchItemsService({
+      setMerchItems,
+    })
+  }
+
+  async function loadMerchVariants() {
+    return loadMerchVariantsService({
+      setMerchVariants,
     })
   }
 
@@ -1750,6 +1795,218 @@ export default function App() {
 
   function canManageSponsors() {
     return canManageMembers() || isAdmin()
+  }
+
+  function canManageMerch() {
+    return canManageMembers() || isAdmin()
+  }
+
+  function resetMerchItemForm() {
+    setMerchItemEditingId(null)
+    setMerchItemNumber('')
+    setMerchItemName('')
+    setMerchItemCategory('other')
+    setMerchItemImagePath('')
+    setMerchItemStatus('active')
+    setMerchItemBasePrice('')
+    setMerchItemTaxRate('0')
+    setMerchItemSkuPrefix('')
+    setMerchItemDescription('')
+  }
+
+  function resetMerchVariantForm() {
+    setMerchVariantEditingId(null)
+    setMerchVariantItemId(merchItems[0]?.id || '')
+    setMerchVariantSku('')
+    setMerchVariantName('')
+    setMerchVariantSize('')
+    setMerchVariantColor('')
+    setMerchVariantPrice('')
+    setMerchVariantStock('0')
+    setMerchVariantReorderLevel('0')
+    setMerchVariantStatus('active')
+  }
+
+  function editMerchItem(item) {
+    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+
+    setMerchItemEditingId(item.id)
+    setMerchItemNumber(item.item_number || '')
+    setMerchItemName(item.name || '')
+    setMerchItemCategory(item.category || 'other')
+    setMerchItemImagePath(item.image_path || '')
+    setMerchItemStatus(item.status || 'active')
+    setMerchItemBasePrice(item.base_price_cents ? String((Number(item.base_price_cents) / 100).toFixed(2)) : '')
+    setMerchItemTaxRate(String(item.tax_rate ?? 0))
+    setMerchItemSkuPrefix(item.sku_prefix || '')
+    setMerchItemDescription(item.description || '')
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveMerchItem() {
+    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+
+    if (!merchItemName.trim()) {
+      alert('Name ist Pflicht.')
+      return
+    }
+
+    const basePriceNumber = merchItemBasePrice ? Number(String(merchItemBasePrice).replace(',', '.')) : 0
+    const taxRateNumber = merchItemTaxRate ? Number(String(merchItemTaxRate).replace(',', '.')) : 0
+
+    if (Number.isNaN(basePriceNumber) || basePriceNumber < 0) {
+      alert('Basispreis muss eine positive Zahl sein.')
+      return
+    }
+
+    if (Number.isNaN(taxRateNumber) || taxRateNumber < 0 || taxRateNumber > 100) {
+      alert('Steuersatz muss zwischen 0 und 100 liegen.')
+      return
+    }
+
+    const payload = {
+      item_number: merchItemNumber.trim() || null,
+      name: merchItemName.trim(),
+      description: merchItemDescription.trim() || null,
+      category: merchItemCategory.trim() || 'other',
+      image_path: merchItemImagePath.trim() || null,
+      status: merchItemStatus || 'active',
+      base_price_cents: Math.round(basePriceNumber * 100),
+      tax_rate: taxRateNumber,
+      sku_prefix: merchItemSkuPrefix.trim() || null,
+    }
+
+    const result = await saveMerchItemRecord({
+      merchItemEditingId,
+      payload,
+      merchItems,
+      createAuditLog,
+      loadMerchItems,
+      resetMerchItemForm,
+    })
+
+    if (result?.error) alert(result.error.message)
+  }
+
+  async function deleteMerchItem(item) {
+    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+
+    const confirmed = window.confirm(
+      `Fanartikel wirklich loschen?\n\n${item.name || ''}\n\nAlle Varianten dieses Artikels werden ebenfalls geloscht.`
+    )
+
+    if (!confirmed) return
+
+    const result = await deleteMerchItemRecord({
+      item,
+      createAuditLog,
+      loadMerchItems,
+      loadMerchVariants,
+    })
+
+    if (result?.error) alert(result.error.message)
+  }
+
+  function editMerchVariant(variant) {
+    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+
+    setMerchVariantEditingId(variant.id)
+    setMerchVariantItemId(variant.merch_item_id || '')
+    setMerchVariantSku(variant.sku || '')
+    setMerchVariantName(variant.variant_name || '')
+    setMerchVariantSize(variant.size || '')
+    setMerchVariantColor(variant.color || '')
+    setMerchVariantPrice(variant.price_cents === null ? '' : String((Number(variant.price_cents) / 100).toFixed(2)))
+    setMerchVariantStock(String(variant.stock_quantity ?? 0))
+    setMerchVariantReorderLevel(String(variant.reorder_level ?? 0))
+    setMerchVariantStatus(variant.status || 'active')
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveMerchVariant() {
+    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+
+    if (merchItems.length === 0) {
+      alert('Bitte zuerst einen Fanartikel anlegen.')
+      return
+    }
+
+    if (!merchVariantItemId) {
+      alert('Fanartikel ist Pflicht.')
+      return
+    }
+
+    if (
+      !merchVariantSku.trim()
+      && !merchVariantName.trim()
+      && !merchVariantSize.trim()
+      && !merchVariantColor.trim()
+    ) {
+      alert('Mindestens SKU, Variantenname, Groesse oder Farbe ist Pflicht.')
+      return
+    }
+
+    const variantPriceNumber = merchVariantPrice ? Number(String(merchVariantPrice).replace(',', '.')) : null
+    const stockNumber = merchVariantStock ? Number(merchVariantStock) : 0
+    const reorderLevelNumber = merchVariantReorderLevel ? Number(merchVariantReorderLevel) : 0
+
+    if (variantPriceNumber !== null && (Number.isNaN(variantPriceNumber) || variantPriceNumber < 0)) {
+      alert('Variantenpreis muss eine positive Zahl sein.')
+      return
+    }
+
+    if (!Number.isInteger(stockNumber) || stockNumber < 0) {
+      alert('Bestand muss eine ganze positive Zahl sein.')
+      return
+    }
+
+    if (!Number.isInteger(reorderLevelNumber) || reorderLevelNumber < 0) {
+      alert('Mindestbestand muss eine ganze positive Zahl sein.')
+      return
+    }
+
+    const payload = {
+      merch_item_id: merchVariantItemId,
+      sku: merchVariantSku.trim() || null,
+      variant_name: merchVariantName.trim() || null,
+      size: merchVariantSize.trim() || null,
+      color: merchVariantColor.trim() || null,
+      price_cents: variantPriceNumber === null ? null : Math.round(variantPriceNumber * 100),
+      stock_quantity: stockNumber,
+      reorder_level: reorderLevelNumber,
+      status: merchVariantStatus || 'active',
+    }
+
+    const result = await saveMerchVariantRecord({
+      merchVariantEditingId,
+      payload,
+      merchVariants,
+      createAuditLog,
+      loadMerchVariants,
+      resetMerchVariantForm,
+    })
+
+    if (result?.error) alert(result.error.message)
+  }
+
+  async function deleteMerchVariant(variant) {
+    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+
+    const confirmed = window.confirm(
+      `Variante wirklich loschen?\n\n${variant.variant_name || variant.sku || ''}`
+    )
+
+    if (!confirmed) return
+
+    const result = await deleteMerchVariantRecord({
+      variant,
+      createAuditLog,
+      loadMerchVariants,
+    })
+
+    if (result?.error) alert(result.error.message)
   }
 
   function resetSponsorForm() {
@@ -3864,6 +4121,60 @@ export default function App() {
           resetSponsorContractForm={resetSponsorContractForm}
           editSponsorContract={editSponsorContract}
           deleteSponsorContract={deleteSponsorContract}
+        />
+      )}
+
+      {activePage === 'merch' && (
+        <MerchPage
+          merchItems={merchItems}
+          merchVariants={merchVariants}
+          canManageMerch={canManageMerch}
+          merchItemEditingId={merchItemEditingId}
+          merchItemNumber={merchItemNumber}
+          setMerchItemNumber={setMerchItemNumber}
+          merchItemName={merchItemName}
+          setMerchItemName={setMerchItemName}
+          merchItemCategory={merchItemCategory}
+          setMerchItemCategory={setMerchItemCategory}
+          merchItemImagePath={merchItemImagePath}
+          setMerchItemImagePath={setMerchItemImagePath}
+          merchItemStatus={merchItemStatus}
+          setMerchItemStatus={setMerchItemStatus}
+          merchItemBasePrice={merchItemBasePrice}
+          setMerchItemBasePrice={setMerchItemBasePrice}
+          merchItemTaxRate={merchItemTaxRate}
+          setMerchItemTaxRate={setMerchItemTaxRate}
+          merchItemSkuPrefix={merchItemSkuPrefix}
+          setMerchItemSkuPrefix={setMerchItemSkuPrefix}
+          merchItemDescription={merchItemDescription}
+          setMerchItemDescription={setMerchItemDescription}
+          saveMerchItem={saveMerchItem}
+          resetMerchItemForm={resetMerchItemForm}
+          editMerchItem={editMerchItem}
+          deleteMerchItem={deleteMerchItem}
+          merchVariantEditingId={merchVariantEditingId}
+          merchVariantItemId={merchVariantItemId}
+          setMerchVariantItemId={setMerchVariantItemId}
+          merchVariantSku={merchVariantSku}
+          setMerchVariantSku={setMerchVariantSku}
+          merchVariantName={merchVariantName}
+          setMerchVariantName={setMerchVariantName}
+          merchVariantSize={merchVariantSize}
+          setMerchVariantSize={setMerchVariantSize}
+          merchVariantColor={merchVariantColor}
+          setMerchVariantColor={setMerchVariantColor}
+          merchVariantPrice={merchVariantPrice}
+          setMerchVariantPrice={setMerchVariantPrice}
+          merchVariantStock={merchVariantStock}
+          setMerchVariantStock={setMerchVariantStock}
+          merchVariantReorderLevel={merchVariantReorderLevel}
+          setMerchVariantReorderLevel={setMerchVariantReorderLevel}
+          merchVariantStatus={merchVariantStatus}
+          setMerchVariantStatus={setMerchVariantStatus}
+          saveMerchVariant={saveMerchVariant}
+          resetMerchVariantForm={resetMerchVariantForm}
+          editMerchVariant={editMerchVariant}
+          deleteMerchVariant={deleteMerchVariant}
         />
       )}
 
