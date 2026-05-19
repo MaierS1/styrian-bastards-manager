@@ -78,6 +78,7 @@ import {
   loadInvoices as loadInvoicesService,
   loadMemberChangeRequests as loadMemberChangeRequestsService,
   loadMembers as loadMembersService,
+  loadSponsorContracts as loadSponsorContractsService,
   loadSponsors as loadSponsorsService,
 } from './services/loaders/appLoaders'
 import {
@@ -193,7 +194,9 @@ import {
   saveInventoryItemRecord,
 } from './services/repositories/inventoryRepository'
 import {
+  deleteSponsorContractRecord,
   deleteSponsorRecord,
+  saveSponsorContractRecord,
   saveSponsorRecord,
 } from './services/repositories/sponsorsRepository'
 import { SponsorsPage } from './components/sponsors/SponsorsPage'
@@ -218,6 +221,7 @@ export default function App() {
   const [invoiceCustomers, setInvoiceCustomers] = useState([])
   const [memberChangeRequests, setMemberChangeRequests] = useState([])
   const [sponsors, setSponsors] = useState([])
+  const [sponsorContracts, setSponsorContracts] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
   const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
@@ -324,6 +328,16 @@ export default function App() {
   const [sponsorLogoPath, setSponsorLogoPath] = useState('')
   const [sponsorStatus, setSponsorStatus] = useState('active')
   const [sponsorNotes, setSponsorNotes] = useState('')
+  const [sponsorContractEditingId, setSponsorContractEditingId] = useState(null)
+  const [contractSponsorId, setContractSponsorId] = useState('')
+  const [contractTitle, setContractTitle] = useState('')
+  const [contractLevel, setContractLevel] = useState('bronze')
+  const [contractStatus, setContractStatus] = useState('draft')
+  const [contractStartsOn, setContractStartsOn] = useState(new Date().toISOString().slice(0, 10))
+  const [contractEndsOn, setContractEndsOn] = useState('')
+  const [contractAmount, setContractAmount] = useState('')
+  const [contractBillingCycle, setContractBillingCycle] = useState('one_time')
+  const [contractNotes, setContractNotes] = useState('')
 
   const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
@@ -413,6 +427,7 @@ export default function App() {
       loadInvoiceItemsFn: () => loadInvoiceItemsService({ setInvoiceItems }),
       loadMemberChangeRequestsFn: () => loadMemberChangeRequestsService({ setMemberChangeRequests }),
       loadSponsorsFn: () => loadSponsorsService({ setSponsors }),
+      loadSponsorContractsFn: () => loadSponsorContractsService({ setSponsorContracts }),
     })
   }, [])
 
@@ -802,6 +817,12 @@ export default function App() {
   async function loadSponsors() {
     return loadSponsorsService({
       setSponsors,
+    })
+  }
+
+  async function loadSponsorContracts() {
+    return loadSponsorContractsService({
+      setSponsorContracts,
     })
   }
 
@@ -1743,6 +1764,19 @@ export default function App() {
     setSponsorNotes('')
   }
 
+  function resetSponsorContractForm() {
+    setSponsorContractEditingId(null)
+    setContractSponsorId(sponsors[0]?.id || '')
+    setContractTitle('')
+    setContractLevel('bronze')
+    setContractStatus('draft')
+    setContractStartsOn(new Date().toISOString().slice(0, 10))
+    setContractEndsOn('')
+    setContractAmount('')
+    setContractBillingCycle('one_time')
+    setContractNotes('')
+  }
+
   function editSponsor(sponsor) {
     if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
 
@@ -1790,6 +1824,101 @@ export default function App() {
     if (result?.error) alert(result.error.message)
   }
 
+  function editSponsorContract(contract) {
+    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+
+    setSponsorContractEditingId(contract.id)
+    setContractSponsorId(contract.sponsor_id || '')
+    setContractTitle(contract.title || '')
+    setContractLevel(contract.category || 'bronze')
+    setContractStatus(contract.status || 'draft')
+    setContractStartsOn(contract.starts_on || new Date().toISOString().slice(0, 10))
+    setContractEndsOn(contract.ends_on || '')
+    setContractAmount(contract.amount_cents ? String((Number(contract.amount_cents) / 100).toFixed(2)) : '')
+    setContractBillingCycle(contract.billing_cycle || 'one_time')
+    setContractNotes(contract.notes || '')
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveSponsorContract() {
+    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+
+    if (sponsors.length === 0) {
+      alert('Bitte zuerst einen Sponsor anlegen.')
+      return
+    }
+
+    if (!contractSponsorId) {
+      alert('Sponsor ist Pflicht.')
+      return
+    }
+
+    if (!contractTitle.trim()) {
+      alert('Vertragstitel ist Pflicht.')
+      return
+    }
+
+    if (!contractStartsOn) {
+      alert('Startdatum ist Pflicht.')
+      return
+    }
+
+    if (contractEndsOn && contractEndsOn < contractStartsOn) {
+      alert('Enddatum darf nicht vor dem Startdatum liegen.')
+      return
+    }
+
+    const amountNumber = contractAmount ? Number(String(contractAmount).replace(',', '.')) : 0
+
+    if (Number.isNaN(amountNumber) || amountNumber < 0) {
+      alert('Betrag muss eine positive Zahl sein.')
+      return
+    }
+
+    const payload = {
+      sponsor_id: contractSponsorId,
+      title: contractTitle.trim(),
+      category: contractLevel || 'bronze',
+      status: contractStatus || 'draft',
+      starts_on: contractStartsOn,
+      ends_on: contractEndsOn || null,
+      amount_cents: Math.round(amountNumber * 100),
+      currency: 'EUR',
+      billing_cycle: contractBillingCycle || 'one_time',
+      notes: contractNotes.trim() || null,
+    }
+
+    const result = await saveSponsorContractRecord({
+      sponsorContractEditingId,
+      payload,
+      sponsorContracts,
+      createAuditLog,
+      loadSponsorContracts,
+      resetSponsorContractForm,
+    })
+
+    if (result?.error) alert(result.error.message)
+  }
+
+  async function deleteSponsorContract(contract) {
+    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+
+    const confirmed = window.confirm(
+      `Sponsor-Vertrag wirklich loschen?\n\n${contract.title || ''}\n\nDas kann nicht ruckgangig gemacht werden.`
+    )
+
+    if (!confirmed) return
+
+    const result = await deleteSponsorContractRecord({
+      contract,
+      createAuditLog,
+      loadSponsorContracts,
+    })
+
+    if (result?.error) alert(result.error.message)
+  }
+
   async function deleteSponsor(sponsor) {
     if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
 
@@ -1806,6 +1935,7 @@ export default function App() {
     })
 
     if (result?.error) alert(result.error.message)
+    else await loadSponsorContracts()
   }
 
   function resetInventoryForm() {
@@ -3688,6 +3818,7 @@ export default function App() {
       {activePage === 'sponsors' && (
         <SponsorsPage
           sponsors={sponsors}
+          sponsorContracts={sponsorContracts}
           canManageSponsors={canManageSponsors}
           sponsorEditingId={sponsorEditingId}
           sponsorName={sponsorName}
@@ -3710,6 +3841,29 @@ export default function App() {
           resetSponsorForm={resetSponsorForm}
           editSponsor={editSponsor}
           deleteSponsor={deleteSponsor}
+          sponsorContractEditingId={sponsorContractEditingId}
+          contractSponsorId={contractSponsorId}
+          setContractSponsorId={setContractSponsorId}
+          contractTitle={contractTitle}
+          setContractTitle={setContractTitle}
+          contractLevel={contractLevel}
+          setContractLevel={setContractLevel}
+          contractStatus={contractStatus}
+          setContractStatus={setContractStatus}
+          contractStartsOn={contractStartsOn}
+          setContractStartsOn={setContractStartsOn}
+          contractEndsOn={contractEndsOn}
+          setContractEndsOn={setContractEndsOn}
+          contractAmount={contractAmount}
+          setContractAmount={setContractAmount}
+          contractBillingCycle={contractBillingCycle}
+          setContractBillingCycle={setContractBillingCycle}
+          contractNotes={contractNotes}
+          setContractNotes={setContractNotes}
+          saveSponsorContract={saveSponsorContract}
+          resetSponsorContractForm={resetSponsorContractForm}
+          editSponsorContract={editSponsorContract}
+          deleteSponsorContract={deleteSponsorContract}
         />
       )}
 

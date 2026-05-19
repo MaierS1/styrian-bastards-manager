@@ -73,3 +73,62 @@ export async function deleteSponsorRecord({
 
   return { ok: true }
 }
+
+export async function saveSponsorContractRecord({
+  sponsorContractEditingId,
+  payload,
+  sponsorContracts,
+  createAuditLog,
+  loadSponsorContracts,
+  resetSponsorContractForm,
+  alertFn = alert,
+}) {
+  if (sponsorContractEditingId) {
+    const oldContract = sponsorContracts.find((contract) => contract.id === sponsorContractEditingId)
+
+    const { error } = await supabase
+      .from('sponsor_contracts')
+      .update(payload)
+      .eq('id', sponsorContractEditingId)
+
+    if (error) return { error }
+
+    await createAuditLog('update', 'sponsor_contracts', sponsorContractEditingId, oldContract, payload)
+    alertFn('Sponsor-Vertrag wurde aktualisiert.')
+  } else {
+    const { data, error } = await supabase
+      .from('sponsor_contracts')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (error) return { error }
+
+    await createAuditLog('insert', 'sponsor_contracts', data?.id, null, data)
+    alertFn('Sponsor-Vertrag wurde angelegt.')
+  }
+
+  resetSponsorContractForm()
+  await loadSponsorContracts()
+  return { ok: true }
+}
+
+export async function deleteSponsorContractRecord({
+  contract,
+  createAuditLog,
+  loadSponsorContracts,
+  alertFn = alert,
+}) {
+  const { error } = await supabase
+    .from('sponsor_contracts')
+    .delete()
+    .eq('id', contract.id)
+
+  if (error) return { error }
+
+  await createAuditLog('delete', 'sponsor_contracts', contract.id, contract, null)
+  await loadSponsorContracts()
+  alertFn('Sponsor-Vertrag wurde geloscht.')
+
+  return { ok: true }
+}
