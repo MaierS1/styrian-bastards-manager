@@ -8,7 +8,12 @@ import { fetchDocuments } from '../repositories/documentsRepository'
 import { fetchInventoryItems } from '../repositories/inventoryRepository'
 import { fetchInvoiceCustomers, fetchInvoiceItems, fetchInvoices } from '../repositories/invoicesRepository'
 import { fetchMemberChangeRequests } from '../repositories/memberChangeRequestsRepository'
-import { fetchMerchItems, fetchMerchVariants } from '../repositories/merchRepository'
+import {
+  fetchMerchItems,
+  fetchMerchSaleItems,
+  fetchMerchSales,
+  fetchMerchVariants,
+} from '../repositories/merchRepository'
 import { fetchSponsorContracts, fetchSponsors } from '../repositories/sponsorsRepository'
 
 export async function loadCurrentMember({ authUserId, setCurrentMember, alertFn = alert }) {
@@ -189,6 +194,28 @@ export async function loadMerchVariants({ setMerchVariants }) {
   setMerchVariants(data || [])
 }
 
+export async function loadMerchSales({ setMerchSales }) {
+  const { data, error } = await fetchMerchSales()
+
+  if (error) {
+    console.warn(error.message)
+    return
+  }
+
+  setMerchSales(data || [])
+}
+
+export async function loadMerchSaleItems({ setMerchSaleItems }) {
+  const { data, error } = await fetchMerchSaleItems()
+
+  if (error) {
+    console.warn(error.message)
+    return
+  }
+
+  setMerchSaleItems(data || [])
+}
+
 export async function loadAll({
   loadMembersFn,
   loadFeesFn,
@@ -206,6 +233,8 @@ export async function loadAll({
   loadSponsorContractsFn,
   loadMerchItemsFn,
   loadMerchVariantsFn,
+  loadMerchSalesFn,
+  loadMerchSaleItemsFn,
 }) {
   const loaders = [
     loadMembersFn(),
@@ -226,6 +255,8 @@ export async function loadAll({
   if (loadSponsorContractsFn) loaders.push(loadSponsorContractsFn())
   if (loadMerchItemsFn) loaders.push(loadMerchItemsFn())
   if (loadMerchVariantsFn) loaders.push(loadMerchVariantsFn())
+  if (loadMerchSalesFn) loaders.push(loadMerchSalesFn())
+  if (loadMerchSaleItemsFn) loaders.push(loadMerchSaleItemsFn())
 
   await Promise.all(loaders)
 }

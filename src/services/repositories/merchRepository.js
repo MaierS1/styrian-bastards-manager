@@ -16,6 +16,21 @@ export async function fetchMerchVariants() {
     .order('created_at', { ascending: true })
 }
 
+export async function fetchMerchSales() {
+  return supabase
+    .from('merch_sales')
+    .select('*')
+    .order('sale_date', { ascending: false })
+    .order('created_at', { ascending: false })
+}
+
+export async function fetchMerchSaleItems() {
+  return supabase
+    .from('merch_sale_items')
+    .select('*')
+    .order('created_at', { ascending: true })
+}
+
 export async function saveMerchItemRecord({
   merchItemEditingId,
   payload,
@@ -132,6 +147,126 @@ export async function deleteMerchVariantRecord({
   await createAuditLog('delete', 'merch_variants', variant.id, variant, null)
   await loadMerchVariants()
   alertFn('Fanartikel-Variante wurde geloscht.')
+
+  return { ok: true }
+}
+
+export async function saveMerchSaleRecord({
+  merchSaleEditingId,
+  payload,
+  merchSales,
+  createAuditLog,
+  loadMerchSales,
+  resetMerchSaleForm,
+  alertFn = alert,
+}) {
+  if (merchSaleEditingId) {
+    const oldSale = merchSales.find((sale) => sale.id === merchSaleEditingId)
+
+    const { error } = await supabase
+      .from('merch_sales')
+      .update(payload)
+      .eq('id', merchSaleEditingId)
+
+    if (error) return { error }
+
+    await createAuditLog('update', 'merch_sales', merchSaleEditingId, oldSale, payload)
+    alertFn('Fanartikel-Verkauf wurde aktualisiert.')
+  } else {
+    const { data, error } = await supabase
+      .from('merch_sales')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (error) return { error }
+
+    await createAuditLog('insert', 'merch_sales', data?.id, null, data)
+    alertFn('Fanartikel-Verkauf wurde angelegt.')
+  }
+
+  resetMerchSaleForm()
+  await loadMerchSales()
+  return { ok: true }
+}
+
+export async function deleteMerchSaleRecord({
+  sale,
+  createAuditLog,
+  loadMerchSales,
+  loadMerchSaleItems,
+  alertFn = alert,
+}) {
+  const { error } = await supabase
+    .from('merch_sales')
+    .delete()
+    .eq('id', sale.id)
+
+  if (error) return { error }
+
+  await createAuditLog('delete', 'merch_sales', sale.id, sale, null)
+  await loadMerchSales()
+  await loadMerchSaleItems()
+  alertFn('Fanartikel-Verkauf wurde geloscht.')
+
+  return { ok: true }
+}
+
+export async function saveMerchSaleItemRecord({
+  merchSaleItemEditingId,
+  payload,
+  merchSaleItems,
+  createAuditLog,
+  loadMerchSaleItems,
+  resetMerchSaleItemForm,
+  alertFn = alert,
+}) {
+  if (merchSaleItemEditingId) {
+    const oldItem = merchSaleItems.find((item) => item.id === merchSaleItemEditingId)
+
+    const { error } = await supabase
+      .from('merch_sale_items')
+      .update(payload)
+      .eq('id', merchSaleItemEditingId)
+
+    if (error) return { error }
+
+    await createAuditLog('update', 'merch_sale_items', merchSaleItemEditingId, oldItem, payload)
+    alertFn('Fanartikel-Verkaufsposition wurde aktualisiert.')
+  } else {
+    const { data, error } = await supabase
+      .from('merch_sale_items')
+      .insert(payload)
+      .select()
+      .single()
+
+    if (error) return { error }
+
+    await createAuditLog('insert', 'merch_sale_items', data?.id, null, data)
+    alertFn('Fanartikel-Verkaufsposition wurde angelegt.')
+  }
+
+  resetMerchSaleItemForm()
+  await loadMerchSaleItems()
+  return { ok: true }
+}
+
+export async function deleteMerchSaleItemRecord({
+  item,
+  createAuditLog,
+  loadMerchSaleItems,
+  alertFn = alert,
+}) {
+  const { error } = await supabase
+    .from('merch_sale_items')
+    .delete()
+    .eq('id', item.id)
+
+  if (error) return { error }
+
+  await createAuditLog('delete', 'merch_sale_items', item.id, item, null)
+  await loadMerchSaleItems()
+  alertFn('Fanartikel-Verkaufsposition wurde geloscht.')
 
   return { ok: true }
 }
