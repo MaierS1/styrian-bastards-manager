@@ -30,6 +30,7 @@ import {
   getAlertStyle as buildAlertStyle,
   getAmountByType as buildAmountByType,
   getCashBalanceForYear as buildCashBalanceForYear,
+  getCommercialDashboardData as buildCommercialDashboardData,
   getDashboardAlerts as buildDashboardAlerts,
   getFinanceDashboardData as buildFinanceDashboardData,
   getFinanceHealthStatus as buildFinanceHealthStatus,
@@ -999,6 +1000,7 @@ export default function App() {
       getCashBalance,
       getFee,
       getMemberById,
+      commercialData: getCommercialDashboardData(),
     })
   }
 
@@ -2985,6 +2987,18 @@ export default function App() {
     })
   }
 
+  function getCommercialDashboardData() {
+    return buildCommercialDashboardData({
+      sponsors,
+      sponsorContracts,
+      merchSales,
+      merchSaleItems,
+      merchVariants,
+      merchItems,
+      selectedCashYear,
+    })
+  }
+
   function getFinanceHealthStatus() {
     return buildFinanceHealthStatus(getFinanceDashboardData(), colors)
   }
@@ -4250,6 +4264,7 @@ export default function App() {
           getStatsMax={getStatsMax}
           financeData={getFinanceDashboardData()}
           financeHealthStatus={getFinanceHealthStatus()}
+          commercialData={getCommercialDashboardData()}
           getCategorySummary={getCategorySummary}
           cashEntries={cashEntries}
           documents={documents}

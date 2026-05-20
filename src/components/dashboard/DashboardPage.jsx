@@ -4,6 +4,7 @@ import { DashboardSummaryCards } from './DashboardSummaryCards'
 import { DashboardMonthlyChart } from './DashboardMonthlyChart'
 import { DashboardStats } from './DashboardStats'
 import { DashboardFinanceOverview } from './DashboardFinanceOverview'
+import { DashboardCommercialOverview } from './DashboardCommercialOverview'
 import { DashboardRecentActivities } from './DashboardRecentActivities'
 
 export function DashboardPage(props) {
@@ -25,6 +26,7 @@ export function DashboardPage(props) {
     getStatsMax,
     financeData,
     financeHealthStatus,
+    commercialData,
     getCategorySummary,
     cashEntries,
     documents,
@@ -60,6 +62,8 @@ export function DashboardPage(props) {
         financeHealthStatus={financeHealthStatus}
         getCategorySummary={getCategorySummary}
       />
+
+      <DashboardCommercialOverview commercialData={commercialData} />
 
       <DashboardRecentActivities cashEntries={cashEntries} documents={documents} />
     </section>

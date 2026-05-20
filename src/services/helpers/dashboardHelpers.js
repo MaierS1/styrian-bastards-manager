@@ -43,6 +43,94 @@ export function getExpenseTotal(cashEntries) {
     .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
 }
 
+export function getCommercialDashboardData({
+  sponsors = [],
+  sponsorContracts = [],
+  merchSales = [],
+  merchSaleItems = [],
+  merchVariants = [],
+  merchItems = [],
+  selectedCashYear,
+  today = new Date(),
+}) {
+  const startOfToday = new Date(today)
+  startOfToday.setHours(0, 0, 0, 0)
+
+  const expiringUntil = new Date(startOfToday)
+  expiringUntil.setDate(startOfToday.getDate() + 30)
+
+  const activeSponsors = sponsors.filter((sponsor) => sponsor.status === 'active')
+  const activeContracts = sponsorContracts.filter((contract) => contract.status === 'active')
+  const expiringContracts = activeContracts
+    .filter((contract) => {
+      if (!contract.ends_on) return false
+
+      const endsOn = new Date(contract.ends_on)
+      endsOn.setHours(0, 0, 0, 0)
+
+      return endsOn >= startOfToday && endsOn <= expiringUntil
+    })
+    .sort((a, b) => new Date(a.ends_on) - new Date(b.ends_on))
+
+  const sponsorshipContractVolumeCents = activeContracts.reduce(
+    (sum, contract) => sum + Number(contract.amount_cents || 0),
+    0
+  )
+
+  const selectedYear = selectedCashYear === 'alle' ? null : String(selectedCashYear || '')
+  const completedSales = merchSales.filter((sale) => {
+    if (sale.status !== 'completed') return false
+    if (!selectedYear) return true
+    return String(sale.sale_date || '').slice(0, 4) === selectedYear
+  })
+  const completedSaleIds = new Set(completedSales.map((sale) => sale.id))
+  const completedSaleItems = merchSaleItems.filter((item) => completedSaleIds.has(item.merch_sale_id))
+  const merchRevenueCents = completedSales.reduce((sum, sale) => sum + Number(sale.total_cents || 0), 0)
+  const merchQuantitySold = completedSaleItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+  const lowStockVariants = merchVariants
+    .filter((variant) => {
+      const item = merchItems.find((candidate) => candidate.id === variant.merch_item_id)
+      return (
+        variant.status === 'active'
+        && item?.status === 'active'
+        && Number(variant.stock_quantity || 0) <= Number(variant.reorder_level || 0)
+      )
+    })
+    .sort((a, b) => Number(a.stock_quantity || 0) - Number(b.stock_quantity || 0))
+
+  const topMerchItemsById = {}
+
+  completedSaleItems.forEach((saleItem) => {
+    const variant = merchVariants.find((candidate) => candidate.id === saleItem.merch_variant_id)
+    const merchItem = merchItems.find((candidate) => candidate.id === variant?.merch_item_id)
+
+    if (!merchItem) return
+
+    if (!topMerchItemsById[merchItem.id]) {
+      topMerchItemsById[merchItem.id] = {
+        id: merchItem.id,
+        name: merchItem.name,
+        quantity: 0,
+        revenueCents: 0,
+      }
+    }
+
+    topMerchItemsById[merchItem.id].quantity += Number(saleItem.quantity || 0)
+    topMerchItemsById[merchItem.id].revenueCents += Number(saleItem.total_cents || 0)
+  })
+
+  return {
+    activeSponsorsCount: activeSponsors.length,
+    activeContractsCount: activeContracts.length,
+    expiringContracts,
+    sponsorshipContractVolumeCents,
+    merchRevenueCents,
+    merchQuantitySold,
+    lowStockVariants,
+    topMerchItems: Object.values(topMerchItemsById).sort((a, b) => b.revenueCents - a.revenueCents),
+  }
+}
+
 export function getDashboardAlerts({
   members,
   documents,
@@ -58,6 +146,7 @@ export function getDashboardAlerts({
   getCashBalance,
   getFee,
   getMemberById,
+  commercialData,
 }) {
   const alerts = []
   const openFeeMembers = members.filter((member) => {
@@ -96,6 +185,26 @@ export function getDashboardAlerts({
       type: 'info',
       title: 'Anstehende Events',
       message: `${upcomingEvents.length} Event(s) in den nächsten 14 Tagen. Nächstes Event: ${upcomingEvents[0].name} am ${upcomingEvents[0].event_date}.`,
+    })
+  }
+
+  if (commercialData?.expiringContracts?.length > 0) {
+    const nextContract = commercialData.expiringContracts[0]
+
+    alerts.push({
+      type: 'warning',
+      title: 'Sponsor-Vertraege laufen aus',
+      message: `${commercialData.expiringContracts.length} aktive Sponsor-Vertrag/Vertraege laufen in den naechsten 30 Tagen aus. Naechster Vertrag: ${nextContract.title || 'Ohne Titel'} bis ${nextContract.ends_on}.`,
+    })
+  }
+
+  if (commercialData?.lowStockVariants?.length > 0) {
+    const nextVariant = commercialData.lowStockVariants[0]
+
+    alerts.push({
+      type: 'warning',
+      title: 'Niedriger Fanartikelbestand',
+      message: `${commercialData.lowStockVariants.length} aktive Fanartikel-Variante(n) liegen am oder unter dem Mindestbestand. Niedrigster Bestand: ${Number(nextVariant.stock_quantity || 0)}.`,
     })
   }
 
