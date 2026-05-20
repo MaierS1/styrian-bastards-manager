@@ -30,6 +30,8 @@ export function SponsorsPage({
   setSponsorStatus,
   sponsorNotes,
   setSponsorNotes,
+  sponsorSaving,
+  sponsorDeletingId,
   saveSponsor,
   resetSponsorForm,
   editSponsor,
@@ -53,6 +55,8 @@ export function SponsorsPage({
   setContractBillingCycle,
   contractNotes,
   setContractNotes,
+  sponsorContractSaving,
+  sponsorContractDeletingId,
   saveSponsorContract,
   resetSponsorContractForm,
   editSponsorContract,
@@ -126,8 +130,8 @@ export function SponsorsPage({
             style={inputStyle}
           />
 
-          <button onClick={saveSponsor} style={buttonStyle}>
-            {sponsorEditingId ? 'Anderungen speichern' : 'Sponsor speichern'}
+          <button onClick={saveSponsor} disabled={sponsorSaving} style={buttonStyle}>
+            {sponsorSaving ? 'Sponsor wird gespeichert...' : sponsorEditingId ? 'Anderungen speichern' : 'Sponsor speichern'}
           </button>
 
           {sponsorEditingId && (
@@ -230,8 +234,8 @@ export function SponsorsPage({
             style={inputStyle}
           />
 
-          <button onClick={saveSponsorContract} style={buttonStyle}>
-            {sponsorContractEditingId ? 'Vertrag speichern' : 'Vertrag anlegen'}
+          <button onClick={saveSponsorContract} disabled={sponsorContractSaving} style={buttonStyle}>
+            {sponsorContractSaving ? 'Vertrag wird gespeichert...' : sponsorContractEditingId ? 'Vertrag speichern' : 'Vertrag anlegen'}
           </button>
 
           {sponsorContractEditingId && (
@@ -280,6 +284,7 @@ export function SponsorsPage({
             canManageSponsors={canManageSponsors}
             editSponsorContract={editSponsorContract}
             deleteSponsorContract={deleteSponsorContract}
+            sponsorContractDeletingId={sponsorContractDeletingId}
           />
 
           {canManageSponsors() && (
@@ -290,9 +295,10 @@ export function SponsorsPage({
               </button>
               <button
                 onClick={() => deleteSponsor(sponsor)}
+                disabled={sponsorDeletingId === sponsor.id}
                 style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
               >
-                Sponsor loschen
+                {sponsorDeletingId === sponsor.id ? 'Sponsor wird geloscht...' : 'Sponsor loschen'}
               </button>
             </>
           )}
@@ -314,6 +320,7 @@ function SponsorContractsList({
   canManageSponsors,
   editSponsorContract,
   deleteSponsorContract,
+  sponsorContractDeletingId,
 }) {
   if (contracts.length === 0) {
     return (
@@ -354,9 +361,10 @@ function SponsorContractsList({
               </button>
               <button
                 onClick={() => deleteSponsorContract(contract)}
+                disabled={sponsorContractDeletingId === contract.id}
                 style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
               >
-                Vertrag loschen
+                {sponsorContractDeletingId === contract.id ? 'Vertrag wird geloscht...' : 'Vertrag loschen'}
               </button>
             </>
           )}

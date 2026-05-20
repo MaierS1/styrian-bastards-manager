@@ -185,3 +185,38 @@ export async function createMerchSaleWithItemRecord({
 
   return { ok: true, sale: data }
 }
+
+export async function cancelMerchSaleRecord({
+  sale,
+  cancellationReason,
+  createAuditLog,
+  loadMerchSales,
+  loadMerchSaleItems,
+  loadMerchVariants,
+  loadCashEntries,
+  alertFn = alert,
+}) {
+  const { data, error } = await supabase
+    .rpc('cancel_merch_sale', {
+      p_merch_sale_id: sale.id,
+      p_cancellation_reason: cancellationReason,
+    })
+    .single()
+
+  if (error) return { error }
+
+  await createAuditLog('cancel_merch_sale', 'merch_sales', sale.id, sale, {
+    rpc: 'cancel_merch_sale',
+    reason: cancellationReason,
+    result: data,
+  })
+
+  await loadMerchSales()
+  await loadMerchSaleItems()
+  await loadMerchVariants()
+  await loadCashEntries()
+
+  alertFn('Fanartikel-Verkauf wurde storniert.')
+
+  return { ok: true, sale: data }
+}

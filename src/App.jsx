@@ -204,6 +204,7 @@ import {
   saveSponsorRecord,
 } from './services/repositories/sponsorsRepository'
 import {
+  cancelMerchSaleRecord,
   createMerchSaleWithItemRecord,
   deleteMerchItemRecord,
   deleteMerchVariantRecord,
@@ -344,6 +345,8 @@ export default function App() {
   const [sponsorLogoPath, setSponsorLogoPath] = useState('')
   const [sponsorStatus, setSponsorStatus] = useState('active')
   const [sponsorNotes, setSponsorNotes] = useState('')
+  const [sponsorSaving, setSponsorSaving] = useState(false)
+  const [sponsorDeletingId, setSponsorDeletingId] = useState(null)
   const [sponsorContractEditingId, setSponsorContractEditingId] = useState(null)
   const [contractSponsorId, setContractSponsorId] = useState('')
   const [contractTitle, setContractTitle] = useState('')
@@ -354,6 +357,8 @@ export default function App() {
   const [contractAmount, setContractAmount] = useState('')
   const [contractBillingCycle, setContractBillingCycle] = useState('one_time')
   const [contractNotes, setContractNotes] = useState('')
+  const [sponsorContractSaving, setSponsorContractSaving] = useState(false)
+  const [sponsorContractDeletingId, setSponsorContractDeletingId] = useState(null)
   const [merchItemEditingId, setMerchItemEditingId] = useState(null)
   const [merchItemNumber, setMerchItemNumber] = useState('')
   const [merchItemName, setMerchItemName] = useState('')
@@ -364,6 +369,8 @@ export default function App() {
   const [merchItemTaxRate, setMerchItemTaxRate] = useState('0')
   const [merchItemSkuPrefix, setMerchItemSkuPrefix] = useState('')
   const [merchItemDescription, setMerchItemDescription] = useState('')
+  const [merchItemSaving, setMerchItemSaving] = useState(false)
+  const [merchItemDeletingId, setMerchItemDeletingId] = useState(null)
   const [merchVariantEditingId, setMerchVariantEditingId] = useState(null)
   const [merchVariantItemId, setMerchVariantItemId] = useState('')
   const [merchVariantSku, setMerchVariantSku] = useState('')
@@ -374,6 +381,8 @@ export default function App() {
   const [merchVariantStock, setMerchVariantStock] = useState('0')
   const [merchVariantReorderLevel, setMerchVariantReorderLevel] = useState('0')
   const [merchVariantStatus, setMerchVariantStatus] = useState('active')
+  const [merchVariantSaving, setMerchVariantSaving] = useState(false)
+  const [merchVariantDeletingId, setMerchVariantDeletingId] = useState(null)
   const [merchSaleVariantId, setMerchSaleVariantId] = useState('')
   const [merchSaleQuantity, setMerchSaleQuantity] = useState('1')
   const [merchSaleDiscount, setMerchSaleDiscount] = useState('')
@@ -383,6 +392,7 @@ export default function App() {
   const [merchSalePaymentMethod, setMerchSalePaymentMethod] = useState('bar')
   const [merchSaleCreateCashEntry, setMerchSaleCreateCashEntry] = useState(true)
   const [merchSaleSaving, setMerchSaleSaving] = useState(false)
+  const [merchSaleCancellingId, setMerchSaleCancellingId] = useState(null)
 
   const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
@@ -1899,6 +1909,26 @@ export default function App() {
     return message
   }
 
+  function getCancelMerchSaleErrorMessage(error) {
+    const message = error?.message || 'Fanartikel-Verkauf konnte nicht storniert werden.'
+
+    if (message.includes('already cancelled')) return 'Dieser Verkauf wurde bereits storniert.'
+    if (message.includes('cannot be cancelled from status')) return 'Dieser Verkauf kann nicht storniert werden.'
+    if (message.includes('has no sale items')) return 'Dieser Verkauf hat keine Positionen und kann nicht storniert werden.'
+
+    return message
+  }
+
+  async function reloadMerchAfterCancelError(sale) {
+    await loadMerchSales()
+    await loadMerchSaleItems()
+    await loadMerchVariants()
+
+    if (sale?.cash_entry_id) {
+      await loadCashEntries()
+    }
+  }
+
   function getMerchSaleTotals() {
     const quantity = merchSaleQuantity ? Number(merchSaleQuantity) : 0
     const discount = merchSaleDiscount ? Number(String(merchSaleDiscount).replace(',', '.')) : 0
@@ -1997,6 +2027,40 @@ export default function App() {
     }
   }
 
+  async function cancelMerchSale(sale) {
+    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverkauf.')
+    if (!sale || sale.status !== 'completed') return alert('Nur abgeschlossene Verkaeufe koennen storniert werden.')
+    if (merchSaleCancellingId) return
+
+    const reason = window.prompt('Grund fur die Stornierung:')
+
+    if (reason === null) return
+
+    setMerchSaleCancellingId(sale.id)
+
+    try {
+      const result = await cancelMerchSaleRecord({
+        sale,
+        cancellationReason: reason.trim() || null,
+        createAuditLog,
+        loadMerchSales,
+        loadMerchSaleItems,
+        loadMerchVariants,
+        loadCashEntries,
+      })
+
+      if (result?.error) {
+        alert(getCancelMerchSaleErrorMessage(result.error))
+        await reloadMerchAfterCancelError(sale)
+      }
+    } catch (error) {
+      alert(getCancelMerchSaleErrorMessage(error))
+      await reloadMerchAfterCancelError(sale)
+    } finally {
+      setMerchSaleCancellingId(null)
+    }
+  }
+
   function editMerchItem(item) {
     if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
 
@@ -2016,6 +2080,7 @@ export default function App() {
 
   async function saveMerchItem() {
     if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (merchItemSaving) return
 
     if (!merchItemName.trim()) {
       alert('Name ist Pflicht.')
@@ -2047,20 +2112,27 @@ export default function App() {
       sku_prefix: merchItemSkuPrefix.trim() || null,
     }
 
-    const result = await saveMerchItemRecord({
-      merchItemEditingId,
-      payload,
-      merchItems,
-      createAuditLog,
-      loadMerchItems,
-      resetMerchItemForm,
-    })
+    setMerchItemSaving(true)
 
-    if (result?.error) alert(result.error.message)
+    try {
+      const result = await saveMerchItemRecord({
+        merchItemEditingId,
+        payload,
+        merchItems,
+        createAuditLog,
+        loadMerchItems,
+        resetMerchItemForm,
+      })
+
+      if (result?.error) alert(result.error.message)
+    } finally {
+      setMerchItemSaving(false)
+    }
   }
 
   async function deleteMerchItem(item) {
     if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (merchItemDeletingId) return
 
     const confirmed = window.confirm(
       `Fanartikel wirklich loschen?\n\n${item.name || ''}\n\nAlle Varianten dieses Artikels werden ebenfalls geloscht.`
@@ -2068,14 +2140,20 @@ export default function App() {
 
     if (!confirmed) return
 
-    const result = await deleteMerchItemRecord({
-      item,
-      createAuditLog,
-      loadMerchItems,
-      loadMerchVariants,
-    })
+    setMerchItemDeletingId(item.id)
 
-    if (result?.error) alert(result.error.message)
+    try {
+      const result = await deleteMerchItemRecord({
+        item,
+        createAuditLog,
+        loadMerchItems,
+        loadMerchVariants,
+      })
+
+      if (result?.error) alert(result.error.message)
+    } finally {
+      setMerchItemDeletingId(null)
+    }
   }
 
   function editMerchVariant(variant) {
@@ -2097,6 +2175,7 @@ export default function App() {
 
   async function saveMerchVariant() {
     if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (merchVariantSaving) return
 
     if (merchItems.length === 0) {
       alert('Bitte zuerst einen Fanartikel anlegen.')
@@ -2149,20 +2228,27 @@ export default function App() {
       status: merchVariantStatus || 'active',
     }
 
-    const result = await saveMerchVariantRecord({
-      merchVariantEditingId,
-      payload,
-      merchVariants,
-      createAuditLog,
-      loadMerchVariants,
-      resetMerchVariantForm,
-    })
+    setMerchVariantSaving(true)
 
-    if (result?.error) alert(result.error.message)
+    try {
+      const result = await saveMerchVariantRecord({
+        merchVariantEditingId,
+        payload,
+        merchVariants,
+        createAuditLog,
+        loadMerchVariants,
+        resetMerchVariantForm,
+      })
+
+      if (result?.error) alert(result.error.message)
+    } finally {
+      setMerchVariantSaving(false)
+    }
   }
 
   async function deleteMerchVariant(variant) {
     if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (merchVariantDeletingId) return
 
     const confirmed = window.confirm(
       `Variante wirklich loschen?\n\n${variant.variant_name || variant.sku || ''}`
@@ -2170,13 +2256,19 @@ export default function App() {
 
     if (!confirmed) return
 
-    const result = await deleteMerchVariantRecord({
-      variant,
-      createAuditLog,
-      loadMerchVariants,
-    })
+    setMerchVariantDeletingId(variant.id)
 
-    if (result?.error) alert(result.error.message)
+    try {
+      const result = await deleteMerchVariantRecord({
+        variant,
+        createAuditLog,
+        loadMerchVariants,
+      })
+
+      if (result?.error) alert(result.error.message)
+    } finally {
+      setMerchVariantDeletingId(null)
+    }
   }
 
   function resetSponsorForm() {
@@ -2222,6 +2314,7 @@ export default function App() {
 
   async function saveSponsor() {
     if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (sponsorSaving) return
 
     if (!sponsorName.trim()) {
       alert('Name ist Pflicht.')
@@ -2239,16 +2332,22 @@ export default function App() {
       notes: sponsorNotes.trim() || null,
     }
 
-    const result = await saveSponsorRecord({
-      sponsorEditingId,
-      payload,
-      sponsors,
-      createAuditLog,
-      loadSponsors,
-      resetSponsorForm,
-    })
+    setSponsorSaving(true)
 
-    if (result?.error) alert(result.error.message)
+    try {
+      const result = await saveSponsorRecord({
+        sponsorEditingId,
+        payload,
+        sponsors,
+        createAuditLog,
+        loadSponsors,
+        resetSponsorForm,
+      })
+
+      if (result?.error) alert(result.error.message)
+    } finally {
+      setSponsorSaving(false)
+    }
   }
 
   function editSponsorContract(contract) {
@@ -2270,6 +2369,7 @@ export default function App() {
 
   async function saveSponsorContract() {
     if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (sponsorContractSaving) return
 
     if (sponsors.length === 0) {
       alert('Bitte zuerst einen Sponsor anlegen.')
@@ -2316,20 +2416,27 @@ export default function App() {
       notes: contractNotes.trim() || null,
     }
 
-    const result = await saveSponsorContractRecord({
-      sponsorContractEditingId,
-      payload,
-      sponsorContracts,
-      createAuditLog,
-      loadSponsorContracts,
-      resetSponsorContractForm,
-    })
+    setSponsorContractSaving(true)
 
-    if (result?.error) alert(result.error.message)
+    try {
+      const result = await saveSponsorContractRecord({
+        sponsorContractEditingId,
+        payload,
+        sponsorContracts,
+        createAuditLog,
+        loadSponsorContracts,
+        resetSponsorContractForm,
+      })
+
+      if (result?.error) alert(result.error.message)
+    } finally {
+      setSponsorContractSaving(false)
+    }
   }
 
   async function deleteSponsorContract(contract) {
     if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (sponsorContractDeletingId) return
 
     const confirmed = window.confirm(
       `Sponsor-Vertrag wirklich loschen?\n\n${contract.title || ''}\n\nDas kann nicht ruckgangig gemacht werden.`
@@ -2337,17 +2444,24 @@ export default function App() {
 
     if (!confirmed) return
 
-    const result = await deleteSponsorContractRecord({
-      contract,
-      createAuditLog,
-      loadSponsorContracts,
-    })
+    setSponsorContractDeletingId(contract.id)
 
-    if (result?.error) alert(result.error.message)
+    try {
+      const result = await deleteSponsorContractRecord({
+        contract,
+        createAuditLog,
+        loadSponsorContracts,
+      })
+
+      if (result?.error) alert(result.error.message)
+    } finally {
+      setSponsorContractDeletingId(null)
+    }
   }
 
   async function deleteSponsor(sponsor) {
     if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (sponsorDeletingId) return
 
     const confirmed = window.confirm(
       `Sponsor wirklich loschen?\n\n${sponsor.name || ''}\n\nBestehende Sponsor-Vertrage wurden durch die Datenbank ebenfalls geloscht.`
@@ -2355,14 +2469,20 @@ export default function App() {
 
     if (!confirmed) return
 
-    const result = await deleteSponsorRecord({
-      sponsor,
-      createAuditLog,
-      loadSponsors,
-    })
+    setSponsorDeletingId(sponsor.id)
 
-    if (result?.error) alert(result.error.message)
-    else await loadSponsorContracts()
+    try {
+      const result = await deleteSponsorRecord({
+        sponsor,
+        createAuditLog,
+        loadSponsors,
+      })
+
+      if (result?.error) alert(result.error.message)
+      else await loadSponsorContracts()
+    } finally {
+      setSponsorDeletingId(null)
+    }
   }
 
   function resetInventoryForm() {
@@ -4264,6 +4384,8 @@ export default function App() {
           setSponsorStatus={setSponsorStatus}
           sponsorNotes={sponsorNotes}
           setSponsorNotes={setSponsorNotes}
+          sponsorSaving={sponsorSaving}
+          sponsorDeletingId={sponsorDeletingId}
           saveSponsor={saveSponsor}
           resetSponsorForm={resetSponsorForm}
           editSponsor={editSponsor}
@@ -4287,6 +4409,8 @@ export default function App() {
           setContractBillingCycle={setContractBillingCycle}
           contractNotes={contractNotes}
           setContractNotes={setContractNotes}
+          sponsorContractSaving={sponsorContractSaving}
+          sponsorContractDeletingId={sponsorContractDeletingId}
           saveSponsorContract={saveSponsorContract}
           resetSponsorContractForm={resetSponsorContractForm}
           editSponsorContract={editSponsorContract}
@@ -4322,6 +4446,8 @@ export default function App() {
           setMerchItemSkuPrefix={setMerchItemSkuPrefix}
           merchItemDescription={merchItemDescription}
           setMerchItemDescription={setMerchItemDescription}
+          merchItemSaving={merchItemSaving}
+          merchItemDeletingId={merchItemDeletingId}
           saveMerchItem={saveMerchItem}
           resetMerchItemForm={resetMerchItemForm}
           editMerchItem={editMerchItem}
@@ -4345,6 +4471,8 @@ export default function App() {
           setMerchVariantReorderLevel={setMerchVariantReorderLevel}
           merchVariantStatus={merchVariantStatus}
           setMerchVariantStatus={setMerchVariantStatus}
+          merchVariantSaving={merchVariantSaving}
+          merchVariantDeletingId={merchVariantDeletingId}
           saveMerchVariant={saveMerchVariant}
           resetMerchVariantForm={resetMerchVariantForm}
           editMerchVariant={editMerchVariant}
@@ -4366,7 +4494,9 @@ export default function App() {
           merchSaleCreateCashEntry={merchSaleCreateCashEntry}
           setMerchSaleCreateCashEntry={setMerchSaleCreateCashEntry}
           merchSaleSaving={merchSaleSaving}
+          merchSaleCancellingId={merchSaleCancellingId}
           saveMerchSale={saveMerchSale}
+          cancelMerchSale={cancelMerchSale}
           resetMerchSaleForm={resetMerchSaleForm}
           getMerchSaleUnitPriceCents={getMerchSaleUnitPriceCents}
           getMerchSaleTotals={getMerchSaleTotals}
