@@ -151,86 +151,39 @@ export async function deleteMerchVariantRecord({
   return { ok: true }
 }
 
-export async function saveMerchSaleRecord({
-  merchSaleEditingId,
-  payload,
-  merchSales,
-  createAuditLog,
-  loadMerchSales,
-  resetMerchSaleForm,
-  alertFn = alert,
-}) {
-  if (merchSaleEditingId) {
-    const oldSale = merchSales.find((sale) => sale.id === merchSaleEditingId)
-
-    const { error } = await supabase
-      .from('merch_sales')
-      .update(payload)
-      .eq('id', merchSaleEditingId)
-
-    if (error) return { error }
-
-    await createAuditLog('update', 'merch_sales', merchSaleEditingId, oldSale, payload)
-    alertFn('Fanartikel-Verkauf wurde aktualisiert.')
-  } else {
-    const { data, error } = await supabase
-      .from('merch_sales')
-      .insert(payload)
-      .select()
-      .single()
-
-    if (error) return { error }
-
-    await createAuditLog('insert', 'merch_sales', data?.id, null, data)
-    alertFn('Fanartikel-Verkauf wurde angelegt.')
-  }
-
-  resetMerchSaleForm()
-  await loadMerchSales()
-  return { ok: true }
-}
-
 export async function createMerchSaleWithItemRecord({
-  salePayload,
-  itemPayload,
+  rpcPayload,
   createAuditLog,
   loadMerchSales,
   loadMerchSaleItems,
+  loadMerchVariants,
+  loadCashEntries,
   resetMerchSaleForm,
   alertFn = alert,
 }) {
-  const { data: sale, error: saleError } = await supabase
-    .from('merch_sales')
-    .insert(salePayload)
-    .select()
+  const { data, error } = await supabase
+    .rpc('create_merch_sale', rpcPayload)
     .single()
 
-  if (saleError) return { error: saleError }
+  if (error) return { error }
 
-  const saleItemPayload = {
-    ...itemPayload,
-    merch_sale_id: sale.id,
-  }
-
-  const { data: saleItem, error: itemError } = await supabase
-    .from('merch_sale_items')
-    .insert(saleItemPayload)
-    .select()
-    .single()
-
-  if (itemError) return { error: itemError }
-
-  await createAuditLog('insert', 'merch_sales', sale.id, null, {
-    sale,
-    item: saleItem,
+  await createAuditLog('insert', 'merch_sales', data?.merch_sale_id, null, {
+    rpc: 'create_merch_sale',
+    result: data,
   })
 
   resetMerchSaleForm()
   await loadMerchSales()
   await loadMerchSaleItems()
+  await loadMerchVariants()
+
+  if (rpcPayload.p_create_cash_entry) {
+    await loadCashEntries()
+  }
+
   alertFn('Fanartikel-Verkauf wurde gespeichert.')
 
-  return { ok: true, sale, item: saleItem }
+  return { ok: true, sale: data }
 }
 
 export async function deleteMerchSaleRecord({
@@ -252,45 +205,6 @@ export async function deleteMerchSaleRecord({
   await loadMerchSaleItems()
   alertFn('Fanartikel-Verkauf wurde geloscht.')
 
-  return { ok: true }
-}
-
-export async function saveMerchSaleItemRecord({
-  merchSaleItemEditingId,
-  payload,
-  merchSaleItems,
-  createAuditLog,
-  loadMerchSaleItems,
-  resetMerchSaleItemForm,
-  alertFn = alert,
-}) {
-  if (merchSaleItemEditingId) {
-    const oldItem = merchSaleItems.find((item) => item.id === merchSaleItemEditingId)
-
-    const { error } = await supabase
-      .from('merch_sale_items')
-      .update(payload)
-      .eq('id', merchSaleItemEditingId)
-
-    if (error) return { error }
-
-    await createAuditLog('update', 'merch_sale_items', merchSaleItemEditingId, oldItem, payload)
-    alertFn('Fanartikel-Verkaufsposition wurde aktualisiert.')
-  } else {
-    const { data, error } = await supabase
-      .from('merch_sale_items')
-      .insert(payload)
-      .select()
-      .single()
-
-    if (error) return { error }
-
-    await createAuditLog('insert', 'merch_sale_items', data?.id, null, data)
-    alertFn('Fanartikel-Verkaufsposition wurde angelegt.')
-  }
-
-  resetMerchSaleItemForm()
-  await loadMerchSaleItems()
   return { ok: true }
 }
 

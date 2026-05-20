@@ -77,6 +77,8 @@ export function MerchPage({
   setMerchSaleEventId,
   merchSalePaymentMethod,
   setMerchSalePaymentMethod,
+  merchSaleCreateCashEntry,
+  setMerchSaleCreateCashEntry,
   saveMerchSale,
   resetMerchSaleForm,
   getMerchSaleUnitPriceCents,
@@ -327,6 +329,16 @@ export function MerchPage({
             <option value="ebanking">E-Banking</option>
             <option value="sonstiges">Sonstiges</option>
           </select>
+
+          <label style={{ display: 'block', margin: '10px 0', color: colors.text }}>
+            <input
+              type="checkbox"
+              checked={merchSaleCreateCashEntry}
+              onChange={(event) => setMerchSaleCreateCashEntry(event.target.checked)}
+              style={{ marginRight: 8 }}
+            />
+            Kassa-Eintrag erzeugen
+          </label>
 
           <p style={mutedTextStyle}>
             Preis: <strong>{formatAmount(getMerchSaleUnitPriceCents())}</strong>

@@ -381,6 +381,7 @@ export default function App() {
   const [merchSaleBuyerName, setMerchSaleBuyerName] = useState('')
   const [merchSaleEventId, setMerchSaleEventId] = useState('')
   const [merchSalePaymentMethod, setMerchSalePaymentMethod] = useState('bar')
+  const [merchSaleCreateCashEntry, setMerchSaleCreateCashEntry] = useState(true)
 
   const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
@@ -1861,6 +1862,7 @@ export default function App() {
     setMerchSaleBuyerName('')
     setMerchSaleEventId('')
     setMerchSalePaymentMethod('bar')
+    setMerchSaleCreateCashEntry(true)
   }
 
   function getMerchSaleUnitPriceCents(variantId = merchSaleVariantId) {
@@ -1923,37 +1925,33 @@ export default function App() {
       return
     }
 
-    const salePayload = {
-      sale_date: new Date().toISOString().slice(0, 10),
-      member_id: merchSaleMemberId || null,
-      event_id: merchSaleEventId || null,
-      cash_entry_id: null,
-      status: 'completed',
-      payment_method: merchSalePaymentMethod || 'bar',
-      currency: 'EUR',
-      subtotal_cents: totals.subtotalCents,
-      discount_cents: totals.discountCents,
-      total_cents: totals.totalCents,
-      buyer_name: merchSaleBuyerName.trim() || null,
-      notes: null,
-    }
+    const saleDate = new Date().toISOString().slice(0, 10)
+    const receiptNumber = merchSaleCreateCashEntry
+      ? getNextReceiptNumber(new Date(`${saleDate}T00:00:00`).getFullYear())
+      : null
 
-    const itemPayload = {
-      merch_variant_id: variant.id,
-      quantity,
-      unit_price_cents: totals.unitPriceCents,
-      subtotal_cents: totals.subtotalCents,
-      discount_cents: totals.discountCents,
-      total_cents: totals.totalCents,
-      notes: null,
+    const rpcPayload = {
+      p_merch_variant_id: variant.id,
+      p_quantity: quantity,
+      p_unit_price_cents: totals.unitPriceCents,
+      p_discount_cents: totals.discountCents,
+      p_sale_date: saleDate,
+      p_payment_method: merchSalePaymentMethod || 'bar',
+      p_member_id: merchSaleMemberId || null,
+      p_event_id: merchSaleEventId || null,
+      p_buyer_name: merchSaleBuyerName.trim() || null,
+      p_notes: null,
+      p_create_cash_entry: merchSaleCreateCashEntry,
+      p_receipt_number: receiptNumber,
     }
 
     const result = await createMerchSaleWithItemRecord({
-      salePayload,
-      itemPayload,
+      rpcPayload,
       createAuditLog,
       loadMerchSales,
       loadMerchSaleItems,
+      loadMerchVariants,
+      loadCashEntries,
       resetMerchSaleForm,
     })
 
@@ -4326,6 +4324,8 @@ export default function App() {
           setMerchSaleEventId={setMerchSaleEventId}
           merchSalePaymentMethod={merchSalePaymentMethod}
           setMerchSalePaymentMethod={setMerchSalePaymentMethod}
+          merchSaleCreateCashEntry={merchSaleCreateCashEntry}
+          setMerchSaleCreateCashEntry={setMerchSaleCreateCashEntry}
           saveMerchSale={saveMerchSale}
           resetMerchSaleForm={resetMerchSaleForm}
           getMerchSaleUnitPriceCents={getMerchSaleUnitPriceCents}
