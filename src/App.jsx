@@ -382,6 +382,7 @@ export default function App() {
   const [merchSaleEventId, setMerchSaleEventId] = useState('')
   const [merchSalePaymentMethod, setMerchSalePaymentMethod] = useState('bar')
   const [merchSaleCreateCashEntry, setMerchSaleCreateCashEntry] = useState(true)
+  const [merchSaleSaving, setMerchSaleSaving] = useState(false)
 
   const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
@@ -1879,6 +1880,25 @@ export default function App() {
     return merchVariants.find((variant) => variant.id === merchSaleVariantId) || null
   }
 
+  function getLocalDateString(date = new Date()) {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+
+    return `${year}-${month}-${day}`
+  }
+
+  function getMerchSaleErrorMessage(error) {
+    const message = error?.message || 'Fanartikel-Verkauf konnte nicht gespeichert werden.'
+    const stockMatch = message.match(/not enough stock.*available\s+(\d+),\s+requested\s+(\d+)/i)
+
+    if (stockMatch) {
+      return `Nicht genug Bestand verfugbar. Verfugbar: ${stockMatch[1]}, angefragt: ${stockMatch[2]}.`
+    }
+
+    return message
+  }
+
   function getMerchSaleTotals() {
     const quantity = merchSaleQuantity ? Number(merchSaleQuantity) : 0
     const discount = merchSaleDiscount ? Number(String(merchSaleDiscount).replace(',', '.')) : 0
@@ -1896,6 +1916,7 @@ export default function App() {
 
   async function saveMerchSale() {
     if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverkauf.')
+    if (merchSaleSaving) return
 
     const variant = getMerchSaleSelectedVariant()
 
@@ -1904,10 +1925,20 @@ export default function App() {
       return
     }
 
+    if (variant.status !== 'active') {
+      alert('Diese Variante ist nicht fur den Verkauf aktiv.')
+      return
+    }
+
     const quantity = merchSaleQuantity ? Number(merchSaleQuantity) : 0
 
     if (!Number.isInteger(quantity) || quantity <= 0) {
       alert('Menge muss eine ganze positive Zahl sein.')
+      return
+    }
+
+    if (Number(variant.stock_quantity || 0) < quantity) {
+      alert(`Nicht genug Bestand verfugbar. Verfugbar: ${Number(variant.stock_quantity || 0)}, angefragt: ${quantity}.`)
       return
     }
 
@@ -1925,9 +1956,9 @@ export default function App() {
       return
     }
 
-    const saleDate = new Date().toISOString().slice(0, 10)
+    const saleDate = getLocalDateString()
     const receiptNumber = merchSaleCreateCashEntry
-      ? getNextReceiptNumber(new Date(`${saleDate}T00:00:00`).getFullYear())
+      ? getNextReceiptNumber(Number(saleDate.slice(0, 4)))
       : null
 
     const rpcPayload = {
@@ -1945,17 +1976,25 @@ export default function App() {
       p_receipt_number: receiptNumber,
     }
 
-    const result = await createMerchSaleWithItemRecord({
-      rpcPayload,
-      createAuditLog,
-      loadMerchSales,
-      loadMerchSaleItems,
-      loadMerchVariants,
-      loadCashEntries,
-      resetMerchSaleForm,
-    })
+    setMerchSaleSaving(true)
 
-    if (result?.error) alert(result.error.message)
+    try {
+      const result = await createMerchSaleWithItemRecord({
+        rpcPayload,
+        createAuditLog,
+        loadMerchSales,
+        loadMerchSaleItems,
+        loadMerchVariants,
+        loadCashEntries,
+        resetMerchSaleForm,
+      })
+
+      if (result?.error) alert(getMerchSaleErrorMessage(result.error))
+    } catch (error) {
+      alert(getMerchSaleErrorMessage(error))
+    } finally {
+      setMerchSaleSaving(false)
+    }
   }
 
   function editMerchItem(item) {
@@ -4326,6 +4365,7 @@ export default function App() {
           setMerchSalePaymentMethod={setMerchSalePaymentMethod}
           merchSaleCreateCashEntry={merchSaleCreateCashEntry}
           setMerchSaleCreateCashEntry={setMerchSaleCreateCashEntry}
+          merchSaleSaving={merchSaleSaving}
           saveMerchSale={saveMerchSale}
           resetMerchSaleForm={resetMerchSaleForm}
           getMerchSaleUnitPriceCents={getMerchSaleUnitPriceCents}

@@ -79,6 +79,7 @@ export function MerchPage({
   setMerchSalePaymentMethod,
   merchSaleCreateCashEntry,
   setMerchSaleCreateCashEntry,
+  merchSaleSaving,
   saveMerchSale,
   resetMerchSaleForm,
   getMerchSaleUnitPriceCents,
@@ -263,15 +264,16 @@ export function MerchPage({
 
           <select value={merchSaleVariantId} onChange={(event) => setMerchSaleVariantId(event.target.value)} style={inputStyle}>
             <option value="">Variante auswahlen</option>
-            {merchVariants.map((variant) => {
+            {merchVariants.filter((variant) => variant.status === 'active').map((variant) => {
               const item = merchItems.find((merchItem) => merchItem.id === variant.merch_item_id)
               const variantLabel = [variant.variant_name, variant.size, variant.color, variant.sku]
                 .filter(Boolean)
                 .join(' / ')
+              const stockQuantity = Number(variant.stock_quantity || 0)
 
               return (
                 <option key={variant.id} value={variant.id}>
-                  {item?.name || 'Fanartikel'} - {variantLabel || 'Variante'}
+                  {item?.name || 'Fanartikel'} - {variantLabel || 'Variante'} - Bestand: {stockQuantity}
                 </option>
               )
             })}
@@ -350,8 +352,8 @@ export function MerchPage({
             Gesamt: <strong>{formatAmount(saleTotals.totalCents)}</strong>
           </p>
 
-          <button onClick={saveMerchSale} style={buttonStyle}>
-            Verkauf speichern
+          <button onClick={saveMerchSale} disabled={merchSaleSaving} style={buttonStyle}>
+            {merchSaleSaving ? 'Verkauf wird gespeichert...' : 'Verkauf speichern'}
           </button>
 
           <button onClick={resetMerchSaleForm} style={secondaryButtonStyle}>
