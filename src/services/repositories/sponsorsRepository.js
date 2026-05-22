@@ -1,5 +1,9 @@
 import { supabase } from '../../lib/supabase'
 
+export async function fetchPublicSponsors() {
+  return supabase.rpc('get_public_sponsors')
+}
+
 export async function fetchSponsors() {
   return supabase
     .from('sponsors')

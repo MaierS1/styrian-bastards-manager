@@ -218,6 +218,7 @@ import {
 } from './services/repositories/merchRepository'
 import { SponsorsPage } from './components/sponsors/SponsorsPage'
 import { MerchPage } from './components/merch/MerchPage'
+import { PublicSponsors } from './components/home/PublicSponsors'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -4036,27 +4037,31 @@ export default function App() {
 
   if (!user) {
     return (
-      <main style={{ ...pageStyle, padding: 30, fontFamily: 'Arial, Helvetica, sans-serif', maxWidth: 520, margin: '0 auto', fontSize: 16, lineHeight: 1.55 }}>
+      <main style={{ ...pageStyle, padding: 30, fontFamily: 'Arial, Helvetica, sans-serif', maxWidth: 760, margin: '0 auto', fontSize: 16, lineHeight: 1.55 }}>
         <h1 style={headingStyle}>Styrian Bastards Login</h1>
 
-        <input
-          placeholder="E-Mail"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={inputStyle}
-        />
+        <div style={{ maxWidth: 520, margin: '0 auto' }}>
+          <input
+            placeholder="E-Mail"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={inputStyle}
+          />
 
-        <input
-          type="password"
-          placeholder="Passwort"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={inputStyle}
-        />
+          <input
+            type="password"
+            placeholder="Passwort"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={inputStyle}
+          />
 
-        <button onClick={login} style={buttonStyle}>
-          Login
-        </button>
+          <button onClick={login} style={buttonStyle}>
+            Login
+          </button>
+        </div>
+
+        <PublicSponsors />
       </main>
     )
   }
