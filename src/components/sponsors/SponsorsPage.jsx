@@ -26,6 +26,18 @@ export function SponsorsPage({
   setSponsorWebsite,
   sponsorLogoPath,
   setSponsorLogoPath,
+  sponsorLogoFile,
+  setSponsorLogoFile,
+  sponsorLogoAlt,
+  setSponsorLogoAlt,
+  sponsorIsPublic,
+  setSponsorIsPublic,
+  sponsorLevel,
+  setSponsorLevel,
+  sponsorPublicSortOrder,
+  setSponsorPublicSortOrder,
+  sponsorPublicDescription,
+  setSponsorPublicDescription,
   sponsorStatus,
   setSponsorStatus,
   sponsorNotes,
@@ -107,10 +119,65 @@ export function SponsorsPage({
           />
 
           <input
-            placeholder="Logo-Pfad"
+            placeholder="Logo-Pfad in public-assets"
             value={sponsorLogoPath}
             onChange={(event) => setSponsorLogoPath(event.target.value)}
             style={inputStyle}
+          />
+
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(event) => setSponsorLogoFile(event.target.files?.[0] || null)}
+            style={inputStyle}
+          />
+
+          {sponsorLogoFile && (
+            <p style={mutedTextStyle}>Neues Logo: {sponsorLogoFile.name}</p>
+          )}
+
+          <input
+            placeholder="Logo Alt-Text"
+            value={sponsorLogoAlt}
+            onChange={(event) => setSponsorLogoAlt(event.target.value)}
+            style={inputStyle}
+          />
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0' }}>
+            <input
+              type="checkbox"
+              checked={sponsorIsPublic}
+              onChange={(event) => setSponsorIsPublic(event.target.checked)}
+            />
+            Öffentlich anzeigen
+          </label>
+
+          <select
+            value={sponsorLevel}
+            onChange={(event) => setSponsorLevel(event.target.value)}
+            style={inputStyle}
+          >
+            <option value="main">Hauptsponsor</option>
+            <option value="premium">Premium</option>
+            <option value="partner">Partner</option>
+            <option value="supporter">Supporter</option>
+          </select>
+
+          <input
+            type="number"
+            min="0"
+            step="1"
+            placeholder="Öffentliche Sortierung"
+            value={sponsorPublicSortOrder}
+            onChange={(event) => setSponsorPublicSortOrder(event.target.value)}
+            style={inputStyle}
+          />
+
+          <textarea
+            placeholder="Öffentliche Beschreibung"
+            value={sponsorPublicDescription}
+            onChange={(event) => setSponsorPublicDescription(event.target.value)}
+            style={{ ...inputStyle, minHeight: 84, resize: 'vertical' }}
           />
 
           <select
@@ -277,6 +344,14 @@ export function SponsorsPage({
           <br />
           Logo: {sponsor.logo_path || '-'}
           <br />
+          Öffentlich: {sponsor.is_public ? 'Ja' : 'Nein'} - Level: {getSponsorLevelLabel(sponsor.sponsor_level)}
+          <br />
+          Öffentliche Sortierung: {sponsor.public_sort_order ?? 0}
+          <br />
+          Logo Alt-Text: {sponsor.logo_alt || '-'}
+          <br />
+          Öffentliche Beschreibung: {sponsor.public_description || '-'}
+          <br />
           Notizen: {sponsor.notes || '-'}
 
           <SponsorContractsList
@@ -375,10 +450,13 @@ function SponsorContractsList({
 }
 
 function getSponsorLevelLabel(level) {
+  if (level === 'main') return 'Hauptsponsor'
+  if (level === 'premium') return 'Premium'
+  if (level === 'partner') return 'Partner'
+  if (level === 'supporter') return 'Supporter'
   if (level === 'bronze') return 'Bronze'
   if (level === 'silver') return 'Silber'
   if (level === 'gold') return 'Gold'
-  if (level === 'main') return 'Hauptsponsor'
   if (level === 'other') return 'Sonstiges'
   return level || '-'
 }

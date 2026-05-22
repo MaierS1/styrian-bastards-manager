@@ -348,6 +348,12 @@ export default function App() {
   const [sponsorPhone, setSponsorPhone] = useState('')
   const [sponsorWebsite, setSponsorWebsite] = useState('')
   const [sponsorLogoPath, setSponsorLogoPath] = useState('')
+  const [sponsorLogoFile, setSponsorLogoFile] = useState(null)
+  const [sponsorLogoAlt, setSponsorLogoAlt] = useState('')
+  const [sponsorIsPublic, setSponsorIsPublic] = useState(false)
+  const [sponsorLevel, setSponsorLevel] = useState('supporter')
+  const [sponsorPublicSortOrder, setSponsorPublicSortOrder] = useState('0')
+  const [sponsorPublicDescription, setSponsorPublicDescription] = useState('')
   const [sponsorStatus, setSponsorStatus] = useState('active')
   const [sponsorNotes, setSponsorNotes] = useState('')
   const [sponsorSaving, setSponsorSaving] = useState(false)
@@ -2277,6 +2283,12 @@ export default function App() {
     setSponsorPhone('')
     setSponsorWebsite('')
     setSponsorLogoPath('')
+    setSponsorLogoFile(null)
+    setSponsorLogoAlt('')
+    setSponsorIsPublic(false)
+    setSponsorLevel('supporter')
+    setSponsorPublicSortOrder('0')
+    setSponsorPublicDescription('')
     setSponsorStatus('active')
     setSponsorNotes('')
   }
@@ -2304,6 +2316,12 @@ export default function App() {
     setSponsorPhone(sponsor.phone || '')
     setSponsorWebsite(sponsor.website || '')
     setSponsorLogoPath(sponsor.logo_path || '')
+    setSponsorLogoFile(null)
+    setSponsorLogoAlt(sponsor.logo_alt || '')
+    setSponsorIsPublic(Boolean(sponsor.is_public))
+    setSponsorLevel(sponsor.sponsor_level || 'supporter')
+    setSponsorPublicSortOrder(String(sponsor.public_sort_order ?? 0))
+    setSponsorPublicDescription(sponsor.public_description || '')
     setSponsorStatus(sponsor.status || 'active')
     setSponsorNotes(sponsor.notes || '')
 
@@ -2319,13 +2337,46 @@ export default function App() {
       return
     }
 
+    const sortOrderNumber = sponsorPublicSortOrder ? Number(sponsorPublicSortOrder) : 0
+
+    if (!Number.isInteger(sortOrderNumber) || sortOrderNumber < 0) {
+      alert('Öffentliche Sortierung muss eine ganze positive Zahl sein.')
+      return
+    }
+
+    let logoPath = sponsorLogoPath.trim() || null
+
+    if (sponsorLogoFile) {
+      const fileExt = sponsorLogoFile.name.split('.').pop()?.toLowerCase() || 'bin'
+      const sponsorFolder = sponsorEditingId || crypto.randomUUID()
+      const fileName = `logo-${Date.now()}.${fileExt}`
+      const filePath = `sponsors/${sponsorFolder}/${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('public-assets')
+        .upload(filePath, sponsorLogoFile, { upsert: true })
+
+      if (uploadError) {
+        alert(uploadError.message)
+        return
+      }
+
+      logoPath = filePath
+      setSponsorLogoPath(filePath)
+    }
+
     const payload = {
       name: sponsorName.trim(),
       contact_person: sponsorContactPerson.trim() || null,
       email: sponsorEmail.trim() || null,
       phone: sponsorPhone.trim() || null,
       website: sponsorWebsite.trim() || null,
-      logo_path: sponsorLogoPath.trim() || null,
+      logo_path: logoPath,
+      logo_alt: sponsorLogoAlt.trim() || null,
+      is_public: sponsorIsPublic,
+      sponsor_level: sponsorLevel || 'supporter',
+      public_sort_order: sortOrderNumber,
+      public_description: sponsorPublicDescription.trim() || null,
       status: sponsorStatus || 'active',
       notes: sponsorNotes.trim() || null,
     }
@@ -4390,6 +4441,18 @@ export default function App() {
           setSponsorWebsite={setSponsorWebsite}
           sponsorLogoPath={sponsorLogoPath}
           setSponsorLogoPath={setSponsorLogoPath}
+          sponsorLogoFile={sponsorLogoFile}
+          setSponsorLogoFile={setSponsorLogoFile}
+          sponsorLogoAlt={sponsorLogoAlt}
+          setSponsorLogoAlt={setSponsorLogoAlt}
+          sponsorIsPublic={sponsorIsPublic}
+          setSponsorIsPublic={setSponsorIsPublic}
+          sponsorLevel={sponsorLevel}
+          setSponsorLevel={setSponsorLevel}
+          sponsorPublicSortOrder={sponsorPublicSortOrder}
+          setSponsorPublicSortOrder={setSponsorPublicSortOrder}
+          sponsorPublicDescription={sponsorPublicDescription}
+          setSponsorPublicDescription={setSponsorPublicDescription}
           sponsorStatus={sponsorStatus}
           setSponsorStatus={setSponsorStatus}
           sponsorNotes={sponsorNotes}
