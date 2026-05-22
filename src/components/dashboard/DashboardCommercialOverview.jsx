@@ -13,9 +13,9 @@ export function DashboardCommercialOverview({ commercialData }) {
           <br />
           Aktive Sponsoren: <strong>{commercialData.activeSponsorsCount}</strong>
           <br />
-          Aktive Vertraege: <strong>{commercialData.activeContractsCount}</strong>
+          Aktive Verträge: <strong>{commercialData.activeContractsCount}</strong>
           <br />
-          Auslaufende Vertraege: <strong>{commercialData.expiringContracts.length}</strong>
+          Auslaufende Verträge: <strong>{commercialData.expiringContracts.length}</strong>
           <br />
           Vertragsvolumen: <strong>{formatAmount(commercialData.sponsorshipContractVolumeCents)}</strong>
         </div>

@@ -55,7 +55,7 @@ export function handleRestoreFile({
       const parsed = JSON.parse(String(reader.result || '{}'))
 
       if (!parsed || typeof parsed !== 'object') {
-        alertFn('Backup-Datei ist ungÃ¼ltig.')
+        alertFn('Backup-Datei ist ungültig.')
         return
       }
 
@@ -103,22 +103,22 @@ export async function restoreFullBackup({
   alertFn = alert,
   confirmFn = window.confirm,
 }) {
-  if (!isAdmin()) return alertFn('Nur Admins dÃ¼rfen Backups wiederherstellen.')
+  if (!isAdmin()) return alertFn('Nur Admins dürfen Backups wiederherstellen.')
 
   if (!restoreData) {
-    alertFn('Bitte zuerst eine Backup-JSON-Datei auswÃ¤hlen.')
+    alertFn('Bitte zuerst eine Backup-JSON-Datei auswählen.')
     return
   }
 
   const confirmed = confirmFn(
     `Backup wiederherstellen?\n\n` +
       `Mitglieder: ${getRestoreCount(restoreData, 'members')}\n` +
-      `BeitrÃ¤ge: ${getRestoreCount(restoreData, 'membership_fees')}\n` +
+      `Beiträge: ${getRestoreCount(restoreData, 'membership_fees')}\n` +
       `Kassa: ${getRestoreCount(restoreData, 'cash_entries')}\n` +
       `Events: ${getRestoreCount(restoreData, 'events')}\n` +
       `Check-ins: ${getRestoreCount(restoreData, 'event_checkins')}\n` +
       `Dokumente: ${getRestoreCount(restoreData, 'documents')}\n\n` +
-      `Es werden nur DatensÃ¤tze mit noch nicht vorhandener ID importiert. Bestehende Daten werden nicht Ã¼berschrieben.`
+      `Es werden nur Datensätze mit noch nicht vorhandener ID importiert. Bestehende Daten werden nicht überschrieben.`
   )
 
   if (!confirmed) return

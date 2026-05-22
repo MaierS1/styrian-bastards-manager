@@ -94,7 +94,7 @@ export async function deleteMemberRecord({
   }
 
   await loadAll()
-  alertFn('Mitglied wurde gelÃ¶scht.')
+  alertFn('Mitglied wurde gelöscht.')
   return { ok: true }
 }
 
@@ -144,7 +144,7 @@ export async function inviteMemberUserRecord({
     await loadMembers()
     await loadAuditLogs()
 
-    alertFn('Einladung wurde versendet und das Mitglied wurde mit dem Auth-User verknÃ¼pft.')
+    alertFn('Einladung wurde versendet und das Mitglied wurde mit dem Auth-User verknüpft.')
     return { ok: true }
   } finally {
     setInvitingMemberId(null)

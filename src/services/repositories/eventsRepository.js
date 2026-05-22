@@ -159,7 +159,7 @@ export async function deleteEventRecord({
   await loadEvents()
   await loadCashEntries()
 
-  alertFn('Event wurde gelÃ¶scht.')
+  alertFn('Event wurde gelöscht.')
   return { ok: true }
 }
 
@@ -177,12 +177,12 @@ export async function checkInMemberRecord({
   const activeEventName = getActiveEventName()
 
   if (!activeEventName) {
-    alertFn('Bitte zuerst ein Event auswÃ¤hlen oder anlegen.')
+    alertFn('Bitte zuerst ein Event auswählen oder anlegen.')
     return { blocked: true, reason: 'no-event' }
   }
 
   if (isCheckedInToday(member.id)) {
-    alertFn(`${member.first_name} ${member.last_name} ist fÃ¼r dieses Event heute bereits eingecheckt.`)
+    alertFn(`${member.first_name} ${member.last_name} ist für dieses Event heute bereits eingecheckt.`)
     return { blocked: true, reason: 'already-checked-in' }
   }
 
@@ -195,6 +195,6 @@ export async function checkInMemberRecord({
   if (error) return { error }
 
   await loadEventCheckins()
-  alertFn(`Check-in erfolgreich: ${member.first_name} ${member.last_name} fÃ¼r ${activeEventName}`)
+  alertFn(`Check-in erfolgreich: ${member.first_name} ${member.last_name} für ${activeEventName}`)
   return { ok: true }
 }

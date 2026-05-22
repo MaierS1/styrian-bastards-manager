@@ -1,10 +1,42 @@
+export function getCashAmountCents(entry) {
+  const amount = Number(entry?.amount ?? 0)
+  return Number.isFinite(amount) ? Math.round(Math.abs(amount) * 100) : 0
+}
+
+export function isValidCashEntry(entry) {
+  return Boolean(
+    entry
+      && !entry.is_cancelled
+      && (entry.type === 'einnahme' || entry.type === 'ausgabe')
+      && getCashAmountCents(entry) > 0
+  )
+}
+
+export function getCashEntrySignedCents(entry, { includeOpening = true } = {}) {
+  if (!isValidCashEntry(entry)) return 0
+  if (!includeOpening && entry.is_opening) return 0
+
+  const amountCents = getCashAmountCents(entry)
+  return entry.type === 'einnahme' ? amountCents : -amountCents
+}
+
+export function getCashEntrySignedAmount(entry, options) {
+  return getCashEntrySignedCents(entry, options) / 100
+}
+
+export function getCashBalance(cashEntries, options) {
+  const balanceCents = cashEntries.reduce(
+    (sum, entry) => sum + getCashEntrySignedCents(entry, options),
+    0
+  )
+
+  return balanceCents / 100
+}
+
 export function getCashBalanceForYear(year, cashEntries) {
-  return cashEntries
-    .filter((entry) => String(entry.entry_year || '') === String(year) && !entry.is_cancelled)
-    .reduce((sum, entry) => {
-      if (entry.is_opening) return sum
-      return sum + (entry.type === 'ausgabe' ? -1 : 1) * Number(entry.amount || 0)
-    }, 0)
+  return getCashBalance(
+    cashEntries.filter((entry) => String(entry.entry_year || '') === String(year))
+  )
 }
 
 export function getAmountByType(type) {
@@ -32,15 +64,17 @@ export function getOpenFeesTotal(fees, getMemberById) {
 }
 
 export function getIncomeTotal(cashEntries) {
-  return cashEntries
-    .filter((entry) => entry.type === 'einnahme' && !entry.is_opening && !entry.is_cancelled)
-    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+  return cashEntries.reduce((sum, entry) => {
+    if (!isValidCashEntry(entry) || entry.is_opening || entry.type !== 'einnahme') return sum
+    return sum + getCashAmountCents(entry)
+  }, 0) / 100
 }
 
 export function getExpenseTotal(cashEntries) {
-  return cashEntries
-    .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening && !entry.is_cancelled)
-    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+  return cashEntries.reduce((sum, entry) => {
+    if (!isValidCashEntry(entry) || entry.is_opening || entry.type !== 'ausgabe') return sum
+    return sum + getCashAmountCents(entry)
+  }, 0) / 100
 }
 
 export function getCommercialDashboardData({
@@ -193,8 +227,8 @@ export function getDashboardAlerts({
 
     alerts.push({
       type: 'warning',
-      title: 'Sponsor-Vertraege laufen aus',
-      message: `${commercialData.expiringContracts.length} aktive Sponsor-Vertrag/Vertraege laufen in den naechsten 30 Tagen aus. Naechster Vertrag: ${nextContract.title || 'Ohne Titel'} bis ${nextContract.ends_on}.`,
+      title: 'Sponsor-Verträge laufen aus',
+      message: `${commercialData.expiringContracts.length} aktive Sponsor-Verträge laufen in den nächsten 30 Tagen aus. Nächster Vertrag: ${nextContract.title || 'Ohne Titel'} bis ${nextContract.ends_on}.`,
     })
   }
 
@@ -292,7 +326,7 @@ export function getMonthlyData(cashEntriesForSelectedYear) {
         const date = new Date(entry.entry_date)
         return date.getMonth() + 1 === monthNumber && entry.type === 'einnahme' && !entry.is_cancelled
       })
-      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+      .reduce((sum, entry) => sum + getCashAmountCents(entry), 0) / 100
 
     const expense = cashEntriesForSelectedYear
       .filter((entry) => {
@@ -300,7 +334,7 @@ export function getMonthlyData(cashEntriesForSelectedYear) {
         const date = new Date(entry.entry_date)
         return date.getMonth() + 1 === monthNumber && entry.type === 'ausgabe' && !entry.is_cancelled
       })
-      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+      .reduce((sum, entry) => sum + getCashAmountCents(entry), 0) / 100
 
     return { month, income, expense }
   })
@@ -360,12 +394,12 @@ export function getFinanceDashboardData({
   getEventExpenseTotal,
   getEventBalance,
 }) {
-  const entries = cashEntriesForSelectedYear.filter((entry) => !entry.is_cancelled)
+  const entries = cashEntriesForSelectedYear.filter((entry) => isValidCashEntry(entry))
   const incomeEntries = entries.filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
   const expenseEntries = entries.filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
 
-  const incomeTotal = incomeEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
-  const expenseTotal = expenseEntries.reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+  const incomeTotal = incomeEntries.reduce((sum, entry) => sum + getCashAmountCents(entry), 0) / 100
+  const expenseTotal = expenseEntries.reduce((sum, entry) => sum + getCashAmountCents(entry), 0) / 100
   const balance = incomeTotal - expenseTotal
 
   const openFees = fees.filter((fee) => {

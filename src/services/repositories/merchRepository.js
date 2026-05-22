@@ -87,7 +87,7 @@ export async function deleteMerchItemRecord({
   await createAuditLog('delete', 'merch_items', item.id, item, null)
   await loadMerchItems()
   await loadMerchVariants()
-  alertFn('Fanartikel wurde geloscht.')
+  alertFn('Fanartikel wurde gelöscht.')
 
   return { ok: true }
 }
@@ -146,7 +146,7 @@ export async function deleteMerchVariantRecord({
 
   await createAuditLog('delete', 'merch_variants', variant.id, variant, null)
   await loadMerchVariants()
-  alertFn('Fanartikel-Variante wurde geloscht.')
+  alertFn('Fanartikel-Variante wurde gelöscht.')
 
   return { ok: true }
 }

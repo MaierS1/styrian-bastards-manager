@@ -131,7 +131,7 @@ export function SponsorsPage({
           />
 
           <button onClick={saveSponsor} disabled={sponsorSaving} style={buttonStyle}>
-            {sponsorSaving ? 'Sponsor wird gespeichert...' : sponsorEditingId ? 'Anderungen speichern' : 'Sponsor speichern'}
+            {sponsorSaving ? 'Sponsor wird gespeichert...' : sponsorEditingId ? 'Änderungen speichern' : 'Sponsor speichern'}
           </button>
 
           {sponsorEditingId && (
@@ -153,7 +153,7 @@ export function SponsorsPage({
             onChange={(event) => setContractSponsorId(event.target.value)}
             style={inputStyle}
           >
-            <option value="">Sponsor auswahlen</option>
+            <option value="">Sponsor auswählen</option>
             {sponsors.map((sponsor) => (
               <option key={sponsor.id} value={sponsor.id}>
                 {sponsor.name}
@@ -249,7 +249,7 @@ export function SponsorsPage({
       <p>
         Sponsoren: <strong>{sponsors.length}</strong>
         <br />
-        Sponsor-Vertraege: <strong>{sponsorContracts.length}</strong>
+        Sponsor-Verträge: <strong>{sponsorContracts.length}</strong>
       </p>
 
       {sponsors.length === 0 && (
@@ -298,7 +298,7 @@ export function SponsorsPage({
                 disabled={sponsorDeletingId === sponsor.id}
                 style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
               >
-                {sponsorDeletingId === sponsor.id ? 'Sponsor wird geloscht...' : 'Sponsor loschen'}
+                {sponsorDeletingId === sponsor.id ? 'Sponsor wird gelöscht...' : 'Sponsor löschen'}
               </button>
             </>
           )}
@@ -326,14 +326,14 @@ function SponsorContractsList({
     return (
       <>
         <br />
-        <span style={mutedTextStyle}>Keine Vertraege hinterlegt.</span>
+        <span style={mutedTextStyle}>Keine Verträge hinterlegt.</span>
       </>
     )
   }
 
   return (
     <div style={{ marginTop: 12 }}>
-      <strong>Vertraege</strong>
+      <strong>Verträge</strong>
       {contracts.map((contract) => (
         <div
           key={contract.id}
@@ -364,7 +364,7 @@ function SponsorContractsList({
                 disabled={sponsorContractDeletingId === contract.id}
                 style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
               >
-                {sponsorContractDeletingId === contract.id ? 'Vertrag wird geloscht...' : 'Vertrag loschen'}
+                {sponsorContractDeletingId === contract.id ? 'Vertrag wird gelöscht...' : 'Vertrag löschen'}
               </button>
             </>
           )}

@@ -12,7 +12,7 @@ export async function closeCashMonthService({
   confirmFn = window.confirm,
   promptFn = window.prompt,
 }) {
-  if (!isAdmin()) return alertFn('Nur Admins dÃ¼rfen Monate abschlieÃŸen.')
+  if (!isAdmin()) return alertFn('Nur Admins dürfen Monate abschließen.')
 
   if (!year || !month) {
     alertFn('Jahr und Monat fehlen.')
@@ -27,7 +27,7 @@ export async function closeCashMonthService({
   const note = promptFn(`Notiz zum Monatsabschluss ${String(month).padStart(2, '0')}/${year}:`, '')
 
   const confirmed = confirmFn(
-    `Monat wirklich abschlieÃŸen?\n\n${String(month).padStart(2, '0')}/${year}\n\nDanach kÃ¶nnen EintrÃ¤ge in diesem Monat nicht mehr bearbeitet oder storniert werden.`
+    `Monat wirklich abschließen?\n\n${String(month).padStart(2, '0')}/${year}\n\nDanach können Einträge in diesem Monat nicht mehr bearbeitet oder storniert werden.`
   )
 
   if (!confirmed) return
@@ -60,7 +60,7 @@ export async function reopenCashMonthService({
   alertFn = alert,
   confirmFn = window.confirm,
 }) {
-  if (!isAdmin()) return alertFn('Nur Admins dÃ¼rfen MonatsabschlÃ¼sse aufheben.')
+  if (!isAdmin()) return alertFn('Nur Admins dürfen Monatsabschlüsse aufheben.')
 
   const confirmed = confirmFn(
     `Monatsabschluss wirklich aufheben?\n\n${String(month).padStart(2, '0')}/${year}`

@@ -1,3 +1,5 @@
+import { getCashAmountCents, isValidCashEntry } from './dashboardHelpers'
+
 export function getCurrentMemberFee(currentMember, getFee) {
   if (!currentMember) return null
   return getFee(currentMember.id)
@@ -32,19 +34,19 @@ export function getEventNameById(events, eventId) {
 
 export function getCashEntriesForEvent(cashEntries, eventId) {
   if (!eventId) return []
-  return cashEntries.filter((entry) => entry.event_id === eventId && !entry.is_cancelled)
+  return cashEntries.filter((entry) => entry.event_id === eventId && isValidCashEntry(entry))
 }
 
 export function getEventIncomeTotal(cashEntries, eventId) {
   return getCashEntriesForEvent(cashEntries, eventId)
-    .filter((entry) => entry.type === 'einnahme' && !entry.is_opening && !entry.is_cancelled)
-    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+    .filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
+    .reduce((sum, entry) => sum + getCashAmountCents(entry), 0) / 100
 }
 
 export function getEventExpenseTotal(cashEntries, eventId) {
   return getCashEntriesForEvent(cashEntries, eventId)
-    .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening && !entry.is_cancelled)
-    .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+    .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
+    .reduce((sum, entry) => sum + getCashAmountCents(entry), 0) / 100
 }
 
 export function getEventBalance(cashEntries, eventId) {

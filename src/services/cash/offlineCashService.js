@@ -26,7 +26,7 @@ export async function syncOfflineCashEntriesService({
   }
 
   if (offlineCashEntries.length === 0) {
-    alertFn('Keine Offline-EintrÃ¤ge vorhanden.')
+    alertFn('Keine Offline-Einträge vorhanden.')
     return
   }
 
@@ -44,5 +44,5 @@ export async function syncOfflineCashEntriesService({
   setOfflineCashEntries([])
   loadCashEntries()
 
-  alertFn('Offline-EintrÃ¤ge wurden synchronisiert.')
+  alertFn('Offline-Einträge wurden synchronisiert.')
 }

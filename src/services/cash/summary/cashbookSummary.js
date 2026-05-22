@@ -1,3 +1,5 @@
+import { getCashAmountCents, isValidCashEntry } from '../../helpers/dashboardHelpers'
+
 export function getCashbookDetailedSummaryService({
   entries,
   selectedCashYear,
@@ -6,7 +8,7 @@ export function getCashbookDetailedSummaryService({
 }) {
   const grouped = {}
 
-  entries.filter((entry) => !entry.is_cancelled).forEach((entry) => {
+  entries.filter((entry) => isValidCashEntry(entry)).forEach((entry) => {
     const monthKey = getCashMonthKey(entry.entry_date)
 
     if (!grouped[monthKey]) {
@@ -34,7 +36,7 @@ export function getCashbookDetailedSummaryService({
       }
     }
 
-    const amount = Number(entry.amount || 0)
+    const amount = getCashAmountCents(entry) / 100
     const paymentMethod = getPaymentMethod(entry)
 
     if (entry.is_opening) {

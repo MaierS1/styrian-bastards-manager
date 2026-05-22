@@ -23,7 +23,7 @@ export function MemberFeeActions({
           </button>
 
           <button onClick={() => markFeePaid(fee, 'ueberweisung')} style={buttonStyle}>
-            Beitrag per Ãœberweisung bezahlt
+            Beitrag per Überweisung bezahlt
           </button>
         </>
       )}

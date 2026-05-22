@@ -4,10 +4,10 @@ function normalizeCsvKey(key) {
   return key
     .trim()
     .toLowerCase()
-    .replace('Ã¤', 'ae')
-    .replace('Ã¶', 'oe')
-    .replace('Ã¼', 'ue')
-    .replace('ÃŸ', 'ss')
+    .replace('ä', 'ae')
+    .replace('ö', 'oe')
+    .replace('ü', 'ue')
+    .replace('ß', 'ss')
     .replace(/[^a-z0-9]/g, '')
 }
 
@@ -58,7 +58,7 @@ function parseCsvLine(line, separator) {
 function parseEuroAmount(value) {
   const cleaned = String(value || '')
     .trim()
-    .replace('â‚¬', '')
+    .replace('€', '')
     .replace(/\s/g, '')
     .replace(/\./g, '')
     .replace(',', '.')
@@ -69,7 +69,7 @@ function parseEuroAmount(value) {
     return null
   }
 
-  return amount
+  return Math.abs(amount)
 }
 
 function normalizeCashDate(value) {
@@ -117,12 +117,12 @@ function normalizeCashType(value) {
 function cashbookRowToEntries(row, cashEventId) {
   const rawDate = normalizeCashDate(getCsvValue(row, ['datum']))
   const description = getCsvValue(row, ['bezeichnung', 'beschreibung', 'description'])
-  const date = rawDate || (description.toLowerCase().includes('Ã¼bertrag') || description.toLowerCase().includes('uebertrag') ? row.__month_start : '')
+  const date = rawDate || (description.toLowerCase().includes('übertrag') || description.toLowerCase().includes('uebertrag') ? row.__month_start : '')
   const note = getCsvValue(row, ['anmerkung', 'notiz', 'notes'])
   const number = getCsvValue(row, ['nummer', 'belegnummer'])
   const lowerDescription = description.toLowerCase()
-  const isOpening = lowerDescription.includes('Ã¼bertrag vorjahr') || lowerDescription.includes('uebertrag vorjahr')
-  const isCarryForward = lowerDescription.includes('Ã¼bertrag vormonat') || lowerDescription.includes('uebertrag vormonat')
+  const isOpening = lowerDescription.includes('übertrag vorjahr') || lowerDescription.includes('uebertrag vorjahr')
+  const isCarryForward = lowerDescription.includes('übertrag vormonat') || lowerDescription.includes('uebertrag vormonat')
   const importedEntries = []
 
   if (isCarryForward) return importedEntries
@@ -200,11 +200,11 @@ export function parseCashbookTextWithMonths(rawText) {
   const headers = parseCsvLine(lines[0], separator).map((header) => header.trim())
 
   const monthNumbers = {
-    'jÃ¤nner': '01',
+    'jänner': '01',
     jaenner: '01',
     januar: '01',
     februar: '02',
-    'mÃ¤rz': '03',
+    'märz': '03',
     maerz: '03',
     april: '04',
     mai: '05',
@@ -228,15 +228,15 @@ export function parseCashbookTextWithMonths(rawText) {
     })
 
     const firstCell = String(values[0] || '').trim()
-    const monthMatch = firstCell.match(/^([A-Za-zÃ„Ã–ÃœÃ¤Ã¶Ã¼ÃŸ]+)\s+(\d{4})$/)
+    const monthMatch = firstCell.match(/^([A-Za-zÄÖÜäöüß]+)\s+(\d{4})$/)
 
     if (monthMatch) {
       const monthName = monthMatch[1]
         .toLowerCase()
-        .replace('Ã¤', 'ae')
-        .replace('Ã¶', 'oe')
-        .replace('Ã¼', 'ue')
-        .replace('ÃŸ', 'ss')
+        .replace('ä', 'ae')
+        .replace('ö', 'oe')
+        .replace('ü', 'ue')
+        .replace('ß', 'ss')
 
       const month = monthNumbers[monthName]
       const year = monthMatch[2]
@@ -268,10 +268,10 @@ export async function importCashbookRowsService({
   loadCashEntries,
   alertFn = alert,
 }) {
-  if (!canManageCash()) return alertFn('Keine Berechtigung fÃ¼r Kassa.')
+  if (!canManageCash()) return alertFn('Keine Berechtigung für Kassa.')
 
   if (cashbookRows.length === 0) {
-    alertFn('Bitte zuerst eine Kassabuch-CSV auswÃ¤hlen.')
+    alertFn('Bitte zuerst eine Kassabuch-CSV auswählen.')
     return
   }
 

@@ -10,7 +10,7 @@ export async function archiveInvoicePdfService({
   loadInvoices,
   alertFn = alert,
 }) {
-  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung fÃ¼r Rechnungsarchiv.')
+  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung für Rechnungsarchiv.')
 
   const { blob, filename } = await buildInvoicePdfBlob(invoice)
   const filePath = getInvoiceFilePath(invoice, filename)
@@ -46,7 +46,7 @@ export async function openArchivedInvoiceService({
   openFn = window.open,
 }) {
   if (!invoice.pdf_url) {
-    alertFn('FÃ¼r diese Rechnung ist noch kein Archiv-PDF gespeichert.')
+    alertFn('Für diese Rechnung ist noch kein Archiv-PDF gespeichert.')
     return
   }
 
@@ -71,7 +71,7 @@ export async function sendInvoiceEmailService({
   alertFn = alert,
   confirmFn = window.confirm,
 }) {
-  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung fÃ¼r Rechnungsversand.')
+  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung für Rechnungsversand.')
 
   if (!invoice.customer_email) {
     alertFn('Diese Rechnung hat keine E-Mail-Adresse.')
@@ -92,8 +92,8 @@ export async function sendInvoiceEmailService({
     : `Rechnung ${invoice.invoice_number}`
 
   const html = reminder
-    ? `<p>Hallo,</p><p>wir mÃ¶chten freundlich an die offene Rechnung <strong>${invoice.invoice_number}</strong> erinnern.</p><p>Danke und sportliche GrÃ¼ÃŸe<br/>Styrian Bastards Eishockey-Fanclub</p>`
-    : `<p>Hallo,</p><p>anbei senden wir die Rechnung <strong>${invoice.invoice_number}</strong>.</p><p>Danke und sportliche GrÃ¼ÃŸe<br/>Styrian Bastards Eishockey-Fanclub</p>`
+    ? `<p>Hallo,</p><p>wir möchten freundlich an die offene Rechnung <strong>${invoice.invoice_number}</strong> erinnern.</p><p>Danke und sportliche Grüße<br/>Styrian Bastards Eishockey-Fanclub</p>`
+    : `<p>Hallo,</p><p>anbei senden wir die Rechnung <strong>${invoice.invoice_number}</strong>.</p><p>Danke und sportliche Grüße<br/>Styrian Bastards Eishockey-Fanclub</p>`
 
   const { data, error } = await supabase.functions.invoke('send-invoice-email', {
     body: {
@@ -150,18 +150,18 @@ export async function createCancellationInvoiceService({
   alertFn = alert,
   promptFn = window.prompt,
 }) {
-  if (!isAdmin()) return alertFn('Nur Admins dÃ¼rfen Stornorechnungen erstellen.')
+  if (!isAdmin()) return alertFn('Nur Admins dürfen Stornorechnungen erstellen.')
 
   const existingCancellation = invoices.find(
     (item) => item.original_invoice_id === invoice.id && item.invoice_type === 'storno'
   )
 
   if (existingCancellation) {
-    alertFn(`FÃ¼r diese Rechnung existiert bereits eine Stornorechnung: ${existingCancellation.invoice_number}`)
+    alertFn(`Für diese Rechnung existiert bereits eine Stornorechnung: ${existingCancellation.invoice_number}`)
     return
   }
 
-  const reason = promptFn(`Grund fÃ¼r Stornorechnung zu ${invoice.invoice_number}:`)
+  const reason = promptFn(`Grund für Stornorechnung zu ${invoice.invoice_number}:`)
 
   if (!reason || !reason.trim()) return
 
@@ -182,7 +182,7 @@ export async function createCancellationInvoiceService({
       customer_address_addition: invoice.customer_address_addition || null,
       customer_postal_code: invoice.customer_postal_code || null,
       customer_city: invoice.customer_city || null,
-      customer_country: invoice.customer_country || 'Ã–sterreich',
+      customer_country: invoice.customer_country || 'Österreich',
       issue_date: new Date().toISOString().slice(0, 10),
       due_date: null,
       total_amount: -Math.abs(Number(invoice.total_amount || 0)),
@@ -250,7 +250,7 @@ export async function createMembershipFeeInvoiceService({
   alertFn = alert,
   confirmFn = window.confirm,
 }) {
-  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung fÃ¼r Rechnungen.')
+  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung für Rechnungen.')
 
   if (!member || !fee) {
     alertFn('Mitglied oder Beitrag fehlt.')
@@ -270,7 +270,7 @@ export async function createMembershipFeeInvoiceService({
 
   if (existingInvoice) {
     const openExisting = confirmFn(
-      `FÃ¼r diesen Beitrag gibt es bereits eine Rechnung:\n\n${existingInvoice.invoice_number}\n\nPDF jetzt Ã¶ffnen?`
+      `Für diesen Beitrag gibt es bereits eine Rechnung:\n\n${existingInvoice.invoice_number}\n\nPDF jetzt öffnen?`
     )
 
     if (openExisting) {
@@ -285,7 +285,7 @@ export async function createMembershipFeeInvoiceService({
   const amount = Number(fee.amount || 0)
 
   const confirmed = confirmFn(
-    `Mitgliedsbeitrag-Rechnung erstellen?\n\n${member.first_name || ''} ${member.last_name || ''}\nBetrag: ${amount.toFixed(2)} â‚¬\nRechnungsnummer: ${invoiceNumber}`
+    `Mitgliedsbeitrag-Rechnung erstellen?\n\n${member.first_name || ''} ${member.last_name || ''}\nBetrag: ${amount.toFixed(2)} €\nRechnungsnummer: ${invoiceNumber}`
   )
 
   if (!confirmed) return
@@ -304,7 +304,7 @@ export async function createMembershipFeeInvoiceService({
       customer_address_addition: null,
       customer_postal_code: member.postal_code || null,
       customer_city: member.city || null,
-      customer_country: 'Ã–sterreich',
+      customer_country: 'Österreich',
       issue_date: new Date().toISOString().slice(0, 10),
       due_date: null,
       total_amount: amount,
@@ -368,7 +368,7 @@ export async function createInvoiceService({
   loadInvoiceItems,
   alertFn = alert,
 }) {
-  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung fÃ¼r Rechnungen.')
+  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung für Rechnungen.')
 
   if (!invoiceCustomerName.trim()) {
     alertFn('Kundenname ist Pflicht.')
@@ -384,7 +384,7 @@ export async function createInvoiceService({
     .filter((row) => row.description && row.quantity > 0 && row.unit_price >= 0)
 
   if (validRows.length === 0) {
-    alertFn('Bitte mindestens eine gÃ¼ltige Rechnungsposition eingeben.')
+    alertFn('Bitte mindestens eine gültige Rechnungsposition eingeben.')
     return
   }
 
@@ -412,7 +412,7 @@ export async function createInvoiceService({
       customer_address_addition: invoiceCustomerAddressAddition.trim() || null,
       customer_postal_code: invoiceCustomerPostalCode.trim() || null,
       customer_city: invoiceCustomerCity.trim() || null,
-      customer_country: invoiceCustomerCountry.trim() || 'Ã–sterreich',
+      customer_country: invoiceCustomerCountry.trim() || 'Österreich',
       issue_date: invoiceIssueDate || new Date().toISOString().slice(0, 10),
       due_date: invoiceDueDate || null,
       total_amount: totalAmount,
@@ -462,7 +462,7 @@ export async function markInvoicePaidService({
   alertFn = alert,
   confirmFn = window.confirm,
 }) {
-  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung fÃ¼r Rechnungen.')
+  if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung für Rechnungen.')
 
   if (invoice.status === 'bezahlt') {
     alertFn('Diese Rechnung ist bereits bezahlt.')
@@ -470,7 +470,7 @@ export async function markInvoicePaidService({
   }
 
   const confirmed = confirmFn(
-    `Rechnung als bezahlt markieren?\n\n${invoice.invoice_number}\n${invoice.customer_name}\n${Number(invoice.total_amount || 0).toFixed(2)} â‚¬\n\n` +
+    `Rechnung als bezahlt markieren?\n\n${invoice.invoice_number}\n${invoice.customer_name}\n${Number(invoice.total_amount || 0).toFixed(2)} €\n\n` +
       (invoice.is_test ? 'Testrechnung: Es wird KEINE Kassa-Einnahme erstellt.' : 'Es wird automatisch eine Kassa-Einnahme erstellt.')
   )
 
@@ -533,7 +533,7 @@ export async function markInvoicePaidService({
   await loadCashEntries()
   await loadFees()
 
-  alertFn('Rechnung wurde als bezahlt markiert und in die Kassa Ã¼bernommen.')
+  alertFn('Rechnung wurde als bezahlt markiert und in die Kassa übernommen.')
 }
 
 export async function cancelInvoiceService({
@@ -544,14 +544,14 @@ export async function cancelInvoiceService({
   alertFn = alert,
   promptFn = window.prompt,
 }) {
-  if (!isAdmin()) return alertFn('Nur Admins dÃ¼rfen Rechnungen stornieren.')
+  if (!isAdmin()) return alertFn('Nur Admins dürfen Rechnungen stornieren.')
 
   if (invoice.status === 'storniert') {
     alertFn('Diese Rechnung ist bereits storniert.')
     return
   }
 
-  const reason = promptFn(`Storno-Grund fÃ¼r ${invoice.invoice_number} eingeben:`)
+  const reason = promptFn(`Storno-Grund für ${invoice.invoice_number} eingeben:`)
 
   if (!reason || !reason.trim()) return
 
@@ -584,16 +584,16 @@ export async function deleteInvoiceService({
   alertFn = alert,
   confirmFn = window.confirm,
 }) {
-  if (!isAdmin()) return alertFn('Nur Admins dÃ¼rfen Rechnungen lÃ¶schen.')
+  if (!isAdmin()) return alertFn('Nur Admins dürfen Rechnungen löschen.')
 
   const confirmed = confirmFn(
-    `Rechnung wirklich endgÃ¼ltig lÃ¶schen?\n\n${invoice.invoice_number} Â· ${invoice.customer_name}\n\nBei echten Rechnungen ist normalerweise Storno besser. Testrechnungen kÃ¶nnen gefahrlos gelÃ¶scht werden.`
+    `Rechnung wirklich endgültig löschen?\n\n${invoice.invoice_number} · ${invoice.customer_name}\n\nBei echten Rechnungen ist normalerweise Storno besser. Testrechnungen können gefahrlos gelöscht werden.`
   )
 
   if (!confirmed) return
 
   const secondConfirm = confirmFn(
-    'Bitte nochmals bestÃ¤tigen: Die Rechnung inklusive Positionen wird endgÃ¼ltig gelÃ¶scht.'
+    'Bitte nochmals bestätigen: Die Rechnung inklusive Positionen wird endgültig gelöscht.'
   )
 
   if (!secondConfirm) return
@@ -609,5 +609,5 @@ export async function deleteInvoiceService({
   await loadInvoices()
   await loadInvoiceItems()
 
-  alertFn('Rechnung wurde gelÃ¶scht.')
+  alertFn('Rechnung wurde gelöscht.')
 }

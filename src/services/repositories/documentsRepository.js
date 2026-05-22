@@ -75,7 +75,7 @@ export async function deleteDocumentRecord({
 
   await createAuditLog('delete', 'documents', document.id, document, null)
   await loadDocuments()
-  alertFn('Dokument wurde gel�scht.')
+  alertFn('Dokument wurde gelöscht.')
 
   return { ok: true }
 }

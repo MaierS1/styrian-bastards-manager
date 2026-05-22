@@ -69,7 +69,7 @@ export async function deleteSponsorRecord({
 
   await createAuditLog('delete', 'sponsors', sponsor.id, sponsor, null)
   await loadSponsors()
-  alertFn('Sponsor wurde geloscht.')
+  alertFn('Sponsor wurde gelöscht.')
 
   return { ok: true }
 }
@@ -128,7 +128,7 @@ export async function deleteSponsorContractRecord({
 
   await createAuditLog('delete', 'sponsor_contracts', contract.id, contract, null)
   await loadSponsorContracts()
-  alertFn('Sponsor-Vertrag wurde geloscht.')
+  alertFn('Sponsor-Vertrag wurde gelöscht.')
 
   return { ok: true }
 }

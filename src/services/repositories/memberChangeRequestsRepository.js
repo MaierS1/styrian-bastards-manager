@@ -26,7 +26,7 @@ export async function submitMemberChangeRequestRecord({
 
   await createAuditLog('request_member_change', 'members', currentMember.id, currentMember, requestedData)
   await loadMemberChangeRequests()
-  alertFn('�nderungsantrag wurde eingereicht.')
+  alertFn('Änderungsantrag wurde eingereicht.')
 
   return { ok: true }
 }
@@ -67,7 +67,7 @@ export async function approveMemberChangeRequestRecord({
   await loadCurrentMember(user.id)
   await loadMemberChangeRequests()
 
-  alertFn('�nderung wurde genehmigt und �bernommen.')
+  alertFn('Änderung wurde genehmigt und übernommen.')
   return { ok: true }
 }
 
@@ -94,6 +94,6 @@ export async function rejectMemberChangeRequestRecord({
   await createAuditLog('reject_member_change', 'member_change_requests', request.id, request, { note })
   await loadMemberChangeRequests()
 
-  alertFn('�nderungsantrag wurde abgelehnt.')
+  alertFn('Änderungsantrag wurde abgelehnt.')
   return { ok: true }
 }

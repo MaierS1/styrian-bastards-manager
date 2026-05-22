@@ -31,7 +31,7 @@ export async function importInventoryRowsRecord({
   setInventoryCsvFileName('')
   await loadInventoryItems()
 
-  alertFn(`${rowsToInsert.length} Inventar-Eintr�ge wurden importiert.`)
+  alertFn(`${rowsToInsert.length} Inventar-Einträge wurden importiert.`)
   return { ok: true }
 }
 
@@ -116,6 +116,6 @@ export async function deleteInventoryItemRecord({
 
   await createAuditLog('delete', 'inventory_items', item.id, item, null)
   await loadInventoryItems()
-  alertFn('Inventar-Eintrag wurde gel�scht.')
+  alertFn('Inventar-Eintrag wurde gelöscht.')
   return { ok: true }
 }

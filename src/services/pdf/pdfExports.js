@@ -135,7 +135,7 @@ export function exportDetailedCashbookPdf({ summary, getCashBalance, getCashMont
 export function exportOpenFeesPdf({ openFees, getOpenFeesTotal, members }) {
   const doc = new jsPDF()
 
-  doc.text('Styrian Bastards - Offene Mitgliedsbeitraege', 14, 15)
+  doc.text('Styrian Bastards - Offene Mitgliedsbeiträge', 14, 15)
   doc.text(`Offene Summe: ${getOpenFeesTotal().toFixed(2)} EUR`, 14, 23)
 
   autoTable(doc, {
@@ -251,7 +251,7 @@ export function exportExcelStyleCashbookPdf({ summary, getCashBalance, getCashMo
           entry.receipt_number || '',
           entry.entry_date || '',
           entry.description || '',
-          entry.is_opening ? 'Ãœbertrag' : entry.category || '',
+          entry.is_opening ? 'Übertrag' : entry.category || '',
           entry.type === 'einnahme' && paymentMethod === 'ebanking' ? `${amount} EUR` : '',
           entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? `${amount} EUR` : '',
           entry.type === 'einnahme' && paymentMethod === 'bar' ? `${amount} EUR` : '',

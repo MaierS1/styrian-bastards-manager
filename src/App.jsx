@@ -29,11 +29,15 @@ import { formatCustomerAddressFromFields as buildFormatCustomerAddressFromFields
 import {
   getAlertStyle as buildAlertStyle,
   getAmountByType as buildAmountByType,
+  getCashAmountCents as buildCashAmountCents,
+  getCashBalance as buildCashBalance,
   getCashBalanceForYear as buildCashBalanceForYear,
+  getCashEntrySignedAmount as buildCashEntrySignedAmount,
   getCommercialDashboardData as buildCommercialDashboardData,
   getDashboardAlerts as buildDashboardAlerts,
   getFinanceDashboardData as buildFinanceDashboardData,
   getFinanceHealthStatus as buildFinanceHealthStatus,
+  isValidCashEntry as buildIsValidCashEntry,
 } from './services/helpers/dashboardHelpers'
 import {
   getFilteredInvoiceCustomers as buildGetFilteredInvoiceCustomers,
@@ -403,7 +407,7 @@ export default function App() {
   const [invoiceCustomerAddressAddition, setInvoiceCustomerAddressAddition] = useState('')
   const [invoiceCustomerPostalCode, setInvoiceCustomerPostalCode] = useState('')
   const [invoiceCustomerCity, setInvoiceCustomerCity] = useState('')
-  const [invoiceCustomerCountry, setInvoiceCustomerCountry] = useState('Ã–sterreich')
+  const [invoiceCustomerCountry, setInvoiceCustomerCountry] = useState('Österreich')
   const [invoiceIssueDate, setInvoiceIssueDate] = useState(new Date().toISOString().slice(0, 10))
   const [invoiceDueDate, setInvoiceDueDate] = useState('')
   const [invoiceNotes, setInvoiceNotes] = useState('')
@@ -422,7 +426,7 @@ export default function App() {
   const [customerAddressAddition, setCustomerAddressAddition] = useState('')
   const [customerPostalCode, setCustomerPostalCode] = useState('')
   const [customerCity, setCustomerCity] = useState('')
-  const [customerCountry, setCustomerCountry] = useState('Ã–sterreich')
+  const [customerCountry, setCustomerCountry] = useState('Österreich')
   const [customerNotes, setCustomerNotes] = useState('')
 
   const [portalEmail, setPortalEmail] = useState('')
@@ -612,18 +616,18 @@ export default function App() {
       setMemberSearch(member.member_number || `${member.first_name || ''} ${member.last_name || ''}`)
       editMember(member)
       setActivePage('members')
-      setLinkedMemberNotice(`Mitglied aus QR-Code geÃ¶ffnet: ${member.first_name || ''} ${member.last_name || ''}`)
+      setLinkedMemberNotice(`Mitglied aus QR-Code geöffnet: ${member.first_name || ''} ${member.last_name || ''}`)
       return
     }
 
     if (currentMember?.id === member.id) {
       setActivePage('portal')
-      setLinkedMemberNotice('Dein Mitgliederportal wurde Ã¼ber den QR-Code geÃ¶ffnet.')
+      setLinkedMemberNotice('Dein Mitgliederportal wurde über den QR-Code geöffnet.')
       return
     }
 
     setActivePage('portal')
-    setLinkedMemberNotice('Dieser Mitgliedsausweis gehÃ¶rt zu einem anderen Mitglied. Du hast keine Berechtigung, diese Daten zu Ã¶ffnen.')
+    setLinkedMemberNotice('Dieser Mitgliedsausweis gehört zu einem anderen Mitglied. Du hast keine Berechtigung, diese Daten zu öffnen.')
   }, [canManageMembers, currentMember, editMember, isAdmin, members])
 
   useEffect(() => {
@@ -947,7 +951,7 @@ export default function App() {
       (entry) =>
         getEntryYear(entry) === String(year) &&
         entry.is_opening &&
-        String(entry.description || '').toLowerCase().includes('Ã¼bertrag vorjahr')
+        String(entry.description || '').toLowerCase().includes('übertrag vorjahr')
     )
   }
 
@@ -1017,13 +1021,13 @@ export default function App() {
     const normalized = String(value || '')
       .trim()
       .toLowerCase()
-      .replace('Ã¶', 'oe')
-      .replace('Ã¼', 'ue')
-      .replace('Ã¤', 'ae')
-      .replace('ÃŸ', 'ss')
+      .replace('ö', 'oe')
+      .replace('ü', 'ue')
+      .replace('ä', 'ae')
+      .replace('ß', 'ss')
 
     if (normalized.includes('foerder')) return 'foerdermitglied'
-    if (normalized.includes('fÃ¶rder')) return 'foerdermitglied'
+    if (normalized.includes('förder')) return 'foerdermitglied'
     if (normalized.includes('ehren')) return 'ehrenmitglied'
     if (normalized.includes('probe')) return 'probejahr'
     if (normalized.includes('voll')) return 'vollmitglied'
@@ -1035,10 +1039,10 @@ export default function App() {
     const normalized = String(value || '')
       .trim()
       .toLowerCase()
-      .replace('Ã¶', 'oe')
-      .replace('Ã¼', 'ue')
-      .replace('Ã¤', 'ae')
-      .replace('ÃŸ', 'ss')
+      .replace('ö', 'oe')
+      .replace('ü', 'ue')
+      .replace('ä', 'ae')
+      .replace('ß', 'ss')
       .replace(/[^a-z0-9]/g, '')
 
     if (normalized.includes('obmannstv') || normalized.includes('obmannstellvertreter')) return 'obmann_stv'
@@ -1060,8 +1064,8 @@ export default function App() {
       obmann_stv: 'Obmann-Stellvertreter',
       kassier: 'Kassier',
       kassier_stv: 'Kassier-Stellvertreter',
-      schriftfuehrer: 'SchriftfÃ¼hrer',
-      schriftfuehrer_stv: 'SchriftfÃ¼hrer-Stellvertreter',
+      schriftfuehrer: 'Schriftführer',
+      schriftfuehrer_stv: 'Schriftführer-Stellvertreter',
       beirat: 'Beirat',
       helfer: 'Helfer',
     }
@@ -1076,10 +1080,10 @@ export default function App() {
       const normalizedKey = key
         .trim()
         .toLowerCase()
-        .replace('Ã¤', 'ae')
-        .replace('Ã¶', 'oe')
-        .replace('Ã¼', 'ue')
-        .replace('ÃŸ', 'ss')
+        .replace('ä', 'ae')
+        .replace('ö', 'oe')
+        .replace('ü', 'ue')
+        .replace('ß', 'ss')
         .replace(/[^a-z0-9]/g, '')
 
       normalizedRow[normalizedKey] = row[key]
@@ -1089,10 +1093,10 @@ export default function App() {
       const normalizedKey = key
         .trim()
         .toLowerCase()
-        .replace('Ã¤', 'ae')
-        .replace('Ã¶', 'oe')
-        .replace('Ã¼', 'ue')
-        .replace('ÃŸ', 'ss')
+        .replace('ä', 'ae')
+        .replace('ö', 'oe')
+        .replace('ü', 'ue')
+        .replace('ß', 'ss')
         .replace(/[^a-z0-9]/g, '')
 
       if (normalizedRow[normalizedKey] !== undefined) {
@@ -1157,11 +1161,11 @@ export default function App() {
     const email = getCsvValue(row, ['email', 'e-mail', 'mail'])
     const phone = getCsvValue(row, ['telefon', 'phone', 'handy', 'mobil'])
     const memberType = normalizeMemberType(getCsvValue(row, ['mitgliedsart', 'member_type', 'mitgliedart', 'art']))
-    const street = getCsvValue(row, ['strasse', 'straÃŸe', 'street', 'adresse'])
+    const street = getCsvValue(row, ['strasse', 'straße', 'street', 'adresse'])
     const postalCode = getCsvValue(row, ['plz', 'postal_code', 'postcode', 'zip'])
     const city = getCsvValue(row, ['ort', 'city', 'stadt'])
     const birthdate = getCsvValue(row, ['geburtsdatum', 'birthdate', 'birthday', 'geburtstag'])
-    const clothingSize = getCsvValue(row, ['kleidergroesse', 'kleidergrÃ¶ÃŸe', 'clothing_size', 'groesse', 'grÃ¶ÃŸe'])
+    const clothingSize = getCsvValue(row, ['kleidergroesse', 'kleidergröße', 'clothing_size', 'groesse', 'größe'])
     const role = normalizeRole(getCsvValue(row, ['rolle', 'funktion', 'vereinsfunktion', 'role']))
 
     return {
@@ -1205,7 +1209,7 @@ export default function App() {
         setCsvRows(membersForPreview)
 
         if (membersForPreview.length === 0) {
-          alert('Keine gÃ¼ltigen Mitglieder gefunden. Mindestens Vorname und Nachname mÃ¼ssen vorhanden sein.')
+          alert('Keine gültigen Mitglieder gefunden. Mindestens Vorname und Nachname müssen vorhanden sein.')
         }
       } catch (error) {
         alert(`CSV konnte nicht gelesen werden: ${error.message}`)
@@ -1216,10 +1220,10 @@ export default function App() {
   }
 
   async function importCsvMembers() {
-    if (!canManageMembers()) return alert('Keine Berechtigung fÃ¼r Mitglieder-Import.')
+    if (!canManageMembers()) return alert('Keine Berechtigung für Mitglieder-Import.')
 
     if (csvRows.length === 0) {
-      alert('Bitte zuerst eine CSV-Datei auswÃ¤hlen.')
+      alert('Bitte zuerst eine CSV-Datei auswählen.')
       return
     }
 
@@ -1238,7 +1242,7 @@ export default function App() {
       })
 
       if (membersToInsert.length === 0) {
-        alert('Keine neuen Mitglieder gefunden. MÃ¶glicherweise sind alle bereits vorhanden.')
+        alert('Keine neuen Mitglieder gefunden. Möglicherweise sind alle bereits vorhanden.')
         return
       }
 
@@ -1274,15 +1278,7 @@ export default function App() {
 
 
   function getCashBalance() {
-    return getCashEntriesForSelectedYear().filter((entry) => !entry.is_cancelled).reduce((sum, entry) => {
-      const amount = Number(entry.amount || 0)
-
-      if (entry.is_opening) {
-        return entry.type === 'einnahme' ? sum + amount : sum - amount
-      }
-
-      return entry.type === 'einnahme' ? sum + amount : sum - amount
-    }, 0)
+    return buildCashBalance(getCashEntriesForSelectedYear())
   }
 
   function getPaymentMethod(entry) {
@@ -1312,9 +1308,9 @@ export default function App() {
 
     const [year, month] = monthKey.split('-')
     const names = [
-      'JÃ¤nner',
+      'Jänner',
       'Februar',
-      'MÃ¤rz',
+      'März',
       'April',
       'Mai',
       'Juni',
@@ -1398,14 +1394,14 @@ export default function App() {
 
   function getIncomeTotal() {
     return getCashEntriesForSelectedYear()
-      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening && !entry.is_cancelled)
-      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening && buildIsValidCashEntry(entry))
+      .reduce((sum, entry) => sum + buildCashAmountCents(entry), 0) / 100
   }
 
   function getExpenseTotal() {
     return getCashEntriesForSelectedYear()
-      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening && !entry.is_cancelled)
-      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening && buildIsValidCashEntry(entry))
+      .reduce((sum, entry) => sum + buildCashAmountCents(entry), 0) / 100
   }
 
   function getEventNameById(eventId) {
@@ -1415,19 +1411,19 @@ export default function App() {
 
   function getCashEntriesForEvent(eventId) {
     if (!eventId) return []
-    return cashEntries.filter((entry) => entry.event_id === eventId && !entry.is_cancelled)
+    return cashEntries.filter((entry) => entry.event_id === eventId && buildIsValidCashEntry(entry))
   }
 
   function getEventIncomeTotal(eventId) {
     return getCashEntriesForEvent(eventId)
-      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening && !entry.is_cancelled)
-      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+      .filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
+      .reduce((sum, entry) => sum + buildCashAmountCents(entry), 0) / 100
   }
 
   function getEventExpenseTotal(eventId) {
     return getCashEntriesForEvent(eventId)
-      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening && !entry.is_cancelled)
-      .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+      .filter((entry) => entry.type === 'ausgabe' && !entry.is_opening)
+      .reduce((sum, entry) => sum + buildCashAmountCents(entry), 0) / 100
   }
 
   function getEventBalance(eventId) {
@@ -1460,7 +1456,7 @@ export default function App() {
     const months = [
       'Jan',
       'Feb',
-      'MÃ¤r',
+      'Mär',
       'Apr',
       'Mai',
       'Jun',
@@ -1479,17 +1475,17 @@ export default function App() {
         .filter((entry) => {
           if (!entry.entry_date) return false
           const date = new Date(entry.entry_date)
-          return date.getMonth() + 1 === monthNumber && entry.type === 'einnahme' && !entry.is_cancelled
+          return date.getMonth() + 1 === monthNumber && entry.type === 'einnahme' && buildIsValidCashEntry(entry)
         })
-        .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+        .reduce((sum, entry) => sum + buildCashAmountCents(entry), 0) / 100
 
       const expense = getCashEntriesForSelectedYear()
         .filter((entry) => {
           if (!entry.entry_date) return false
           const date = new Date(entry.entry_date)
-          return date.getMonth() + 1 === monthNumber && entry.type === 'ausgabe' && !entry.is_cancelled
+          return date.getMonth() + 1 === monthNumber && entry.type === 'ausgabe' && buildIsValidCashEntry(entry)
         })
-        .reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+        .reduce((sum, entry) => sum + buildCashAmountCents(entry), 0) / 100
 
       return { month, income, expense }
     })
@@ -1507,7 +1503,7 @@ export default function App() {
   function getMemberTypeStats() {
     const types = [
       ['vollmitglied', 'Vollmitglieder'],
-      ['foerdermitglied', 'FÃ¶rdermitglieder'],
+      ['foerdermitglied', 'Fördermitglieder'],
       ['ehrenmitglied', 'Ehrenmitglieder'],
       ['probejahr', 'Probejahr'],
     ]
@@ -1775,7 +1771,7 @@ export default function App() {
   }
 
   async function inviteMemberUser(member) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Benutzer einladen.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Benutzer einladen.')
 
     if (!member?.id) {
       alert('Mitglied fehlt.')
@@ -1790,7 +1786,7 @@ export default function App() {
     }
 
     const selectedRole = window.prompt(
-      `App-Recht fÃ¼r ${member.first_name || ''} ${member.last_name || ''}:\n\nadmin\ncashier\nmembers\ncheckin\nreadonly`,
+      `App-Recht für ${member.first_name || ''} ${member.last_name || ''}:\n\nadmin\ncashier\nmembers\ncheckin\nreadonly`,
       member.app_role || 'readonly'
     )
 
@@ -1799,7 +1795,7 @@ export default function App() {
     const allowedRoles = ['admin', 'cashier', 'members', 'checkin', 'readonly']
 
     if (!allowedRoles.includes(selectedRole)) {
-      alert('UngÃ¼ltige Rolle.')
+      alert('Ungültige Rolle.')
       return
     }
 
@@ -1947,7 +1943,7 @@ export default function App() {
   }
 
   async function saveMerchSale() {
-    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverkauf.')
+    if (!canManageMerch()) return alert('Keine Berechtigung für Fanartikelverkauf.')
     if (merchSaleSaving) return
 
     const variant = getMerchSaleSelectedVariant()
@@ -1958,7 +1954,7 @@ export default function App() {
     }
 
     if (variant.status !== 'active') {
-      alert('Diese Variante ist nicht fur den Verkauf aktiv.')
+      alert('Diese Variante ist nicht für den Verkauf aktiv.')
       return
     }
 
@@ -2030,11 +2026,11 @@ export default function App() {
   }
 
   async function cancelMerchSale(sale) {
-    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverkauf.')
+    if (!canManageMerch()) return alert('Keine Berechtigung für Fanartikelverkauf.')
     if (!sale || sale.status !== 'completed') return alert('Nur abgeschlossene Verkaeufe koennen storniert werden.')
     if (merchSaleCancellingId) return
 
-    const reason = window.prompt('Grund fur die Stornierung:')
+    const reason = window.prompt('Grund für die Stornierung:')
 
     if (reason === null) return
 
@@ -2064,7 +2060,7 @@ export default function App() {
   }
 
   function editMerchItem(item) {
-    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (!canManageMerch()) return alert('Keine Berechtigung für Fanartikelverwaltung.')
 
     setMerchItemEditingId(item.id)
     setMerchItemNumber(item.item_number || '')
@@ -2081,7 +2077,7 @@ export default function App() {
   }
 
   async function saveMerchItem() {
-    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (!canManageMerch()) return alert('Keine Berechtigung für Fanartikelverwaltung.')
     if (merchItemSaving) return
 
     if (!merchItemName.trim()) {
@@ -2133,11 +2129,11 @@ export default function App() {
   }
 
   async function deleteMerchItem(item) {
-    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (!canManageMerch()) return alert('Keine Berechtigung für Fanartikelverwaltung.')
     if (merchItemDeletingId) return
 
     const confirmed = window.confirm(
-      `Fanartikel wirklich loschen?\n\n${item.name || ''}\n\nAlle Varianten dieses Artikels werden ebenfalls geloscht.`
+      `Fanartikel wirklich löschen?\n\n${item.name || ''}\n\nAlle Varianten dieses Artikels werden ebenfalls gelöscht.`
     )
 
     if (!confirmed) return
@@ -2159,7 +2155,7 @@ export default function App() {
   }
 
   function editMerchVariant(variant) {
-    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (!canManageMerch()) return alert('Keine Berechtigung für Fanartikelverwaltung.')
 
     setMerchVariantEditingId(variant.id)
     setMerchVariantItemId(variant.merch_item_id || '')
@@ -2176,7 +2172,7 @@ export default function App() {
   }
 
   async function saveMerchVariant() {
-    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (!canManageMerch()) return alert('Keine Berechtigung für Fanartikelverwaltung.')
     if (merchVariantSaving) return
 
     if (merchItems.length === 0) {
@@ -2195,7 +2191,7 @@ export default function App() {
       && !merchVariantSize.trim()
       && !merchVariantColor.trim()
     ) {
-      alert('Mindestens SKU, Variantenname, Groesse oder Farbe ist Pflicht.')
+      alert('Mindestens SKU, Variantenname, Größe oder Farbe ist Pflicht.')
       return
     }
 
@@ -2249,11 +2245,11 @@ export default function App() {
   }
 
   async function deleteMerchVariant(variant) {
-    if (!canManageMerch()) return alert('Keine Berechtigung fur Fanartikelverwaltung.')
+    if (!canManageMerch()) return alert('Keine Berechtigung für Fanartikelverwaltung.')
     if (merchVariantDeletingId) return
 
     const confirmed = window.confirm(
-      `Variante wirklich loschen?\n\n${variant.variant_name || variant.sku || ''}`
+      `Variante wirklich löschen?\n\n${variant.variant_name || variant.sku || ''}`
     )
 
     if (!confirmed) return
@@ -2299,7 +2295,7 @@ export default function App() {
   }
 
   function editSponsor(sponsor) {
-    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (!canManageSponsors()) return alert('Keine Berechtigung für Sponsorenverwaltung.')
 
     setSponsorEditingId(sponsor.id)
     setSponsorName(sponsor.name || '')
@@ -2315,7 +2311,7 @@ export default function App() {
   }
 
   async function saveSponsor() {
-    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (!canManageSponsors()) return alert('Keine Berechtigung für Sponsorenverwaltung.')
     if (sponsorSaving) return
 
     if (!sponsorName.trim()) {
@@ -2353,7 +2349,7 @@ export default function App() {
   }
 
   function editSponsorContract(contract) {
-    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (!canManageSponsors()) return alert('Keine Berechtigung für Sponsorenverwaltung.')
 
     setSponsorContractEditingId(contract.id)
     setContractSponsorId(contract.sponsor_id || '')
@@ -2370,7 +2366,7 @@ export default function App() {
   }
 
   async function saveSponsorContract() {
-    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (!canManageSponsors()) return alert('Keine Berechtigung für Sponsorenverwaltung.')
     if (sponsorContractSaving) return
 
     if (sponsors.length === 0) {
@@ -2437,11 +2433,11 @@ export default function App() {
   }
 
   async function deleteSponsorContract(contract) {
-    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (!canManageSponsors()) return alert('Keine Berechtigung für Sponsorenverwaltung.')
     if (sponsorContractDeletingId) return
 
     const confirmed = window.confirm(
-      `Sponsor-Vertrag wirklich loschen?\n\n${contract.title || ''}\n\nDas kann nicht ruckgangig gemacht werden.`
+      `Sponsor-Vertrag wirklich löschen?\n\n${contract.title || ''}\n\nDas kann nicht rückgängig gemacht werden.`
     )
 
     if (!confirmed) return
@@ -2462,11 +2458,11 @@ export default function App() {
   }
 
   async function deleteSponsor(sponsor) {
-    if (!canManageSponsors()) return alert('Keine Berechtigung fur Sponsorenverwaltung.')
+    if (!canManageSponsors()) return alert('Keine Berechtigung für Sponsorenverwaltung.')
     if (sponsorDeletingId) return
 
     const confirmed = window.confirm(
-      `Sponsor wirklich loschen?\n\n${sponsor.name || ''}\n\nBestehende Sponsor-Vertrage wurden durch die Datenbank ebenfalls geloscht.`
+      `Sponsor wirklich löschen?\n\n${sponsor.name || ''}\n\nBestehende Sponsor-Verträge wurden durch die Datenbank ebenfalls gelöscht.`
     )
 
     if (!confirmed) return
@@ -2513,8 +2509,8 @@ export default function App() {
     const purchaseDate = normalizeInventoryDate(getInventoryCsvValue(row, ['Anschaffungsdatum', 'Kaufdatum']))
     const condition = normalizeInventoryCondition(getInventoryCsvValue(row, ['Zustand']))
     const status = normalizeInventoryStatus(getInventoryCsvValue(row, ['Status']))
-    const lastCheckDate = normalizeInventoryDate(getInventoryCsvValue(row, ['Letzte Pruefung', 'Letzte PrÃ¼fung']))
-    const checkStatus = getInventoryCsvValue(row, ['Pruefstatus', 'PrÃ¼fstatus']) || 'OK'
+    const lastCheckDate = normalizeInventoryDate(getInventoryCsvValue(row, ['Letzte Pruefung', 'Letzte Prüfung']))
+    const checkStatus = getInventoryCsvValue(row, ['Pruefstatus', 'Prüfstatus']) || 'OK'
     const qrUrl = getInventoryCsvValue(row, ['QR-URL', 'QR URL']) || getInventoryCsvValue(row, [''])
     const labelLine1 = getInventoryCsvValue(row, ['Etikett Zeile 1']) || 'STYRIAN BASTARDS'
     const labelLine2 = getInventoryCsvValue(row, ['Etikett Zeile 2']) || 'VEREINSEIGENTUM'
@@ -2564,7 +2560,7 @@ export default function App() {
         setInventoryCsvRows(items)
 
         if (items.length === 0) {
-          alert('Keine gÃ¼ltigen Inventar-EintrÃ¤ge gefunden. Inventar-Nr. und Bezeichnung sind Pflicht.')
+          alert('Keine gültigen Inventar-Einträge gefunden. Inventar-Nr. und Bezeichnung sind Pflicht.')
         }
       } catch (error) {
         alert(`Inventar-CSV konnte nicht gelesen werden: ${error.message}`)
@@ -2575,10 +2571,10 @@ export default function App() {
   }
 
   async function importInventoryRows() {
-    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Inventar-Import.')
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventar-Import.')
 
     if (inventoryCsvRows.length === 0) {
-      alert('Bitte zuerst eine Inventar-CSV auswÃ¤hlen.')
+      alert('Bitte zuerst eine Inventar-CSV auswählen.')
       return
     }
 
@@ -2589,7 +2585,7 @@ export default function App() {
       const rowsToInsert = inventoryCsvRows.filter((item) => !existingNumbers.has(item.inventory_number))
 
       if (rowsToInsert.length === 0) {
-        alert('Keine neuen Inventar-EintrÃ¤ge gefunden. MÃ¶glicherweise sind alle bereits vorhanden.')
+        alert('Keine neuen Inventar-Einträge gefunden. Möglicherweise sind alle bereits vorhanden.')
         return
       }
 
@@ -2607,7 +2603,7 @@ export default function App() {
   }
 
   function editInventoryItem(item) {
-    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Inventarverwaltung.')
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventarverwaltung.')
 
     setInventoryEditingId(item.id)
     setInventoryNumber(item.inventory_number || '')
@@ -2628,7 +2624,7 @@ export default function App() {
   }
 
   async function saveInventoryItem() {
-    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Inventarverwaltung.')
+    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventarverwaltung.')
 
     if (!inventoryName.trim()) {
       alert('Bezeichnung ist Pflicht.')
@@ -2667,9 +2663,9 @@ export default function App() {
   }
 
   async function retireInventoryItem(item) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Inventar ausmustern.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Inventar ausmustern.')
 
-    const reason = window.prompt(`Grund fÃ¼r Ausmustern von ${item.inventory_number} eingeben:`)
+    const reason = window.prompt(`Grund für Ausmustern von ${item.inventory_number} eingeben:`)
 
     if (!reason || !reason.trim()) return
 
@@ -2704,16 +2700,16 @@ export default function App() {
   }
 
   async function deleteInventoryItem(item) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Inventar lÃ¶schen.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Inventar löschen.')
 
     const confirmed = window.confirm(
-      `Inventar-Eintrag wirklich endgÃ¼ltig lÃ¶schen?\n\n${item.inventory_number || ''} Â· ${item.name || ''}\n\nEmpfohlen ist normalerweise â€žAusmusternâ€œ. LÃ¶schen entfernt den Eintrag dauerhaft.`
+      `Inventar-Eintrag wirklich endgültig löschen?\n\n${item.inventory_number || ''} · ${item.name || ''}\n\nEmpfohlen ist normalerweise „Ausmustern“. Löschen entfernt den Eintrag dauerhaft.`
     )
 
     if (!confirmed) return
 
     const secondConfirm = window.confirm(
-      'Bitte nochmals bestÃ¤tigen: Dieser Inventar-Eintrag wird endgÃ¼ltig gelÃ¶scht.'
+      'Bitte nochmals bestätigen: Dieser Inventar-Eintrag wird endgültig gelöscht.'
     )
 
     if (!secondConfirm) return
@@ -2767,7 +2763,7 @@ export default function App() {
   }
 
   async function markMemberAsTest(member) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Testmitglieder markieren.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Testmitglieder markieren.')
 
     const confirmed = window.confirm(
       `Mitglied als Testmitglied markieren?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nTestmitglieder werden im Dashboard und Kassasystem getrennt angezeigt.`
@@ -2783,20 +2779,20 @@ export default function App() {
   }
 
   async function deleteAllTestDataForMember(member) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Testdaten lÃ¶schen.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Testdaten löschen.')
 
     if (!member?.is_test) {
-      alert('Dieses Mitglied ist kein Testmitglied. Aus SicherheitsgrÃ¼nden wird nichts gelÃ¶scht.')
+      alert('Dieses Mitglied ist kein Testmitglied. Aus Sicherheitsgründen wird nichts gelöscht.')
       return
     }
 
     const confirmed = window.confirm(
-      `Alle Testdaten endgÃ¼ltig lÃ¶schen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nGelÃ¶scht werden:\n- Test-Rechnungen\n- Test-Kassa-EintrÃ¤ge\n- MitgliedsbeitrÃ¤ge\n- Ã„nderungsantrÃ¤ge\n- das Testmitglied\n\nEchte Daten werden nicht gelÃ¶scht.`
+      `Alle Testdaten endgültig löschen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nGelöscht werden:\n- Test-Rechnungen\n- Test-Kassa-Einträge\n- Mitgliedsbeiträge\n- Änderungsanträge\n- das Testmitglied\n\nEchte Daten werden nicht gelöscht.`
     )
 
     if (!confirmed) return
 
-    const secondConfirm = window.confirm('Bitte nochmals bestÃ¤tigen: Die Testdaten werden endgÃ¼ltig gelÃ¶scht.')
+    const secondConfirm = window.confirm('Bitte nochmals bestätigen: Die Testdaten werden endgültig gelöscht.')
 
     if (!secondConfirm) return
 
@@ -2854,11 +2850,11 @@ export default function App() {
     })
 
     await loadAll()
-    alert('Testmitglied und zugehÃ¶rige Testdaten wurden gelÃ¶scht.')
+    alert('Testmitglied und zugehörige Testdaten wurden gelöscht.')
   }
 
   async function deleteAllTestData() {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Testdaten lÃ¶schen.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Testdaten löschen.')
 
     const testMembers = getTestMembers()
 
@@ -2868,7 +2864,7 @@ export default function App() {
     }
 
     const confirmed = window.confirm(
-      `Alle Testdaten lÃ¶schen?\n\nTestmitglieder: ${testMembers.length}\nTest-Rechnungen: ${getTestInvoices().length}\nTest-Kassa-EintrÃ¤ge: ${getTestCashEntries().length}\n\nDieser Vorgang ist endgÃ¼ltig.`
+      `Alle Testdaten löschen?\n\nTestmitglieder: ${testMembers.length}\nTest-Rechnungen: ${getTestInvoices().length}\nTest-Kassa-Einträge: ${getTestCashEntries().length}\n\nDieser Vorgang ist endgültig.`
     )
 
     if (!confirmed) return
@@ -2886,7 +2882,7 @@ export default function App() {
     }
 
     await loadAll()
-    alert('Alle Testdaten wurden gelÃ¶scht.')
+    alert('Alle Testdaten wurden gelöscht.')
   }
 
   function getPendingMemberChangeRequests() {
@@ -2899,7 +2895,7 @@ export default function App() {
   }
 
   async function submitMemberChangeRequest() {
-    if (!currentMember) return alert('Kein Mitglied mit deinem Login verknÃ¼pft.')
+    if (!currentMember) return alert('Kein Mitglied mit deinem Login verknüpft.')
 
     const requestedData = {
       email: portalEmail,
@@ -2915,12 +2911,12 @@ export default function App() {
     })
 
     if (changedFields.length === 0) {
-      alert('Es wurden keine Ã„nderungen erkannt.')
+      alert('Es wurden keine Änderungen erkannt.')
       return
     }
 
     const confirmed = window.confirm(
-      `Ã„nderungsantrag einreichen?\n\nGeÃ¤nderte Felder: ${changedFields.join(', ')}\n\nEin Vorstandsmitglied muss die Ã„nderung bestÃ¤tigen.`
+      `Änderungsantrag einreichen?\n\nGeänderte Felder: ${changedFields.join(', ')}\n\nEin Vorstandsmitglied muss die Änderung bestätigen.`
     )
 
     if (!confirmed) return
@@ -2940,7 +2936,7 @@ export default function App() {
     const member = members.find((item) => item.id === request.member_id)
 
     const confirmed = window.confirm(
-      `Ã„nderungsantrag genehmigen?\n\nMitglied: ${member ? `${member.first_name || ''} ${member.last_name || ''}` : request.member_id}`
+      `Änderungsantrag genehmigen?\n\nMitglied: ${member ? `${member.first_name || ''} ${member.last_name || ''}` : request.member_id}`
     )
 
     if (!confirmed) return
@@ -3031,7 +3027,7 @@ export default function App() {
     setInvoiceCustomerAddressAddition(customer.address_addition || '')
     setInvoiceCustomerPostalCode(customer.postal_code || '')
     setInvoiceCustomerCity(customer.city || '')
-    setInvoiceCustomerCountry(customer.country || 'Ã–sterreich')
+    setInvoiceCustomerCountry(customer.country || 'Österreich')
   }
 
   function resetCustomerForm() {
@@ -3043,12 +3039,12 @@ export default function App() {
     setCustomerAddressAddition('')
     setCustomerPostalCode('')
     setCustomerCity('')
-    setCustomerCountry('Ã–sterreich')
+    setCustomerCountry('Österreich')
     setCustomerNotes('')
   }
 
   function editInvoiceCustomer(customer) {
-    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Kunden.')
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Kunden.')
 
     setEditingCustomerId(customer.id)
     setCustomerName(customer.name || '')
@@ -3058,12 +3054,12 @@ export default function App() {
     setCustomerAddressAddition(customer.address_addition || '')
     setCustomerPostalCode(customer.postal_code || '')
     setCustomerCity(customer.city || '')
-    setCustomerCountry(customer.country || 'Ã–sterreich')
+    setCustomerCountry(customer.country || 'Österreich')
     setCustomerNotes(customer.notes || '')
   }
 
   async function saveInvoiceCustomer() {
-    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung fÃ¼r Kunden.')
+    if (!canManageCash() && !isAdmin()) return alert('Keine Berechtigung für Kunden.')
 
     if (!customerName.trim()) {
       alert('Kundenname ist Pflicht.')
@@ -3078,7 +3074,7 @@ export default function App() {
       address_addition: customerAddressAddition.trim() || null,
       postal_code: customerPostalCode.trim() || null,
       city: customerCity.trim() || null,
-      country: customerCountry.trim() || 'Ã–sterreich',
+      country: customerCountry.trim() || 'Österreich',
       notes: customerNotes.trim() || null,
     }
 
@@ -3093,16 +3089,16 @@ export default function App() {
   }
 
   async function deleteInvoiceCustomer(customer) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Kunden lÃ¶schen.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Kunden löschen.')
 
     const used = invoices.some((invoice) => invoice.customer_id === customer.id)
 
     if (used) {
-      alert('Dieser Kunde wird bereits in Rechnungen verwendet und kann nicht gelÃ¶scht werden.')
+      alert('Dieser Kunde wird bereits in Rechnungen verwendet und kann nicht gelöscht werden.')
       return
     }
 
-    const confirmed = window.confirm(`Kunde wirklich lÃ¶schen?\n\n${customer.name}`)
+    const confirmed = window.confirm(`Kunde wirklich löschen?\n\n${customer.name}`)
 
     if (!confirmed) return
 
@@ -3229,7 +3225,7 @@ export default function App() {
     setInvoiceCustomerAddressAddition('')
     setInvoiceCustomerPostalCode('')
     setInvoiceCustomerCity('')
-    setInvoiceCustomerCountry('Ã–sterreich')
+    setInvoiceCustomerCountry('Österreich')
     setInvoiceIssueDate(new Date().toISOString().slice(0, 10))
     setInvoiceDueDate('')
     setInvoiceNotes('')
@@ -3444,7 +3440,7 @@ export default function App() {
   }
 
   function editEvent(event) {
-    if (!canManageEvents()) return alert('Keine Berechtigung fÃ¼r Event-Verwaltung.')
+    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
 
     setEditingEventId(event.id)
     setNewEventName(event.name || '')
@@ -3456,7 +3452,7 @@ export default function App() {
   }
 
   async function createEvent() {
-    if (!canManageEvents()) return alert('Keine Berechtigung fÃ¼r Event-Verwaltung.')
+    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
 
     if (!newEventName.trim()) {
       alert('Bitte einen Eventnamen eingeben.')
@@ -3479,10 +3475,10 @@ export default function App() {
   }
 
   async function updateEvent() {
-    if (!canManageEvents()) return alert('Keine Berechtigung fÃ¼r Event-Verwaltung.')
+    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
 
     if (!editingEventId) {
-      alert('Kein Event zum Bearbeiten ausgewÃ¤hlt.')
+      alert('Kein Event zum Bearbeiten ausgewählt.')
       return
     }
 
@@ -3509,7 +3505,7 @@ export default function App() {
   }
 
   async function updateEventStatus(eventId, status) {
-    if (!canManageEvents()) return alert('Keine Berechtigung fÃ¼r Event-Verwaltung.')
+    if (!canManageEvents()) return alert('Keine Berechtigung für Event-Verwaltung.')
 
     await updateEventStatusRecord({
       eventId,
@@ -3521,7 +3517,7 @@ export default function App() {
   }
 
   async function deleteEvent(event) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Events lÃ¶schen.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Events löschen.')
 
     await deleteEventRecord({
       event,
@@ -3540,16 +3536,16 @@ export default function App() {
   }
 
   async function deleteMember(member) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Mitglieder lÃ¶schen.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Mitglieder löschen.')
 
     const confirmed = window.confirm(
-      `Mitglied wirklich lÃ¶schen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nDas kann nicht rÃ¼ckgÃ¤ngig gemacht werden.`
+      `Mitglied wirklich löschen?\n\n${member.first_name || ''} ${member.last_name || ''}\n\nDas kann nicht rückgängig gemacht werden.`
     )
 
     if (!confirmed) return
 
     const secondConfirm = window.confirm(
-      'Bitte nochmals bestÃ¤tigen: Dieses Mitglied und verknÃ¼pfte Daten kÃ¶nnen gelÃ¶scht werden.'
+      'Bitte nochmals bestätigen: Dieses Mitglied und verknüpfte Daten können gelöscht werden.'
     )
 
     if (!secondConfirm) return
@@ -3594,7 +3590,7 @@ export default function App() {
   }
 
   async function saveMember() {
-    if (!canManageMembers()) return alert('Keine Berechtigung fÃ¼r Mitgliederverwaltung.')
+    if (!canManageMembers()) return alert('Keine Berechtigung für Mitgliederverwaltung.')
 
     if (!firstName || !lastName) {
       alert('Vorname und Nachname sind Pflicht.')
@@ -3630,7 +3626,7 @@ export default function App() {
   }
 
   async function changeMemberStatus(id, status) {
-    if (!canManageMembers()) return alert('Keine Berechtigung fÃ¼r Mitgliederverwaltung.')
+    if (!canManageMembers()) return alert('Keine Berechtigung für Mitgliederverwaltung.')
 
     await changeMemberStatusRecord({
       id,
@@ -3642,7 +3638,7 @@ export default function App() {
   }
 
   async function markFeePaid(fee, paymentMethod = 'bar') {
-    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
     await saveMembershipFee({
       fee,
@@ -3654,7 +3650,7 @@ export default function App() {
   }
 
   async function markFeeOpen(fee) {
-    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
     await deleteMembershipFee({
       fee,
@@ -3683,7 +3679,7 @@ export default function App() {
         setCashbookRows(entries)
 
         if (entries.length === 0) {
-          alert('Keine gÃ¼ltigen Kassa-EintrÃ¤ge gefunden. PrÃ¼fe bitte Datum, Bezeichnung und BetrÃ¤ge.')
+          alert('Keine gültigen Kassa-Einträge gefunden. Prüfe bitte Datum, Bezeichnung und Beträge.')
         }
       } catch (error) {
         alert(`Kassabuch konnte nicht gelesen werden: ${error.message}`)
@@ -3694,10 +3690,10 @@ export default function App() {
   }
 
   async function importCashbookRows() {
-    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
     if (cashbookRows.length === 0) {
-      alert('Bitte zuerst eine Kassabuch-CSV auswÃ¤hlen.')
+      alert('Bitte zuerst eine Kassabuch-CSV auswählen.')
       return
     }
 
@@ -3722,8 +3718,8 @@ export default function App() {
   }
 
   function editCashEntry(entry) {
-    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
-    if (entry.is_cancelled) return alert('Stornierte EintrÃ¤ge kÃ¶nnen nicht bearbeitet werden.')
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
+    if (entry.is_cancelled) return alert('Stornierte Einträge können nicht bearbeitet werden.')
     if (isCashEntryMonthClosed(entry)) return alert('Dieser Monat ist abgeschlossen. Der Eintrag kann nicht bearbeitet werden.')
 
     setEditingCashId(entry.id)
@@ -3764,12 +3760,11 @@ export default function App() {
   }
 
   function getCashEntrySignedAmount(entry) {
-    const amount = Number(entry.amount || 0)
-    return entry.type === 'einnahme' ? amount : -amount
+    return buildCashEntrySignedAmount(entry)
   }
 
   async function updateCashEntry() {
-    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
     const editingEntry = cashEntries.find((entry) => entry.id === editingCashId)
 
@@ -3779,7 +3774,7 @@ export default function App() {
     }
 
     if (!editingCashId) {
-      alert('Kein Kassa-Eintrag zum Bearbeiten ausgewÃ¤hlt.')
+      alert('Kein Kassa-Eintrag zum Bearbeiten ausgewählt.')
       return
     }
 
@@ -3787,7 +3782,7 @@ export default function App() {
     const todayMonth = Number(new Date().toISOString().slice(5, 7))
 
     if (isCashMonthClosed(todayYear, todayMonth)) {
-      alert('Der aktuelle Monat ist abgeschlossen. Es kÃ¶nnen keine neuen Kassa-EintrÃ¤ge angelegt werden.')
+      alert('Der aktuelle Monat ist abgeschlossen. Es können keine neuen Kassa-Einträge angelegt werden.')
       return
     }
 
@@ -3798,7 +3793,7 @@ export default function App() {
 
     if (cashType === 'ausgabe' && !receiptFile) {
       const proceedWithoutReceipt = window.confirm(
-        'FÃ¼r Ausgaben sollte ein Beleg hochgeladen werden. Trotzdem ohne Beleg speichern?'
+        'Für Ausgaben sollte ein Beleg hochgeladen werden. Trotzdem ohne Beleg speichern?'
       )
 
       if (!proceedWithoutReceipt) return
@@ -3811,7 +3806,7 @@ export default function App() {
         category: cashCategory,
         event_id: cashEventId || null,
         payment_method: cashPaymentMethod,
-        amount: Number(cashAmount),
+        amount: Math.abs(Number(cashAmount)),
         description: cashDescription,
       },
       cashEntries,
@@ -3822,7 +3817,7 @@ export default function App() {
   }
 
   async function addCashEntry() {
-    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
     if (!cashAmount || !cashDescription) {
       alert('Betrag und Beschreibung sind Pflicht.')
@@ -3839,7 +3834,7 @@ export default function App() {
       event_id: cashEventId || null,
       payment_method: cashPaymentMethod,
       is_opening: false,
-      amount: Number(cashAmount),
+      amount: Math.abs(Number(cashAmount)),
       description: cashDescription,
       receipt_url: null,
     }
@@ -3856,7 +3851,7 @@ export default function App() {
       setCashDescription('')
       setReceiptFile(null)
 
-      alert('Offline gespeichert. Wird spÃ¤ter synchronisiert.')
+      alert('Offline gespeichert. Wird später synchronisiert.')
       return
     }
 
@@ -3885,7 +3880,7 @@ export default function App() {
   }
 
   async function deleteCashEntry(entry) {
-    if (!canManageCash()) return alert('Keine Berechtigung fÃ¼r Kassa.')
+    if (!canManageCash()) return alert('Keine Berechtigung für Kassa.')
 
     if (isCashEntryMonthClosed(entry)) {
       alert('Dieser Monat ist abgeschlossen. Der Eintrag kann nicht storniert werden.')
@@ -3898,7 +3893,7 @@ export default function App() {
     }
 
     const reason = window.prompt(
-      `Storno-Grund eingeben:\n\n${entry.receipt_number || 'ohne Belegnummer'} Â· ${entry.type === 'einnahme' ? 'Einnahme' : 'Ausgabe'} ${Number(entry.amount || 0).toFixed(2)} â‚¬\n${entry.description || ''}`
+      `Storno-Grund eingeben:\n\n${entry.receipt_number || 'ohne Belegnummer'} · ${entry.type === 'einnahme' ? 'Einnahme' : 'Ausgabe'} ${Number(entry.amount || 0).toFixed(2)} €\n${entry.description || ''}`
     )
 
     if (!reason || !reason.trim()) {
@@ -3930,7 +3925,7 @@ export default function App() {
 
   async function uploadDocument() {
     if (!canManageMembers() && !isAdmin()) {
-      alert('Keine Berechtigung fÃ¼r Dokumenten-Upload.')
+      alert('Keine Berechtigung für Dokumenten-Upload.')
       return
     }
 
@@ -3961,10 +3956,10 @@ export default function App() {
   }
 
   async function deleteDocument(document) {
-    if (!isAdmin()) return alert('Nur Admins dÃ¼rfen Dokumente lÃ¶schen.')
+    if (!isAdmin()) return alert('Nur Admins dürfen Dokumente löschen.')
 
     const confirmed = window.confirm(
-      `Dokument wirklich lÃ¶schen?\n\n${document.title || ''}\n\nDas kann nicht rÃ¼ckgÃ¤ngig gemacht werden.`
+      `Dokument wirklich löschen?\n\n${document.title || ''}\n\nDas kann nicht rückgängig gemacht werden.`
     )
 
     if (!confirmed) return
@@ -4047,7 +4042,7 @@ export default function App() {
 
         {currentMember && (
           <>
-            {' '}Â· Mitglied:{' '}
+            {' '}· Mitglied:{' '}
             <strong style={{ color: colors.white }}>
               {currentMember.first_name} {currentMember.last_name}
             </strong>
@@ -4057,9 +4052,9 @@ export default function App() {
 
       {!currentMember && (
         <div style={{ ...cardStyle, background: '#fef2f2', color: '#991b1b', borderColor: '#b91c1c' }}>
-          <strong>Kein Mitglied mit diesem Login verknÃ¼pft.</strong>
+          <strong>Kein Mitglied mit diesem Login verknüpft.</strong>
           <br />
-          Bitte in Supabase beim passenden Mitglied die Spalte auth_user_id mit deiner Supabase User ID befÃ¼llen und app_role setzen.
+          Bitte in Supabase beim passenden Mitglied die Spalte auth_user_id mit deiner Supabase User ID befüllen und app_role setzen.
         </div>
       )}
 
@@ -4093,7 +4088,7 @@ export default function App() {
           {linkedMemberNotice}
           <br />
           <button onClick={() => setLinkedMemberNotice('')} style={secondaryButtonStyle}>
-            Hinweis schlieÃŸen
+            Hinweis schließen
           </button>
         </div>
       )}
@@ -4101,14 +4096,14 @@ export default function App() {
       {activePage === 'cash' && !canManageCash() && (
         <section style={sectionStyle}>
           <h2 style={headingStyle}>Kassa</h2>
-          <p>FÃ¼r diesen Bereich hast du keine Berechtigung.</p>
+          <p>Für diesen Bereich hast du keine Berechtigung.</p>
         </section>
       )}
 
       {activePage === 'members' && !canManageMembers() && (
         <section style={sectionStyle}>
           <h2 style={headingStyle}>Mitglieder</h2>
-          <p>FÃ¼r die Mitgliederverwaltung hast du keine Bearbeitungsrechte. Die Mitgliederliste bleibt weiter unten sichtbar, wenn sie freigegeben ist.</p>
+          <p>Für die Mitgliederverwaltung hast du keine Bearbeitungsrechte. Die Mitgliederliste bleibt weiter unten sichtbar, wenn sie freigegeben ist.</p>
         </section>
       )}
 

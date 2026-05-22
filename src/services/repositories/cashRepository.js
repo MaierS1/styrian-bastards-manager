@@ -118,12 +118,34 @@ export async function saveMembershipFee({
   if (feeError) return { error: feeError }
 
   const member = members.find((m) => m.id === fee.member_id)
+  const { data: existingCashEntries, error: existingCashError } = await supabase
+    .from('cash_entries')
+    .select('id')
+    .eq('membership_fee_id', fee.id)
+    .eq('is_cancelled', false)
+    .limit(1)
+
+  if (existingCashError) return { error: existingCashError }
+
+  if (existingCashEntries?.length > 0) {
+    await createAuditLog('payment_mark_paid', 'membership_fees', fee.id, fee, {
+      paid: true,
+      paid_at: today,
+      payment_method: paymentMethod,
+      cash_entry: 'already_exists',
+    })
+
+    await loadAll()
+    return { ok: true }
+  }
 
   const { error: cashError } = await supabase.from('cash_entries').insert({
     entry_date: today,
+    entry_year: Number(today.slice(0, 4)),
+    is_cancelled: false,
     type: 'einnahme',
     category: 'mitgliedsbeitrag',
-    amount: fee.amount,
+    amount: Math.abs(Number(fee.amount || 0)),
     description: `Mitgliedsbeitrag 2026 - ${
       member ? `${member.first_name} ${member.last_name}` : 'Mitglied'
     }`,

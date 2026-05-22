@@ -72,7 +72,7 @@ export async function deleteInvoiceCustomerRecord({
   const used = invoices.some((invoice) => invoice.customer_id === customer.id)
 
   if (used) {
-    alertFn('Dieser Kunde wird bereits in Rechnungen verwendet und kann nicht gel�scht werden.')
+    alertFn('Dieser Kunde wird bereits in Rechnungen verwendet und kann nicht gelöscht werden.')
     return { blocked: true }
   }
 
@@ -85,7 +85,7 @@ export async function deleteInvoiceCustomerRecord({
 
   await createAuditLog('delete', 'invoice_customers', customer.id, customer, null)
   await loadInvoiceCustomers()
-  alertFn('Kunde wurde gel�scht.')
+  alertFn('Kunde wurde gelöscht.')
 
   return { ok: true }
 }

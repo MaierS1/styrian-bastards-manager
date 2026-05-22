@@ -183,7 +183,7 @@ export function MerchPage({
           <h3 style={headingStyle}>{merchVariantEditingId ? 'Variante bearbeiten' : 'Variante anlegen'}</h3>
 
           <select value={merchVariantItemId} onChange={(event) => setMerchVariantItemId(event.target.value)} style={inputStyle}>
-            <option value="">Fanartikel auswahlen</option>
+            <option value="">Fanartikel auswählen</option>
             {merchItems.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.item_number ? `${item.item_number} - ${item.name}` : item.name}
@@ -206,7 +206,7 @@ export function MerchPage({
           />
 
           <input
-            placeholder="Groesse"
+            placeholder="Größe"
             value={merchVariantSize}
             onChange={(event) => setMerchVariantSize(event.target.value)}
             style={inputStyle}
@@ -269,7 +269,7 @@ export function MerchPage({
           <h3 style={headingStyle}>Verkauf erfassen</h3>
 
           <select value={merchSaleVariantId} onChange={(event) => setMerchSaleVariantId(event.target.value)} style={inputStyle}>
-            <option value="">Variante auswahlen</option>
+            <option value="">Variante auswählen</option>
             {merchVariants.filter((variant) => {
               const item = merchItems.find((merchItem) => merchItem.id === variant.merch_item_id)
               return variant.status === 'active' && item?.status === 'active'
@@ -366,7 +366,7 @@ export function MerchPage({
           </button>
 
           <button onClick={resetMerchSaleForm} style={secondaryButtonStyle}>
-            Verkauf zurucksetzen
+            Verkauf zurücksetzen
           </button>
         </>
       )}
@@ -459,7 +459,7 @@ function MerchItemCard({
             disabled={merchItemDeletingId === item.id}
             style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
           >
-            {merchItemDeletingId === item.id ? 'Fanartikel wird geloscht...' : 'Fanartikel loschen'}
+            {merchItemDeletingId === item.id ? 'Fanartikel wird gelöscht...' : 'Fanartikel löschen'}
           </button>
         </>
       )}
@@ -500,7 +500,7 @@ function MerchVariantsList({
           >
             <strong>{variant.variant_name || variant.sku || 'Variante'}</strong>
             <br />
-            SKU: {variant.sku || '-'} - Groesse: {variant.size || '-'} - Farbe: {variant.color || '-'}
+            SKU: {variant.sku || '-'} - Größe: {variant.size || '-'} - Farbe: {variant.color || '-'}
             <br />
             Preis: {variant.price_cents === null ? 'Artikelpreis' : formatAmount(variant.price_cents)}
             <br />
@@ -523,7 +523,7 @@ function MerchVariantsList({
                   disabled={merchVariantDeletingId === variant.id}
                   style={{ ...secondaryButtonStyle, borderColor: '#7f1d1d', color: '#7f1d1d' }}
                 >
-                  {merchVariantDeletingId === variant.id ? 'Variante wird geloscht...' : 'Variante loschen'}
+                  {merchVariantDeletingId === variant.id ? 'Variante wird gelöscht...' : 'Variante löschen'}
                 </button>
               </>
             )}
