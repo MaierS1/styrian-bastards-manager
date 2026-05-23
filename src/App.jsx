@@ -958,7 +958,7 @@ export default function App() {
       (entry) =>
         getEntryYear(entry) === String(year) &&
         entry.is_opening &&
-        String(entry.description || '').toLowerCase().includes('übertrag vorjahr')
+        !entry.is_cancelled
     )
   }
 

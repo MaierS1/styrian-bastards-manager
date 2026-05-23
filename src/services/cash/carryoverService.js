@@ -53,6 +53,32 @@ export async function createAutomaticCarryoverService({
 
   if (!confirmed) return
 
+  const { data: existingOpenings, error: openingCheckError } = await supabase
+    .from('cash_entries')
+    .select('id, amount, type, payment_method, description')
+    .eq('entry_year', Number(carryoverToYear))
+    .eq('is_opening', true)
+    .eq('is_cancelled', false)
+    .limit(5)
+
+  if (openingCheckError) return alertFn(openingCheckError.message)
+
+  if (existingOpenings?.length > 0) {
+    const details = existingOpenings
+      .map((entry) => {
+        const sign = entry.type === 'ausgabe' ? '-' : '+'
+        const paymentMethod = entry.payment_method === 'ebanking' ? 'E-Banking' : 'Bar'
+
+        return `${entry.id}: ${sign}${Number(entry.amount || 0).toFixed(2)} € ${paymentMethod}`
+      })
+      .join('\n')
+
+    alertFn(
+      `Für ${carryoverToYear} existieren bereits aktive Opening-/Übertrag-Einträge.\n\n${details}\n\nDer automatische Übertrag wurde nicht erstellt.`
+    )
+    return
+  }
+
   const carryoverEntry = {
     entry_date: `${carryoverToYear}-01-01`,
     entry_year: Number(carryoverToYear),
