@@ -327,9 +327,9 @@ export function CashPage({
                   'Ausgabe E-Banking',
                   'Einnahme Bar',
                   'Ausgabe Bar',
-                  'Einnahmen ges. inkl. Übertrag',
-                  'Ausgaben ges. inkl. Übertrag',
-                  'Differenz wie Excel',
+                  'Einnahmen gesamt',
+                  'Ausgaben gesamt',
+                  'Differenz',
                   'Saldo laufend',
                   'Abschluss',
                 ].map((header) => (
@@ -349,10 +349,10 @@ export function CashPage({
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.expenseBank.toFixed(2)} €</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.incomeCash.toFixed(2)} €</td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{month.expenseCash.toFixed(2)} €</td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalIncomeWithOpening.toFixed(2)} €</strong></td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalExpenseWithOpening.toFixed(2)} €</strong></td>
-                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb', color: month.differenceWithOpening >= 0 ? '#166534' : '#b91c1c' }}>
-                    <strong>{month.differenceWithOpening.toFixed(2)} €</strong>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalIncome.toFixed(2)} €</strong></td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.totalExpense.toFixed(2)} €</strong></td>
+                  <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb', color: month.monthMovement >= 0 ? '#166534' : '#b91c1c' }}>
+                    <strong>{month.monthMovement.toFixed(2)} €</strong>
                   </td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}><strong>{month.runningBalance.toFixed(2)} €</strong></td>
                   <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>

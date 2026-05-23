@@ -282,6 +282,9 @@ export function exportExcelStyleCashbookCsv({
       AusgabeEBanking: '',
       EinnahmeBar: '',
       AusgabeBar: '',
+      UebertragBankNetto: month.openingBank.toFixed(2),
+      UebertragBarNetto: month.openingCash.toFixed(2),
+      Saldo: month.runningBalance.toFixed(2),
       Anmerkung: '',
     })
 
@@ -297,10 +300,13 @@ export function exportExcelStyleCashbookCsv({
           Datum: entry.entry_date || '',
           Bezeichnung: entry.description || '',
           Kuerzel: entry.is_opening ? 'Übertrag' : entry.category || '',
-          EinnahmeEBanking: entry.type === 'einnahme' && paymentMethod === 'ebanking' ? amount : '',
-          AusgabeEBanking: entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? amount : '',
-          EinnahmeBar: entry.type === 'einnahme' && paymentMethod === 'bar' ? amount : '',
-          AusgabeBar: entry.type === 'ausgabe' && paymentMethod === 'bar' ? amount : '',
+          EinnahmeEBanking: !entry.is_opening && entry.type === 'einnahme' && paymentMethod === 'ebanking' ? amount : '',
+          AusgabeEBanking: !entry.is_opening && entry.type === 'ausgabe' && paymentMethod === 'ebanking' ? amount : '',
+          EinnahmeBar: !entry.is_opening && entry.type === 'einnahme' && paymentMethod === 'bar' ? amount : '',
+          AusgabeBar: !entry.is_opening && entry.type === 'ausgabe' && paymentMethod === 'bar' ? amount : '',
+          UebertragBankNetto: entry.is_opening && paymentMethod === 'ebanking' ? month.openingBank.toFixed(2) : '',
+          UebertragBarNetto: entry.is_opening && paymentMethod === 'bar' ? month.openingCash.toFixed(2) : '',
+          Saldo: '',
           Anmerkung: entry.is_cancelled ? `STORNIERT: ${entry.cancellation_reason || ''}` : getEventNameById(entry.event_id) || '',
         })
       })
@@ -311,16 +317,19 @@ export function exportExcelStyleCashbookCsv({
       Datum: '',
       Bezeichnung: '',
       Kuerzel: '',
-      EinnahmeEBanking: (month.openingBankIncome + month.incomeBank).toFixed(2),
-      AusgabeEBanking: (month.openingBankExpense + month.expenseBank).toFixed(2),
-      EinnahmeBar: (month.openingCashIncome + month.incomeCash).toFixed(2),
-      AusgabeBar: (month.openingCashExpense + month.expenseCash).toFixed(2),
+      EinnahmeEBanking: month.incomeBank.toFixed(2),
+      AusgabeEBanking: month.expenseBank.toFixed(2),
+      EinnahmeBar: month.incomeCash.toFixed(2),
+      AusgabeBar: month.expenseCash.toFixed(2),
+      UebertragBankNetto: month.openingBank.toFixed(2),
+      UebertragBarNetto: month.openingCash.toFixed(2),
+      Saldo: month.runningBalance.toFixed(2),
       Anmerkung: '',
     })
 
     rows.push({
       Monat: 'Einnahmen gesamt',
-      Nummer: month.totalIncomeWithOpening.toFixed(2),
+      Nummer: month.totalIncome.toFixed(2),
       Datum: '',
       Bezeichnung: '',
       Kuerzel: '',
@@ -328,25 +337,15 @@ export function exportExcelStyleCashbookCsv({
       AusgabeEBanking: '',
       EinnahmeBar: 'Summe Bar',
       AusgabeBar: '',
+      UebertragBankNetto: '',
+      UebertragBarNetto: '',
+      Saldo: '',
       Anmerkung: '',
     })
 
     rows.push({
       Monat: 'Ausgaben gesamt',
-      Nummer: month.totalExpenseWithOpening.toFixed(2),
-      Datum: '',
-      Bezeichnung: '',
-      Kuerzel: '',
-      EinnahmeEBanking: month.openingBank.toFixed(2),
-      AusgabeEBanking: '',
-      EinnahmeBar: month.openingCash.toFixed(2),
-      AusgabeBar: '',
-      Anmerkung: '',
-    })
-
-    rows.push({
-      Monat: 'Differenz',
-      Nummer: month.differenceWithOpening.toFixed(2),
+      Nummer: month.totalExpense.toFixed(2),
       Datum: '',
       Bezeichnung: '',
       Kuerzel: '',
@@ -354,6 +353,25 @@ export function exportExcelStyleCashbookCsv({
       AusgabeEBanking: '',
       EinnahmeBar: '',
       AusgabeBar: '',
+      UebertragBankNetto: '',
+      UebertragBarNetto: '',
+      Saldo: '',
+      Anmerkung: '',
+    })
+
+    rows.push({
+      Monat: 'Differenz',
+      Nummer: month.monthMovement.toFixed(2),
+      Datum: '',
+      Bezeichnung: '',
+      Kuerzel: '',
+      EinnahmeEBanking: '',
+      AusgabeEBanking: '',
+      EinnahmeBar: '',
+      AusgabeBar: '',
+      UebertragBankNetto: '',
+      UebertragBarNetto: '',
+      Saldo: month.runningBalance.toFixed(2),
       Anmerkung: '',
     })
   })
@@ -368,6 +386,9 @@ export function exportExcelStyleCashbookCsv({
     'AusgabeEBanking',
     'EinnahmeBar',
     'AusgabeBar',
+    'UebertragBankNetto',
+    'UebertragBarNetto',
+    'Saldo',
     'Anmerkung',
   ]
 

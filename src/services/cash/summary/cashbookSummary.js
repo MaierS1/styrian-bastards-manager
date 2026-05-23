@@ -27,10 +27,7 @@ export function getCashbookDetailedSummaryService({
         expenseCash: 0,
         totalIncome: 0,
         totalExpense: 0,
-        totalIncomeWithOpening: 0,
-        totalExpenseWithOpening: 0,
         monthMovement: 0,
-        differenceWithOpening: 0,
         runningBalance: 0,
         entries: [],
       }
@@ -85,12 +82,6 @@ export function getCashbookDetailedSummaryService({
 
       const openingTotal = month.openingBank + month.openingCash
       month.monthMovement = month.totalIncome - month.totalExpense
-      month.totalIncomeWithOpening =
-        month.openingBankIncome + month.openingCashIncome + month.totalIncome
-      month.totalExpenseWithOpening =
-        month.openingBankExpense + month.openingCashExpense + month.totalExpense
-      month.differenceWithOpening =
-        month.totalIncomeWithOpening - month.totalExpenseWithOpening
 
       runningBalance += openingTotal + month.monthMovement
 
