@@ -9,6 +9,16 @@ import {
   sectionStyle,
 } from '../../styles/appStyles'
 
+const checkboxLabelStyle = {
+  display: 'block',
+  margin: '10px 0',
+  color: colors.text,
+}
+
+const checkboxInputStyle = {
+  marginRight: 8,
+}
+
 export function MerchPage({
   merchItems,
   merchVariants,
@@ -36,6 +46,20 @@ export function MerchPage({
   setMerchItemSkuPrefix,
   merchItemDescription,
   setMerchItemDescription,
+  merchItemIsPublic,
+  setMerchItemIsPublic,
+  merchItemPublicSortOrder,
+  setMerchItemPublicSortOrder,
+  merchItemPublicTitle,
+  setMerchItemPublicTitle,
+  merchItemPublicDescription,
+  setMerchItemPublicDescription,
+  merchItemPublicImageAlt,
+  setMerchItemPublicImageAlt,
+  merchItemPublicCtaLabel,
+  setMerchItemPublicCtaLabel,
+  merchItemPublicCtaUrl,
+  setMerchItemPublicCtaUrl,
   merchItemSaving,
   merchItemDeletingId,
   saveMerchItem,
@@ -61,6 +85,10 @@ export function MerchPage({
   setMerchVariantReorderLevel,
   merchVariantStatus,
   setMerchVariantStatus,
+  merchVariantIsPublic,
+  setMerchVariantIsPublic,
+  merchVariantPublicSortOrder,
+  setMerchVariantPublicSortOrder,
   merchVariantSaving,
   merchVariantDeletingId,
   saveMerchVariant,
@@ -170,6 +198,61 @@ export function MerchPage({
             style={inputStyle}
           />
 
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchItemIsPublic}
+              onChange={(event) => setMerchItemIsPublic(event.target.checked)}
+              style={checkboxInputStyle}
+            />
+            Oeffentlich anzeigen
+          </label>
+
+          <input
+            placeholder="Oeffentlicher Titel"
+            value={merchItemPublicTitle}
+            onChange={(event) => setMerchItemPublicTitle(event.target.value)}
+            style={inputStyle}
+          />
+
+          <input
+            placeholder="Oeffentliche Beschreibung"
+            value={merchItemPublicDescription}
+            onChange={(event) => setMerchItemPublicDescription(event.target.value)}
+            style={inputStyle}
+          />
+
+          <input
+            placeholder="Bild-Alt-Text"
+            value={merchItemPublicImageAlt}
+            onChange={(event) => setMerchItemPublicImageAlt(event.target.value)}
+            style={inputStyle}
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="1"
+            placeholder="Oeffentliche Sortierung"
+            value={merchItemPublicSortOrder}
+            onChange={(event) => setMerchItemPublicSortOrder(event.target.value)}
+            style={inputStyle}
+          />
+
+          <input
+            placeholder="CTA-Label"
+            value={merchItemPublicCtaLabel}
+            onChange={(event) => setMerchItemPublicCtaLabel(event.target.value)}
+            style={inputStyle}
+          />
+
+          <input
+            placeholder="CTA-URL"
+            value={merchItemPublicCtaUrl}
+            onChange={(event) => setMerchItemPublicCtaUrl(event.target.value)}
+            style={inputStyle}
+          />
+
           <button onClick={saveMerchItem} disabled={merchItemSaving} style={buttonStyle}>
             {merchItemSaving ? 'Fanartikel wird gespeichert...' : merchItemEditingId ? 'Fanartikel speichern' : 'Fanartikel anlegen'}
           </button>
@@ -255,6 +338,26 @@ export function MerchPage({
             <option value="sold_out">Ausverkauft</option>
             <option value="archived">Archiviert</option>
           </select>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchVariantIsPublic}
+              onChange={(event) => setMerchVariantIsPublic(event.target.checked)}
+              style={checkboxInputStyle}
+            />
+            Variante oeffentlich anzeigen
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            step="1"
+            placeholder="Varianten-Sortierung"
+            value={merchVariantPublicSortOrder}
+            onChange={(event) => setMerchVariantPublicSortOrder(event.target.value)}
+            style={inputStyle}
+          />
 
           <button onClick={saveMerchVariant} disabled={merchVariantSaving} style={buttonStyle}>
             {merchVariantSaving ? 'Variante wird gespeichert...' : merchVariantEditingId ? 'Variante speichern' : 'Variante anlegen'}
@@ -439,6 +542,16 @@ function MerchItemCard({
       SKU-Prefix: {item.sku_prefix || '-'} - Bild: {item.image_path || '-'}
       <br />
       Beschreibung: {item.description || '-'}
+      <br />
+      Oeffentlich: {item.is_public ? 'Ja' : 'Nein'} - Sortierung: {item.public_sort_order ?? 0}
+      <br />
+      Oeffentlicher Titel: {item.public_title || '-'}
+      <br />
+      Oeffentliche Beschreibung: {item.public_description || '-'}
+      <br />
+      Bild-Alt-Text: {item.public_image_alt || '-'}
+      <br />
+      CTA: {getCtaLabel(item)}
 
       <MerchVariantsList
         variants={variants}
@@ -511,6 +624,8 @@ function MerchVariantsList({
             - Mindestbestand: {variant.reorder_level}
             <br />
             Status: {getVariantStatusLabel(variant.status)}
+            <br />
+            Oeffentlich: {variant.is_public ? 'Ja' : 'Nein'} - Sortierung: {variant.public_sort_order ?? 0}
 
             {canManageMerch() && (
               <>
@@ -547,6 +662,13 @@ function getVariantStatusLabel(status) {
   if (status === 'sold_out') return 'Ausverkauft'
   if (status === 'archived') return 'Archiviert'
   return status || '-'
+}
+
+function getCtaLabel(item) {
+  const label = item.public_cta_label || '-'
+  const url = item.public_cta_url || '-'
+
+  return `${label} - ${url}`
 }
 
 function MerchSalesList({

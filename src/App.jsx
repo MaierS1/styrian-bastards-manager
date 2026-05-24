@@ -390,6 +390,13 @@ export default function App() {
   const [merchItemTaxRate, setMerchItemTaxRate] = useState('0')
   const [merchItemSkuPrefix, setMerchItemSkuPrefix] = useState('')
   const [merchItemDescription, setMerchItemDescription] = useState('')
+  const [merchItemIsPublic, setMerchItemIsPublic] = useState(false)
+  const [merchItemPublicSortOrder, setMerchItemPublicSortOrder] = useState('0')
+  const [merchItemPublicTitle, setMerchItemPublicTitle] = useState('')
+  const [merchItemPublicDescription, setMerchItemPublicDescription] = useState('')
+  const [merchItemPublicImageAlt, setMerchItemPublicImageAlt] = useState('')
+  const [merchItemPublicCtaLabel, setMerchItemPublicCtaLabel] = useState('')
+  const [merchItemPublicCtaUrl, setMerchItemPublicCtaUrl] = useState('')
   const [merchItemSaving, setMerchItemSaving] = useState(false)
   const [merchItemDeletingId, setMerchItemDeletingId] = useState(null)
   const [merchVariantEditingId, setMerchVariantEditingId] = useState(null)
@@ -402,6 +409,8 @@ export default function App() {
   const [merchVariantStock, setMerchVariantStock] = useState('0')
   const [merchVariantReorderLevel, setMerchVariantReorderLevel] = useState('0')
   const [merchVariantStatus, setMerchVariantStatus] = useState('active')
+  const [merchVariantIsPublic, setMerchVariantIsPublic] = useState(false)
+  const [merchVariantPublicSortOrder, setMerchVariantPublicSortOrder] = useState('0')
   const [merchVariantSaving, setMerchVariantSaving] = useState(false)
   const [merchVariantDeletingId, setMerchVariantDeletingId] = useState(null)
   const [merchSaleVariantId, setMerchSaleVariantId] = useState('')
@@ -1874,6 +1883,13 @@ export default function App() {
     setMerchItemTaxRate('0')
     setMerchItemSkuPrefix('')
     setMerchItemDescription('')
+    setMerchItemIsPublic(false)
+    setMerchItemPublicSortOrder('0')
+    setMerchItemPublicTitle('')
+    setMerchItemPublicDescription('')
+    setMerchItemPublicImageAlt('')
+    setMerchItemPublicCtaLabel('')
+    setMerchItemPublicCtaUrl('')
   }
 
   function resetMerchVariantForm() {
@@ -1887,6 +1903,8 @@ export default function App() {
     setMerchVariantStock('0')
     setMerchVariantReorderLevel('0')
     setMerchVariantStatus('active')
+    setMerchVariantIsPublic(false)
+    setMerchVariantPublicSortOrder('0')
   }
 
   function resetMerchSaleForm() {
@@ -2098,6 +2116,13 @@ export default function App() {
     setMerchItemTaxRate(String(item.tax_rate ?? 0))
     setMerchItemSkuPrefix(item.sku_prefix || '')
     setMerchItemDescription(item.description || '')
+    setMerchItemIsPublic(Boolean(item.is_public))
+    setMerchItemPublicSortOrder(String(item.public_sort_order ?? 0))
+    setMerchItemPublicTitle(item.public_title || '')
+    setMerchItemPublicDescription(item.public_description || '')
+    setMerchItemPublicImageAlt(item.public_image_alt || '')
+    setMerchItemPublicCtaLabel(item.public_cta_label || '')
+    setMerchItemPublicCtaUrl(item.public_cta_url || '')
 
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -2113,6 +2138,7 @@ export default function App() {
 
     const basePriceNumber = merchItemBasePrice ? Number(String(merchItemBasePrice).replace(',', '.')) : 0
     const taxRateNumber = merchItemTaxRate ? Number(String(merchItemTaxRate).replace(',', '.')) : 0
+    const publicSortOrderNumber = merchItemPublicSortOrder ? Number(merchItemPublicSortOrder) : 0
 
     if (Number.isNaN(basePriceNumber) || basePriceNumber < 0) {
       alert('Basispreis muss eine positive Zahl sein.')
@@ -2121,6 +2147,11 @@ export default function App() {
 
     if (Number.isNaN(taxRateNumber) || taxRateNumber < 0 || taxRateNumber > 100) {
       alert('Steuersatz muss zwischen 0 und 100 liegen.')
+      return
+    }
+
+    if (!Number.isInteger(publicSortOrderNumber) || publicSortOrderNumber < 0) {
+      alert('Oeffentliche Sortierung muss eine ganze positive Zahl sein.')
       return
     }
 
@@ -2134,6 +2165,13 @@ export default function App() {
       base_price_cents: Math.round(basePriceNumber * 100),
       tax_rate: taxRateNumber,
       sku_prefix: merchItemSkuPrefix.trim() || null,
+      is_public: merchItemIsPublic,
+      public_sort_order: publicSortOrderNumber,
+      public_title: merchItemPublicTitle.trim() || null,
+      public_description: merchItemPublicDescription.trim() || null,
+      public_image_alt: merchItemPublicImageAlt.trim() || null,
+      public_cta_label: merchItemPublicCtaLabel.trim() || null,
+      public_cta_url: merchItemPublicCtaUrl.trim() || null,
     }
 
     setMerchItemSaving(true)
@@ -2193,6 +2231,8 @@ export default function App() {
     setMerchVariantStock(String(variant.stock_quantity ?? 0))
     setMerchVariantReorderLevel(String(variant.reorder_level ?? 0))
     setMerchVariantStatus(variant.status || 'active')
+    setMerchVariantIsPublic(Boolean(variant.is_public))
+    setMerchVariantPublicSortOrder(String(variant.public_sort_order ?? 0))
 
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -2224,6 +2264,7 @@ export default function App() {
     const variantPriceNumber = merchVariantPrice ? Number(String(merchVariantPrice).replace(',', '.')) : null
     const stockNumber = merchVariantStock ? Number(merchVariantStock) : 0
     const reorderLevelNumber = merchVariantReorderLevel ? Number(merchVariantReorderLevel) : 0
+    const publicSortOrderNumber = merchVariantPublicSortOrder ? Number(merchVariantPublicSortOrder) : 0
 
     if (variantPriceNumber !== null && (Number.isNaN(variantPriceNumber) || variantPriceNumber < 0)) {
       alert('Variantenpreis muss eine positive Zahl sein.')
@@ -2240,6 +2281,11 @@ export default function App() {
       return
     }
 
+    if (!Number.isInteger(publicSortOrderNumber) || publicSortOrderNumber < 0) {
+      alert('Varianten-Sortierung muss eine ganze positive Zahl sein.')
+      return
+    }
+
     const payload = {
       merch_item_id: merchVariantItemId,
       sku: merchVariantSku.trim() || null,
@@ -2250,6 +2296,8 @@ export default function App() {
       stock_quantity: stockNumber,
       reorder_level: reorderLevelNumber,
       status: merchVariantStatus || 'active',
+      is_public: merchVariantIsPublic,
+      public_sort_order: publicSortOrderNumber,
     }
 
     setMerchVariantSaving(true)
@@ -4608,6 +4656,20 @@ export default function App() {
           setMerchItemSkuPrefix={setMerchItemSkuPrefix}
           merchItemDescription={merchItemDescription}
           setMerchItemDescription={setMerchItemDescription}
+          merchItemIsPublic={merchItemIsPublic}
+          setMerchItemIsPublic={setMerchItemIsPublic}
+          merchItemPublicSortOrder={merchItemPublicSortOrder}
+          setMerchItemPublicSortOrder={setMerchItemPublicSortOrder}
+          merchItemPublicTitle={merchItemPublicTitle}
+          setMerchItemPublicTitle={setMerchItemPublicTitle}
+          merchItemPublicDescription={merchItemPublicDescription}
+          setMerchItemPublicDescription={setMerchItemPublicDescription}
+          merchItemPublicImageAlt={merchItemPublicImageAlt}
+          setMerchItemPublicImageAlt={setMerchItemPublicImageAlt}
+          merchItemPublicCtaLabel={merchItemPublicCtaLabel}
+          setMerchItemPublicCtaLabel={setMerchItemPublicCtaLabel}
+          merchItemPublicCtaUrl={merchItemPublicCtaUrl}
+          setMerchItemPublicCtaUrl={setMerchItemPublicCtaUrl}
           merchItemSaving={merchItemSaving}
           merchItemDeletingId={merchItemDeletingId}
           saveMerchItem={saveMerchItem}
@@ -4633,6 +4695,10 @@ export default function App() {
           setMerchVariantReorderLevel={setMerchVariantReorderLevel}
           merchVariantStatus={merchVariantStatus}
           setMerchVariantStatus={setMerchVariantStatus}
+          merchVariantIsPublic={merchVariantIsPublic}
+          setMerchVariantIsPublic={setMerchVariantIsPublic}
+          merchVariantPublicSortOrder={merchVariantPublicSortOrder}
+          setMerchVariantPublicSortOrder={setMerchVariantPublicSortOrder}
           merchVariantSaving={merchVariantSaving}
           merchVariantDeletingId={merchVariantDeletingId}
           saveMerchVariant={saveMerchVariant}
