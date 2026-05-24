@@ -257,6 +257,14 @@ export default function App() {
   const [newEventDate, setNewEventDate] = useState(new Date().toISOString().slice(0, 10))
   const [newEventLocation, setNewEventLocation] = useState('')
   const [newEventNotes, setNewEventNotes] = useState('')
+  const [newEventIsPublic, setNewEventIsPublic] = useState(false)
+  const [newEventPublicTitle, setNewEventPublicTitle] = useState('')
+  const [newEventPublicDescription, setNewEventPublicDescription] = useState('')
+  const [newEventPublicSortOrder, setNewEventPublicSortOrder] = useState('0')
+  const [newEventPublicPublishedAt, setNewEventPublicPublishedAt] = useState('')
+  const [newEventPublicImagePath, setNewEventPublicImagePath] = useState('')
+  const [newEventPublicRegistrationUrl, setNewEventPublicRegistrationUrl] = useState('')
+  const [newEventPublicExternalUrl, setNewEventPublicExternalUrl] = useState('')
 
   const [offlineCashEntries, setOfflineCashEntries] = useState(() =>
     JSON.parse(localStorage.getItem('offlineCashEntries') || '[]')
@@ -533,6 +541,16 @@ export default function App() {
 
   const getTodayDate = useCallback(() => {
     return new Date().toISOString().slice(0, 10)
+  }, [])
+
+  const formatDateTimeLocal = useCallback((value) => {
+    if (!value) return ''
+
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+
+    const timezoneOffsetMs = date.getTimezoneOffset() * 60000
+    return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 16)
   }, [])
 
   const getSelectedEvent = useCallback(() => {
@@ -3489,6 +3507,14 @@ export default function App() {
     setNewEventDate(getTodayDate())
     setNewEventLocation('')
     setNewEventNotes('')
+    setNewEventIsPublic(false)
+    setNewEventPublicTitle('')
+    setNewEventPublicDescription('')
+    setNewEventPublicSortOrder('0')
+    setNewEventPublicPublishedAt('')
+    setNewEventPublicImagePath('')
+    setNewEventPublicRegistrationUrl('')
+    setNewEventPublicExternalUrl('')
   }
 
   function editEvent(event) {
@@ -3499,8 +3525,31 @@ export default function App() {
     setNewEventDate(event.event_date || getTodayDate())
     setNewEventLocation(event.location || '')
     setNewEventNotes(event.notes || '')
+    setNewEventIsPublic(Boolean(event.is_public))
+    setNewEventPublicTitle(event.public_title || '')
+    setNewEventPublicDescription(event.public_description || '')
+    setNewEventPublicSortOrder(String(event.public_sort_order ?? 0))
+    setNewEventPublicPublishedAt(formatDateTimeLocal(event.public_published_at))
+    setNewEventPublicImagePath(event.public_image_path || '')
+    setNewEventPublicRegistrationUrl(event.public_registration_url || '')
+    setNewEventPublicExternalUrl(event.public_external_url || '')
 
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function getEventPublicPayload() {
+    const publicSortOrder = Number.parseInt(newEventPublicSortOrder, 10)
+
+    return {
+      is_public: newEventIsPublic,
+      public_title: newEventPublicTitle.trim() || null,
+      public_description: newEventPublicDescription.trim() || null,
+      public_sort_order: Number.isNaN(publicSortOrder) ? 0 : Math.max(0, publicSortOrder),
+      public_published_at: newEventPublicPublishedAt ? new Date(newEventPublicPublishedAt).toISOString() : null,
+      public_image_path: newEventPublicImagePath.trim() || null,
+      public_registration_url: newEventPublicRegistrationUrl.trim() || null,
+      public_external_url: newEventPublicExternalUrl.trim() || null,
+    }
   }
 
   async function createEvent() {
@@ -3511,12 +3560,18 @@ export default function App() {
       return
     }
 
+    if (newEventIsPublic && !newEventPublicTitle.trim()) {
+      alert('Bitte einen öffentlichen Titel eingeben.')
+      return
+    }
+
     await createEventRecord({
       payload: {
         name: newEventName.trim(),
         event_date: newEventDate || getTodayDate(),
         location: newEventLocation.trim() || null,
         notes: newEventNotes.trim() || null,
+        ...getEventPublicPayload(),
       },
       createAuditLog,
       loadEvents,
@@ -3539,6 +3594,11 @@ export default function App() {
       return
     }
 
+    if (newEventIsPublic && !newEventPublicTitle.trim()) {
+      alert('Bitte einen öffentlichen Titel eingeben.')
+      return
+    }
+
     await updateEventRecord({
       editingEventId,
       payload: {
@@ -3546,6 +3606,7 @@ export default function App() {
         event_date: newEventDate || getTodayDate(),
         location: newEventLocation.trim() || null,
         notes: newEventNotes.trim() || null,
+        ...getEventPublicPayload(),
       },
       events,
       createAuditLog,
@@ -4268,6 +4329,22 @@ export default function App() {
           setNewEventLocation={setNewEventLocation}
           newEventNotes={newEventNotes}
           setNewEventNotes={setNewEventNotes}
+          newEventIsPublic={newEventIsPublic}
+          setNewEventIsPublic={setNewEventIsPublic}
+          newEventPublicTitle={newEventPublicTitle}
+          setNewEventPublicTitle={setNewEventPublicTitle}
+          newEventPublicDescription={newEventPublicDescription}
+          setNewEventPublicDescription={setNewEventPublicDescription}
+          newEventPublicSortOrder={newEventPublicSortOrder}
+          setNewEventPublicSortOrder={setNewEventPublicSortOrder}
+          newEventPublicPublishedAt={newEventPublicPublishedAt}
+          setNewEventPublicPublishedAt={setNewEventPublicPublishedAt}
+          newEventPublicImagePath={newEventPublicImagePath}
+          setNewEventPublicImagePath={setNewEventPublicImagePath}
+          newEventPublicRegistrationUrl={newEventPublicRegistrationUrl}
+          setNewEventPublicRegistrationUrl={setNewEventPublicRegistrationUrl}
+          newEventPublicExternalUrl={newEventPublicExternalUrl}
+          setNewEventPublicExternalUrl={setNewEventPublicExternalUrl}
           createEvent={createEvent}
           updateEvent={updateEvent}
           resetEventForm={resetEventForm}

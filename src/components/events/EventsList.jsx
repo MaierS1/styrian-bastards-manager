@@ -27,6 +27,13 @@ export function EventsList({
           <br />
           Status: {event.status || '-'}
           <br />
+          Homepage: {event.is_public ? 'Ja' : 'Nein'}
+          {event.is_public && (
+            <>
+              {' '}Â· Titel: {event.public_title || '-'}
+            </>
+          )}
+          <br />
           Notizen: {event.notes || '-'}
           <br />
           Einnahmen: {getEventIncomeTotal(event.id).toFixed(2)} € · Ausgaben: {getEventExpenseTotal(event.id).toFixed(2)} € · Ergebnis: {getEventBalance(event.id).toFixed(2)} €

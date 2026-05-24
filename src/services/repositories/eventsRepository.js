@@ -27,10 +27,7 @@ export async function createEventRecord({
   const { data, error } = await supabase
     .from('events')
     .insert({
-      name: payload.name,
-      event_date: payload.event_date,
-      location: payload.location,
-      notes: payload.notes,
+      ...payload,
       status: 'geplant',
     })
     .select()

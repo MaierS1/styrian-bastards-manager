@@ -10,6 +10,22 @@ export function EventForm({
   setNewEventLocation,
   newEventNotes,
   setNewEventNotes,
+  newEventIsPublic,
+  setNewEventIsPublic,
+  newEventPublicTitle,
+  setNewEventPublicTitle,
+  newEventPublicDescription,
+  setNewEventPublicDescription,
+  newEventPublicSortOrder,
+  setNewEventPublicSortOrder,
+  newEventPublicPublishedAt,
+  setNewEventPublicPublishedAt,
+  newEventPublicImagePath,
+  setNewEventPublicImagePath,
+  newEventPublicRegistrationUrl,
+  setNewEventPublicRegistrationUrl,
+  newEventPublicExternalUrl,
+  setNewEventPublicExternalUrl,
   createEvent,
   updateEvent,
   resetEventForm,
@@ -46,6 +62,75 @@ export function EventForm({
         style={inputStyle}
       />
 
+      <fieldset style={publicEventFieldsetStyle}>
+        <legend style={publicEventLegendStyle}>Homepage</legend>
+
+        <label style={checkboxLabelStyle}>
+          <input
+            type="checkbox"
+            checked={newEventIsPublic}
+            onChange={(e) => setNewEventIsPublic(e.target.checked)}
+            style={checkboxInputStyle}
+          />
+          Öffentlich anzeigen
+        </label>
+
+        <input
+          placeholder="Öffentlicher Titel"
+          value={newEventPublicTitle}
+          onChange={(e) => setNewEventPublicTitle(e.target.value)}
+          style={inputStyle}
+        />
+
+        <textarea
+          placeholder="Öffentliche Beschreibung"
+          value={newEventPublicDescription}
+          onChange={(e) => setNewEventPublicDescription(e.target.value)}
+          style={textareaStyle}
+          rows={3}
+        />
+
+        <input
+          type="number"
+          min="0"
+          placeholder="Öffentliche Sortierung"
+          value={newEventPublicSortOrder}
+          onChange={(e) => setNewEventPublicSortOrder(e.target.value)}
+          style={inputStyle}
+        />
+
+        <label style={fieldLabelStyle}>
+          Veröffentlichungsdatum
+          <input
+            type="datetime-local"
+            value={newEventPublicPublishedAt}
+            onChange={(e) => setNewEventPublicPublishedAt(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        </label>
+
+        <input
+          placeholder="Bild-URL oder Storage-Pfad"
+          value={newEventPublicImagePath}
+          onChange={(e) => setNewEventPublicImagePath(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="Anmelde-URL"
+          value={newEventPublicRegistrationUrl}
+          onChange={(e) => setNewEventPublicRegistrationUrl(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="Externe URL"
+          value={newEventPublicExternalUrl}
+          onChange={(e) => setNewEventPublicExternalUrl(e.target.value)}
+          style={inputStyle}
+        />
+      </fieldset>
+
       {editingEventId ? (
         <>
           <button onClick={updateEvent} style={buttonStyle}>
@@ -62,4 +147,41 @@ export function EventForm({
       )}
     </>
   )
+}
+
+const publicEventFieldsetStyle = {
+  margin: '10px 0 16px',
+  padding: 14,
+  border: '1px solid #d1d5db',
+  borderRadius: 10,
+}
+
+const publicEventLegendStyle = {
+  padding: '0 6px',
+  fontWeight: 800,
+}
+
+const checkboxLabelStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 10,
+  marginBottom: 12,
+  fontWeight: 700,
+}
+
+const checkboxInputStyle = {
+  width: 18,
+  height: 18,
+}
+
+const fieldLabelStyle = {
+  display: 'block',
+  marginBottom: 12,
+  fontWeight: 700,
+}
+
+const textareaStyle = {
+  ...inputStyle,
+  minHeight: 92,
+  resize: 'vertical',
 }

@@ -13,6 +13,22 @@ export function EventsPage({
   setNewEventLocation,
   newEventNotes,
   setNewEventNotes,
+  newEventIsPublic,
+  setNewEventIsPublic,
+  newEventPublicTitle,
+  setNewEventPublicTitle,
+  newEventPublicDescription,
+  setNewEventPublicDescription,
+  newEventPublicSortOrder,
+  setNewEventPublicSortOrder,
+  newEventPublicPublishedAt,
+  setNewEventPublicPublishedAt,
+  newEventPublicImagePath,
+  setNewEventPublicImagePath,
+  newEventPublicRegistrationUrl,
+  setNewEventPublicRegistrationUrl,
+  newEventPublicExternalUrl,
+  setNewEventPublicExternalUrl,
   createEvent,
   updateEvent,
   resetEventForm,
@@ -54,6 +70,22 @@ export function EventsPage({
           setNewEventLocation={setNewEventLocation}
           newEventNotes={newEventNotes}
           setNewEventNotes={setNewEventNotes}
+          newEventIsPublic={newEventIsPublic}
+          setNewEventIsPublic={setNewEventIsPublic}
+          newEventPublicTitle={newEventPublicTitle}
+          setNewEventPublicTitle={setNewEventPublicTitle}
+          newEventPublicDescription={newEventPublicDescription}
+          setNewEventPublicDescription={setNewEventPublicDescription}
+          newEventPublicSortOrder={newEventPublicSortOrder}
+          setNewEventPublicSortOrder={setNewEventPublicSortOrder}
+          newEventPublicPublishedAt={newEventPublicPublishedAt}
+          setNewEventPublicPublishedAt={setNewEventPublicPublishedAt}
+          newEventPublicImagePath={newEventPublicImagePath}
+          setNewEventPublicImagePath={setNewEventPublicImagePath}
+          newEventPublicRegistrationUrl={newEventPublicRegistrationUrl}
+          setNewEventPublicRegistrationUrl={setNewEventPublicRegistrationUrl}
+          newEventPublicExternalUrl={newEventPublicExternalUrl}
+          setNewEventPublicExternalUrl={setNewEventPublicExternalUrl}
           createEvent={createEvent}
           updateEvent={updateEvent}
           resetEventForm={resetEventForm}
