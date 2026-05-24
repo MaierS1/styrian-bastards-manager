@@ -1,5 +1,9 @@
 import { supabase } from '../../lib/supabase'
 
+export async function fetchPublicEvents() {
+  return supabase.rpc('get_public_events')
+}
+
 export async function fetchEvents() {
   return supabase
     .from('events')

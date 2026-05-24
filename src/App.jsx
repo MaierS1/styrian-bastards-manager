@@ -255,6 +255,7 @@ export default function App() {
   const [editingEventId, setEditingEventId] = useState(null)
   const [newEventName, setNewEventName] = useState('')
   const [newEventDate, setNewEventDate] = useState(new Date().toISOString().slice(0, 10))
+  const [newEventCategory, setNewEventCategory] = useState('event')
   const [newEventLocation, setNewEventLocation] = useState('')
   const [newEventNotes, setNewEventNotes] = useState('')
   const [newEventIsPublic, setNewEventIsPublic] = useState(false)
@@ -3505,6 +3506,7 @@ export default function App() {
     setEditingEventId(null)
     setNewEventName('')
     setNewEventDate(getTodayDate())
+    setNewEventCategory('event')
     setNewEventLocation('')
     setNewEventNotes('')
     setNewEventIsPublic(false)
@@ -3523,6 +3525,7 @@ export default function App() {
     setEditingEventId(event.id)
     setNewEventName(event.name || '')
     setNewEventDate(event.event_date || getTodayDate())
+    setNewEventCategory(event.event_category || 'event')
     setNewEventLocation(event.location || '')
     setNewEventNotes(event.notes || '')
     setNewEventIsPublic(Boolean(event.is_public))
@@ -3569,6 +3572,7 @@ export default function App() {
       payload: {
         name: newEventName.trim(),
         event_date: newEventDate || getTodayDate(),
+        event_category: newEventCategory || 'event',
         location: newEventLocation.trim() || null,
         notes: newEventNotes.trim() || null,
         ...getEventPublicPayload(),
@@ -3604,6 +3608,7 @@ export default function App() {
       payload: {
         name: newEventName.trim(),
         event_date: newEventDate || getTodayDate(),
+        event_category: newEventCategory || 'event',
         location: newEventLocation.trim() || null,
         notes: newEventNotes.trim() || null,
         ...getEventPublicPayload(),
@@ -4325,6 +4330,8 @@ export default function App() {
           setNewEventName={setNewEventName}
           newEventDate={newEventDate}
           setNewEventDate={setNewEventDate}
+          newEventCategory={newEventCategory}
+          setNewEventCategory={setNewEventCategory}
           newEventLocation={newEventLocation}
           setNewEventLocation={setNewEventLocation}
           newEventNotes={newEventNotes}

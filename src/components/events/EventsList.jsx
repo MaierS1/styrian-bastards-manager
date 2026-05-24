@@ -1,4 +1,5 @@
 import { buttonStyle, cardStyle, headingStyle, secondaryButtonStyle } from '../../styles/appStyles'
+import { getEventCategoryLabel } from './eventCategories'
 
 export function EventsList({
   events,
@@ -20,6 +21,7 @@ export function EventsList({
       {events.map((event) => (
         <div key={event.id} style={cardStyle}>
           <strong>{event.name}</strong>
+          <span style={categoryBadgeStyle}>{getEventCategoryLabel(event.event_category)}</span>
           <br />
           Datum: {event.event_date || '-'}
           <br />
@@ -67,4 +69,17 @@ export function EventsList({
       ))}
     </>
   )
+}
+
+const categoryBadgeStyle = {
+  display: 'inline-block',
+  marginLeft: 8,
+  padding: '2px 8px',
+  borderRadius: 999,
+  background: '#e0f2fe',
+  color: '#075985',
+  fontSize: 12,
+  fontWeight: 800,
+  lineHeight: 1.5,
+  verticalAlign: 'middle',
 }

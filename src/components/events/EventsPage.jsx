@@ -9,6 +9,8 @@ export function EventsPage({
   setNewEventName,
   newEventDate,
   setNewEventDate,
+  newEventCategory,
+  setNewEventCategory,
   newEventLocation,
   setNewEventLocation,
   newEventNotes,
@@ -66,6 +68,8 @@ export function EventsPage({
           setNewEventName={setNewEventName}
           newEventDate={newEventDate}
           setNewEventDate={setNewEventDate}
+          newEventCategory={newEventCategory}
+          setNewEventCategory={setNewEventCategory}
           newEventLocation={newEventLocation}
           setNewEventLocation={setNewEventLocation}
           newEventNotes={newEventNotes}

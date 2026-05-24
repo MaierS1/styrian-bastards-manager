@@ -1,4 +1,5 @@
 import { buttonStyle, headingStyle, inputStyle, secondaryButtonStyle } from '../../styles/appStyles'
+import { EVENT_CATEGORY_OPTIONS } from './eventCategories'
 
 export function EventForm({
   editingEventId,
@@ -6,6 +7,8 @@ export function EventForm({
   setNewEventName,
   newEventDate,
   setNewEventDate,
+  newEventCategory,
+  setNewEventCategory,
   newEventLocation,
   setNewEventLocation,
   newEventNotes,
@@ -47,6 +50,18 @@ export function EventForm({
         onChange={(e) => setNewEventDate(e.target.value)}
         style={inputStyle}
       />
+
+      <select
+        value={newEventCategory}
+        onChange={(e) => setNewEventCategory(e.target.value)}
+        style={inputStyle}
+      >
+        {EVENT_CATEGORY_OPTIONS.map((category) => (
+          <option key={category.value} value={category.value}>
+            {category.label}
+          </option>
+        ))}
+      </select>
 
       <input
         placeholder="Ort"
