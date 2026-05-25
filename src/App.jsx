@@ -77,6 +77,7 @@ import {
   loadEventCheckins as loadEventCheckinsService,
   loadEvents as loadEventsService,
   loadFees as loadFeesService,
+  loadMediaItems as loadMediaItemsService,
   loadInventoryItems as loadInventoryItemsService,
   loadInvoiceCustomers as loadInvoiceCustomersService,
   loadInvoiceItems as loadInvoiceItemsService,
@@ -122,6 +123,10 @@ import {
   deleteDocumentRecord,
   uploadDocumentRecord,
 } from './services/repositories/documentsRepository'
+import {
+  deleteMediaItemRecord,
+  saveMediaItemRecord,
+} from './services/repositories/mediaRepository'
 import {
   exportMembersCsv as exportMembersCsvService,
   exportCashCsv as exportCashCsvService,
@@ -218,6 +223,7 @@ import {
 } from './services/repositories/merchRepository'
 import { SponsorsPage } from './components/sponsors/SponsorsPage'
 import { MerchPage } from './components/merch/MerchPage'
+import { MediaPage } from './components/media/MediaPage'
 import { PublicSponsors } from './components/home/PublicSponsors'
 
 export default function App() {
@@ -239,6 +245,7 @@ export default function App() {
   const [invoiceItems, setInvoiceItems] = useState([])
   const [invoiceCustomers, setInvoiceCustomers] = useState([])
   const [memberChangeRequests, setMemberChangeRequests] = useState([])
+  const [mediaItems, setMediaItems] = useState([])
   const [sponsors, setSponsors] = useState([])
   const [sponsorContracts, setSponsorContracts] = useState([])
   const [merchItems, setMerchItems] = useState([])
@@ -380,6 +387,26 @@ export default function App() {
   const [contractNotes, setContractNotes] = useState('')
   const [sponsorContractSaving, setSponsorContractSaving] = useState(false)
   const [sponsorContractDeletingId, setSponsorContractDeletingId] = useState(null)
+  const [mediaEditingId, setMediaEditingId] = useState(null)
+  const [mediaTitle, setMediaTitle] = useState('')
+  const [mediaSlug, setMediaSlug] = useState('')
+  const [mediaCategory, setMediaCategory] = useState('vereinsnews')
+  const [mediaSourceName, setMediaSourceName] = useState('')
+  const [mediaSummary, setMediaSummary] = useState('')
+  const [mediaContent, setMediaContent] = useState('')
+  const [mediaExternalUrl, setMediaExternalUrl] = useState('')
+  const [mediaAudioUrl, setMediaAudioUrl] = useState('')
+  const [mediaImagePath, setMediaImagePath] = useState('')
+  const [mediaImageAlt, setMediaImageAlt] = useState('')
+  const [mediaPublicationDate, setMediaPublicationDate] = useState(new Date().toISOString().slice(0, 10))
+  const [mediaPublishedAt, setMediaPublishedAt] = useState('')
+  const [mediaStatus, setMediaStatus] = useState('draft')
+  const [mediaIsPublic, setMediaIsPublic] = useState(false)
+  const [mediaIsFeatured, setMediaIsFeatured] = useState(false)
+  const [mediaPublicSortOrder, setMediaPublicSortOrder] = useState('0')
+  const [mediaInternalNotes, setMediaInternalNotes] = useState('')
+  const [mediaSaving, setMediaSaving] = useState(false)
+  const [mediaDeletingId, setMediaDeletingId] = useState(null)
   const [merchItemEditingId, setMerchItemEditingId] = useState(null)
   const [merchItemNumber, setMerchItemNumber] = useState('')
   const [merchItemName, setMerchItemName] = useState('')
@@ -511,6 +538,7 @@ export default function App() {
       loadInvoicesFn: () => loadInvoicesService({ setInvoices }),
       loadInvoiceItemsFn: () => loadInvoiceItemsService({ setInvoiceItems }),
       loadMemberChangeRequestsFn: () => loadMemberChangeRequestsService({ setMemberChangeRequests }),
+      loadMediaItemsFn: () => loadMediaItemsService({ setMediaItems }),
       loadSponsorsFn: () => loadSponsorsService({ setSponsors }),
       loadSponsorContractsFn: () => loadSponsorContractsService({ setSponsorContracts }),
       loadMerchItemsFn: () => loadMerchItemsService({ setMerchItems }),
@@ -880,6 +908,12 @@ export default function App() {
   async function loadDocuments() {
     return loadDocumentsService({
       setDocuments,
+    })
+  }
+
+  async function loadMediaItems() {
+    return loadMediaItemsService({
+      setMediaItems,
     })
   }
 
@@ -1868,6 +1902,10 @@ export default function App() {
     return canManageMembers() || isAdmin()
   }
 
+  function canManageMedia() {
+    return canManageMembers() || isAdmin()
+  }
+
   function canManageMerch() {
     return canManageMembers() || isAdmin()
   }
@@ -2599,6 +2637,143 @@ export default function App() {
       else await loadSponsorContracts()
     } finally {
       setSponsorDeletingId(null)
+    }
+  }
+
+  function resetMediaForm() {
+    setMediaEditingId(null)
+    setMediaTitle('')
+    setMediaSlug('')
+    setMediaCategory('vereinsnews')
+    setMediaSourceName('')
+    setMediaSummary('')
+    setMediaContent('')
+    setMediaExternalUrl('')
+    setMediaAudioUrl('')
+    setMediaImagePath('')
+    setMediaImageAlt('')
+    setMediaPublicationDate(new Date().toISOString().slice(0, 10))
+    setMediaPublishedAt('')
+    setMediaStatus('draft')
+    setMediaIsPublic(false)
+    setMediaIsFeatured(false)
+    setMediaPublicSortOrder('0')
+    setMediaInternalNotes('')
+  }
+
+  function editMediaItem(mediaItem) {
+    if (!canManageMedia()) return alert('Keine Berechtigung für Medienverwaltung.')
+
+    setMediaEditingId(mediaItem.id)
+    setMediaTitle(mediaItem.title || '')
+    setMediaSlug(mediaItem.slug || '')
+    setMediaCategory(mediaItem.category || 'vereinsnews')
+    setMediaSourceName(mediaItem.source_name || '')
+    setMediaSummary(mediaItem.summary || '')
+    setMediaContent(mediaItem.content || '')
+    setMediaExternalUrl(mediaItem.external_url || '')
+    setMediaAudioUrl(mediaItem.audio_url || '')
+    setMediaImagePath(mediaItem.image_path || '')
+    setMediaImageAlt(mediaItem.image_alt || '')
+    setMediaPublicationDate(mediaItem.publication_date || new Date().toISOString().slice(0, 10))
+    setMediaPublishedAt(mediaItem.published_at ? String(mediaItem.published_at).slice(0, 16) : '')
+    setMediaStatus(mediaItem.status || 'draft')
+    setMediaIsPublic(Boolean(mediaItem.is_public))
+    setMediaIsFeatured(Boolean(mediaItem.is_featured))
+    setMediaPublicSortOrder(String(mediaItem.public_sort_order ?? 0))
+    setMediaInternalNotes(mediaItem.internal_notes || '')
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveMediaItem() {
+    if (!canManageMedia()) return alert('Keine Berechtigung für Medienverwaltung.')
+    if (mediaSaving) return
+
+    if (!mediaTitle.trim()) {
+      alert('Titel ist Pflicht.')
+      return
+    }
+
+    if (!mediaPublicationDate) {
+      alert('Veröffentlichungsdatum ist Pflicht.')
+      return
+    }
+
+    const sortOrderNumber = mediaPublicSortOrder ? Number(mediaPublicSortOrder) : 0
+
+    if (!Number.isInteger(sortOrderNumber) || sortOrderNumber < 0) {
+      alert('Sortierung muss eine ganze positive Zahl sein.')
+      return
+    }
+
+    const slugValue = mediaSlug.trim() || null
+
+    if (slugValue && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slugValue)) {
+      alert('Slug darf nur Kleinbuchstaben, Zahlen und Bindestriche enthalten.')
+      return
+    }
+
+    const payload = {
+      title: mediaTitle.trim(),
+      slug: slugValue,
+      category: mediaCategory || 'vereinsnews',
+      source_name: mediaSourceName.trim() || null,
+      summary: mediaSummary.trim() || null,
+      content: mediaContent.trim() || null,
+      external_url: mediaExternalUrl.trim() || null,
+      audio_url: mediaAudioUrl.trim() || null,
+      image_path: mediaImagePath.trim() || null,
+      image_alt: mediaImageAlt.trim() || null,
+      publication_date: mediaPublicationDate,
+      published_at: mediaPublishedAt || null,
+      status: mediaStatus || 'draft',
+      is_public: mediaIsPublic,
+      is_featured: mediaIsFeatured,
+      public_sort_order: sortOrderNumber,
+      internal_notes: mediaInternalNotes.trim() || null,
+    }
+
+    setMediaSaving(true)
+
+    try {
+      const result = await saveMediaItemRecord({
+        mediaEditingId,
+        payload,
+        mediaItems,
+        createAuditLog,
+        loadMediaItems,
+        resetMediaForm,
+      })
+
+      if (result?.error) alert(result.error.message)
+    } finally {
+      setMediaSaving(false)
+    }
+  }
+
+  async function deleteMediaItem(mediaItem) {
+    if (!canManageMedia()) return alert('Keine Berechtigung für Medienverwaltung.')
+    if (mediaDeletingId) return
+
+    const confirmed = window.confirm(
+      `Medienbeitrag wirklich löschen?\n\n${mediaItem.title || ''}\n\nDas kann nicht rückgängig gemacht werden.`
+    )
+
+    if (!confirmed) return
+
+    setMediaDeletingId(mediaItem.id)
+
+    try {
+      const result = await deleteMediaItemRecord({
+        mediaItem,
+        createAuditLog,
+        loadMediaItems,
+      })
+
+      if (result?.error) alert(result.error.message)
+    } finally {
+      setMediaDeletingId(null)
     }
   }
 
@@ -4557,6 +4732,54 @@ export default function App() {
             openDocument,
             deleteDocument,
           }}
+        />
+      )}
+
+      {activePage === 'media' && (
+        <MediaPage
+          mediaItems={mediaItems}
+          canManageMedia={canManageMedia}
+          mediaEditingId={mediaEditingId}
+          mediaTitle={mediaTitle}
+          setMediaTitle={setMediaTitle}
+          mediaSlug={mediaSlug}
+          setMediaSlug={setMediaSlug}
+          mediaCategory={mediaCategory}
+          setMediaCategory={setMediaCategory}
+          mediaSourceName={mediaSourceName}
+          setMediaSourceName={setMediaSourceName}
+          mediaSummary={mediaSummary}
+          setMediaSummary={setMediaSummary}
+          mediaContent={mediaContent}
+          setMediaContent={setMediaContent}
+          mediaExternalUrl={mediaExternalUrl}
+          setMediaExternalUrl={setMediaExternalUrl}
+          mediaAudioUrl={mediaAudioUrl}
+          setMediaAudioUrl={setMediaAudioUrl}
+          mediaImagePath={mediaImagePath}
+          setMediaImagePath={setMediaImagePath}
+          mediaImageAlt={mediaImageAlt}
+          setMediaImageAlt={setMediaImageAlt}
+          mediaPublicationDate={mediaPublicationDate}
+          setMediaPublicationDate={setMediaPublicationDate}
+          mediaPublishedAt={mediaPublishedAt}
+          setMediaPublishedAt={setMediaPublishedAt}
+          mediaStatus={mediaStatus}
+          setMediaStatus={setMediaStatus}
+          mediaIsPublic={mediaIsPublic}
+          setMediaIsPublic={setMediaIsPublic}
+          mediaIsFeatured={mediaIsFeatured}
+          setMediaIsFeatured={setMediaIsFeatured}
+          mediaPublicSortOrder={mediaPublicSortOrder}
+          setMediaPublicSortOrder={setMediaPublicSortOrder}
+          mediaInternalNotes={mediaInternalNotes}
+          setMediaInternalNotes={setMediaInternalNotes}
+          mediaSaving={mediaSaving}
+          mediaDeletingId={mediaDeletingId}
+          saveMediaItem={saveMediaItem}
+          resetMediaForm={resetMediaForm}
+          editMediaItem={editMediaItem}
+          deleteMediaItem={deleteMediaItem}
         />
       )}
 

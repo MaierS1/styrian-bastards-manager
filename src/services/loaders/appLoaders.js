@@ -5,6 +5,7 @@ import { fetchCashEntries, fetchCashMonthClosings } from '../repositories/cashRe
 import { fetchAuditLogs } from '../repositories/auditLogsRepository'
 import { fetchEventCheckins, fetchEvents } from '../repositories/eventsRepository'
 import { fetchDocuments } from '../repositories/documentsRepository'
+import { fetchMediaItems } from '../repositories/mediaRepository'
 import { fetchInventoryItems } from '../repositories/inventoryRepository'
 import { fetchInvoiceCustomers, fetchInvoiceItems, fetchInvoices } from '../repositories/invoicesRepository'
 import { fetchMemberChangeRequests } from '../repositories/memberChangeRequestsRepository'
@@ -93,6 +94,13 @@ export async function loadDocuments({ setDocuments, alertFn = alert }) {
 
   if (error) return alertFn(error.message)
   setDocuments(data || [])
+}
+
+export async function loadMediaItems({ setMediaItems, alertFn = alert }) {
+  const { data, error } = await fetchMediaItems()
+
+  if (error) return alertFn(error.message)
+  setMediaItems(data || [])
 }
 
 export async function loadInventoryItems({ setInventoryItems }) {
@@ -225,6 +233,7 @@ export async function loadAll({
   loadEventCheckinsFn,
   loadEventsFn,
   loadDocumentsFn,
+  loadMediaItemsFn,
   loadInventoryItemsFn,
   loadInvoicesFn,
   loadInvoiceItemsFn,
@@ -251,6 +260,7 @@ export async function loadAll({
     loadMemberChangeRequestsFn(),
   ]
 
+  if (loadMediaItemsFn) loaders.push(loadMediaItemsFn())
   if (loadSponsorsFn) loaders.push(loadSponsorsFn())
   if (loadSponsorContractsFn) loaders.push(loadSponsorContractsFn())
   if (loadMerchItemsFn) loaders.push(loadMerchItemsFn())
