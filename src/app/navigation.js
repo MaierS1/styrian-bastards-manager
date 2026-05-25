@@ -7,6 +7,7 @@ export const navigationItems = [
   ['invoices', 'Rechnungen'],
   ['events', 'Events'],
   ['documents', 'Dokumente'],
+  ['media', 'Medien / Presse'],
   ['sponsors', 'Sponsoren'],
   ['merch', 'Fanartikel'],
   ['inventory', 'Inventar'],
