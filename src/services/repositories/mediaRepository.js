@@ -8,6 +8,14 @@ export async function fetchMediaItems() {
     .order('created_at', { ascending: false })
 }
 
+export async function fetchPublicMediaItems({ limit = 50 } = {}) {
+  return supabase.rpc('get_public_media_items', {
+    p_category: null,
+    p_limit: limit,
+    p_featured_only: false,
+  })
+}
+
 export async function saveMediaItemRecord({
   mediaEditingId,
   payload,

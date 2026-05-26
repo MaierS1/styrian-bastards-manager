@@ -224,6 +224,7 @@ import {
 import { SponsorsPage } from './components/sponsors/SponsorsPage'
 import { MerchPage } from './components/merch/MerchPage'
 import { MediaPage } from './components/media/MediaPage'
+import { PublicPressPage } from './components/media/PublicPressPage'
 import { PublicSponsors } from './components/home/PublicSponsors'
 
 export default function App() {
@@ -4323,6 +4324,11 @@ export default function App() {
 
   const filteredMembers = getFilteredMembers()
   const filteredCashEntries = getFilteredCashEntries()
+  const pressePathMatch = window.location.pathname.match(/^\/presse(?:\/([^/]+))?\/?$/)
+
+  if (pressePathMatch) {
+    return <PublicPressPage detailIdentifier={pressePathMatch[1] || ''} />
+  }
 
   if (!user) {
     return (
