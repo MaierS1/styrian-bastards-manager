@@ -215,6 +215,7 @@ import {
 } from './services/repositories/sponsorsRepository'
 import {
   cancelMerchSaleRecord,
+  createMerchSaleWithInvoiceRecord,
   createMerchSaleWithItemRecord,
   deleteMerchItemRecord,
   deleteMerchVariantRecord,
@@ -449,6 +450,11 @@ export default function App() {
   const [merchSaleEventId, setMerchSaleEventId] = useState('')
   const [merchSalePaymentMethod, setMerchSalePaymentMethod] = useState('bar')
   const [merchSaleCreateCashEntry, setMerchSaleCreateCashEntry] = useState(true)
+  const [merchSaleCreateInvoice, setMerchSaleCreateInvoice] = useState(false)
+  const [merchSaleInvoiceCustomerId, setMerchSaleInvoiceCustomerId] = useState('')
+  const [merchSaleInvoiceEmail, setMerchSaleInvoiceEmail] = useState('')
+  const [merchSaleInvoiceStatus, setMerchSaleInvoiceStatus] = useState('bezahlt')
+  const [merchSaleSendInvoiceEmail, setMerchSaleSendInvoiceEmail] = useState(false)
   const [merchSaleSaving, setMerchSaleSaving] = useState(false)
   const [merchSaleCancellingId, setMerchSaleCancellingId] = useState(null)
 
@@ -1955,6 +1961,11 @@ export default function App() {
     setMerchSaleEventId('')
     setMerchSalePaymentMethod('bar')
     setMerchSaleCreateCashEntry(true)
+    setMerchSaleCreateInvoice(false)
+    setMerchSaleInvoiceCustomerId('')
+    setMerchSaleInvoiceEmail('')
+    setMerchSaleInvoiceStatus('bezahlt')
+    setMerchSaleSendInvoiceEmail(false)
   }
 
   function getMerchSaleUnitPriceCents(variantId = merchSaleVariantId) {
@@ -1969,6 +1980,108 @@ export default function App() {
 
   function getMerchSaleSelectedVariant() {
     return merchVariants.find((variant) => variant.id === merchSaleVariantId) || null
+  }
+
+  function getMerchSaleInvoiceCustomer() {
+    return invoiceCustomers.find((customer) => customer.id === merchSaleInvoiceCustomerId) || null
+  }
+
+  function getMerchSaleInvoiceRecipientLabel() {
+    const member = members.find((item) => item.id === merchSaleMemberId)
+    const customer = getMerchSaleInvoiceCustomer()
+    const memberName = member ? `${member.first_name || ''} ${member.last_name || ''}`.trim() : ''
+
+    return memberName || customer?.name || merchSaleBuyerName.trim()
+  }
+
+  async function fetchInvoiceForImmediateAction(invoiceId) {
+    if (!invoiceId) return null
+
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('id', invoiceId)
+      .single()
+
+    if (error) throw error
+
+    const { data: items, error: itemsError } = await supabase
+      .from('invoice_items')
+      .select('*')
+      .eq('invoice_id', invoiceId)
+      .order('created_at', { ascending: true })
+
+    if (itemsError) throw itemsError
+
+    return { invoice, items: items || [] }
+  }
+
+  async function exportImmediateInvoicePdf(invoiceId) {
+    const invoiceData = await fetchInvoiceForImmediateAction(invoiceId)
+
+    if (!invoiceData) return null
+
+    await exportInvoicePdfService({
+      invoice: invoiceData.invoice,
+      member: invoiceData.invoice.member_id ? getMemberById(invoiceData.invoice.member_id) : null,
+      items: invoiceData.items,
+      isTest: Boolean(invoiceData.invoice.is_test || getMemberById(invoiceData.invoice.member_id)?.is_test),
+      isCancelled: invoiceData.invoice.status === 'storniert',
+    })
+
+    return invoiceData.invoice
+  }
+
+  async function sendImmediateInvoiceEmail(invoiceId) {
+    const invoiceData = await fetchInvoiceForImmediateAction(invoiceId)
+
+    if (!invoiceData?.invoice?.customer_email) {
+      alert('Diese Rechnung hat keine E-Mail-Adresse.')
+      return
+    }
+
+    await sendInvoiceEmailService({
+      invoice: invoiceData.invoice,
+      reminder: false,
+      canManageCash,
+      isAdmin,
+      buildInvoicePdfBlob: async () => buildInvoicePdfBlobService({
+        invoice: invoiceData.invoice,
+        member: invoiceData.invoice.member_id ? getMemberById(invoiceData.invoice.member_id) : null,
+        items: invoiceData.items,
+        isTest: Boolean(invoiceData.invoice.is_test || getMemberById(invoiceData.invoice.member_id)?.is_test),
+        isCancelled: invoiceData.invoice.status === 'storniert',
+      }),
+      blobToBase64,
+      createAuditLog,
+      loadInvoices,
+    })
+  }
+
+  async function openMerchSaleInvoice(sale) {
+    if (!sale?.invoice_id) return alert('Dieser Verkauf hat keine Rechnung.')
+
+    const invoice = getInvoiceById(sale.invoice_id)
+
+    if (invoice) {
+      await exportInvoicePdf(invoice)
+      return
+    }
+
+    await exportImmediateInvoicePdf(sale.invoice_id)
+  }
+
+  async function sendMerchSaleInvoice(sale) {
+    if (!sale?.invoice_id) return alert('Dieser Verkauf hat keine Rechnung.')
+
+    const invoice = getInvoiceById(sale.invoice_id)
+
+    if (invoice) {
+      await sendInvoiceEmail(invoice, false)
+      return
+    }
+
+    await sendImmediateInvoiceEmail(sale.invoice_id)
   }
 
   function getLocalDateString(date = new Date()) {
@@ -2067,12 +2180,22 @@ export default function App() {
       return
     }
 
+    if (merchSaleCreateInvoice && merchSaleInvoiceStatus === 'offen' && merchSaleCreateCashEntry) {
+      alert('Eine offene Rechnung kann nicht gleichzeitig einen Kassa-Eintrag erzeugen.')
+      return
+    }
+
+    if (merchSaleCreateInvoice && !getMerchSaleInvoiceRecipientLabel()) {
+      alert('Für eine Rechnung ist ein Mitglied, ein Rechnungskunde oder ein Freitext-Kunde erforderlich.')
+      return
+    }
+
     const saleDate = getLocalDateString()
     const receiptNumber = merchSaleCreateCashEntry
       ? getNextReceiptNumber(Number(saleDate.slice(0, 4)))
       : null
 
-    const rpcPayload = {
+    const baseRpcPayload = {
       p_merch_variant_id: variant.id,
       p_quantity: quantity,
       p_unit_price_cents: totals.unitPriceCents,
@@ -2087,20 +2210,63 @@ export default function App() {
       p_receipt_number: receiptNumber,
     }
 
+    const invoiceCustomer = getMerchSaleInvoiceCustomer()
+    const invoiceRpcPayload = {
+      ...baseRpcPayload,
+      p_buyer_email: merchSaleInvoiceEmail.trim() || null,
+      p_customer_id: merchSaleInvoiceCustomerId || null,
+      p_customer_street: invoiceCustomer?.street || null,
+      p_customer_house_number: invoiceCustomer?.house_number || null,
+      p_customer_address_addition: invoiceCustomer?.address_addition || null,
+      p_customer_postal_code: invoiceCustomer?.postal_code || null,
+      p_customer_city: invoiceCustomer?.city || null,
+      p_customer_country: invoiceCustomer?.country || 'Österreich',
+      p_create_invoice: true,
+      p_invoice_is_test: false,
+      p_invoice_status: merchSaleInvoiceStatus,
+      p_invoice_due_date: null,
+      p_invoice_notes: null,
+    }
+
     setMerchSaleSaving(true)
 
     try {
-      const result = await createMerchSaleWithItemRecord({
-        rpcPayload,
-        createAuditLog,
-        loadMerchSales,
-        loadMerchSaleItems,
-        loadMerchVariants,
-        loadCashEntries,
-        resetMerchSaleForm,
-      })
+      const result = merchSaleCreateInvoice
+        ? await createMerchSaleWithInvoiceRecord({
+          rpcPayload: invoiceRpcPayload,
+          createAuditLog,
+          loadMerchSales,
+          loadMerchSaleItems,
+          loadMerchVariants,
+          loadCashEntries,
+          loadInvoices,
+          loadInvoiceItems,
+          resetMerchSaleForm,
+          alertFn: () => {},
+        })
+        : await createMerchSaleWithItemRecord({
+          rpcPayload: baseRpcPayload,
+          createAuditLog,
+          loadMerchSales,
+          loadMerchSaleItems,
+          loadMerchVariants,
+          loadCashEntries,
+          resetMerchSaleForm,
+        })
 
-      if (result?.error) alert(getMerchSaleErrorMessage(result.error))
+      if (result?.error) {
+        alert(getMerchSaleErrorMessage(result.error))
+        return
+      }
+
+      if (merchSaleCreateInvoice && result?.sale?.invoice_id) {
+        alert(`Rechnung ${result.sale.invoice_number || ''} wurde erzeugt.`)
+        await exportImmediateInvoicePdf(result.sale.invoice_id)
+
+        if (merchSaleSendInvoiceEmail) {
+          await sendImmediateInvoiceEmail(result.sale.invoice_id)
+        }
+      }
     } catch (error) {
       alert(getMerchSaleErrorMessage(error))
     } finally {
@@ -2113,7 +2279,11 @@ export default function App() {
     if (!sale || sale.status !== 'completed') return alert('Nur abgeschlossene Verkaeufe koennen storniert werden.')
     if (merchSaleCancellingId) return
 
-    const reason = window.prompt('Grund für die Stornierung:')
+    const reason = window.prompt(
+      sale.invoice_id
+        ? 'Grund für die Stornierung:\n\nDieser Verkauf ist mit einer Rechnung verknüpft. Rechnung, Kassa und Bestand werden gemeinsam storniert.'
+        : 'Grund für die Stornierung:'
+    )
 
     if (reason === null) return
 
@@ -4863,6 +5033,8 @@ export default function App() {
           merchVariants={merchVariants}
           merchSales={merchSales}
           merchSaleItems={merchSaleItems}
+          invoices={invoices}
+          invoiceCustomers={invoiceCustomers}
           members={members}
           events={events}
           canManageMerch={canManageMerch}
@@ -4950,10 +5122,22 @@ export default function App() {
           setMerchSalePaymentMethod={setMerchSalePaymentMethod}
           merchSaleCreateCashEntry={merchSaleCreateCashEntry}
           setMerchSaleCreateCashEntry={setMerchSaleCreateCashEntry}
+          merchSaleCreateInvoice={merchSaleCreateInvoice}
+          setMerchSaleCreateInvoice={setMerchSaleCreateInvoice}
+          merchSaleInvoiceCustomerId={merchSaleInvoiceCustomerId}
+          setMerchSaleInvoiceCustomerId={setMerchSaleInvoiceCustomerId}
+          merchSaleInvoiceEmail={merchSaleInvoiceEmail}
+          setMerchSaleInvoiceEmail={setMerchSaleInvoiceEmail}
+          merchSaleInvoiceStatus={merchSaleInvoiceStatus}
+          setMerchSaleInvoiceStatus={setMerchSaleInvoiceStatus}
+          merchSaleSendInvoiceEmail={merchSaleSendInvoiceEmail}
+          setMerchSaleSendInvoiceEmail={setMerchSaleSendInvoiceEmail}
           merchSaleSaving={merchSaleSaving}
           merchSaleCancellingId={merchSaleCancellingId}
           saveMerchSale={saveMerchSale}
           cancelMerchSale={cancelMerchSale}
+          openMerchSaleInvoice={openMerchSaleInvoice}
+          sendMerchSaleInvoice={sendMerchSaleInvoice}
           resetMerchSaleForm={resetMerchSaleForm}
           getMerchSaleUnitPriceCents={getMerchSaleUnitPriceCents}
           getMerchSaleTotals={getMerchSaleTotals}

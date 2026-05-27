@@ -186,6 +186,45 @@ export async function createMerchSaleWithItemRecord({
   return { ok: true, sale: data }
 }
 
+export async function createMerchSaleWithInvoiceRecord({
+  rpcPayload,
+  createAuditLog,
+  loadMerchSales,
+  loadMerchSaleItems,
+  loadMerchVariants,
+  loadCashEntries,
+  loadInvoices,
+  loadInvoiceItems,
+  resetMerchSaleForm,
+  alertFn = alert,
+}) {
+  const { data, error } = await supabase
+    .rpc('create_merch_sale_with_invoice', rpcPayload)
+    .single()
+
+  if (error) return { error }
+
+  await createAuditLog('insert_with_invoice', 'merch_sales', data?.merch_sale_id, null, {
+    rpc: 'create_merch_sale_with_invoice',
+    result: data,
+  })
+
+  resetMerchSaleForm()
+  await loadMerchSales()
+  await loadMerchSaleItems()
+  await loadMerchVariants()
+  await loadInvoices()
+  await loadInvoiceItems()
+
+  if (rpcPayload.p_create_cash_entry) {
+    await loadCashEntries()
+  }
+
+  alertFn(`Fanartikel-Verkauf wurde gespeichert. Rechnung: ${data?.invoice_number || '-'}`)
+
+  return { ok: true, sale: data }
+}
+
 export async function cancelMerchSaleRecord({
   sale,
   cancellationReason,

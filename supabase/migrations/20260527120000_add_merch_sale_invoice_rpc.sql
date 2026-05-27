@@ -334,8 +334,7 @@ begin
       p_quantity,
       p_unit_price_cents::numeric / 100,
       v_invoice_total
-    )
-    returning invoice_id into v_invoice_id;
+    );
   end if;
 
   if coalesce(p_create_cash_entry, true) then
@@ -586,7 +585,7 @@ begin
   for v_item in
     select merch_variant_id, quantity
     from public.merch_sale_items
-    where merch_sale_id = p_merch_sale_id
+    where public.merch_sale_items.merch_sale_id = p_merch_sale_id
   loop
     update public.merch_variants
     set stock_quantity = stock_quantity + v_item.quantity

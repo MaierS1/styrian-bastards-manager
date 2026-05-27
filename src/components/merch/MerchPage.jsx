@@ -24,6 +24,8 @@ export function MerchPage({
   merchVariants,
   merchSales,
   merchSaleItems,
+  invoices,
+  invoiceCustomers,
   members,
   events,
   canManageMerch,
@@ -111,10 +113,22 @@ export function MerchPage({
   setMerchSalePaymentMethod,
   merchSaleCreateCashEntry,
   setMerchSaleCreateCashEntry,
+  merchSaleCreateInvoice,
+  setMerchSaleCreateInvoice,
+  merchSaleInvoiceCustomerId,
+  setMerchSaleInvoiceCustomerId,
+  merchSaleInvoiceEmail,
+  setMerchSaleInvoiceEmail,
+  merchSaleInvoiceStatus,
+  setMerchSaleInvoiceStatus,
+  merchSaleSendInvoiceEmail,
+  setMerchSaleSendInvoiceEmail,
   merchSaleSaving,
   merchSaleCancellingId,
   saveMerchSale,
   cancelMerchSale,
+  openMerchSaleInvoice,
+  sendMerchSaleInvoice,
   resetMerchSaleForm,
   getMerchSaleUnitPriceCents,
   getMerchSaleTotals,
@@ -454,6 +468,73 @@ export function MerchPage({
             Kassa-Eintrag erzeugen
           </label>
 
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchSaleCreateInvoice}
+              onChange={(event) => {
+                setMerchSaleCreateInvoice(event.target.checked)
+                if (event.target.checked) {
+                  setMerchSaleCreateCashEntry(true)
+                  setMerchSaleInvoiceStatus('bezahlt')
+                }
+              }}
+              style={checkboxInputStyle}
+            />
+            Rechnung erzeugen
+          </label>
+
+          {merchSaleCreateInvoice && (
+            <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
+              <strong>Rechnungsempfaenger</strong>
+              <p style={mutedTextStyle}>
+                Verwendet wird das ausgewaehlte Mitglied, ein Rechnungskunde oder der Freitext-Kunde.
+              </p>
+
+              <select
+                value={merchSaleInvoiceCustomerId}
+                onChange={(event) => setMerchSaleInvoiceCustomerId(event.target.value)}
+                style={inputStyle}
+              >
+                <option value="">Keinen Rechnungskunden auswaehlen</option>
+                {invoiceCustomers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.name} - {customer.city || '-'}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                placeholder="E-Mail fuer Rechnung optional"
+                value={merchSaleInvoiceEmail}
+                onChange={(event) => setMerchSaleInvoiceEmail(event.target.value)}
+                style={inputStyle}
+              />
+
+              <select
+                value={merchSaleInvoiceStatus}
+                onChange={(event) => {
+                  setMerchSaleInvoiceStatus(event.target.value)
+                  if (event.target.value === 'offen') setMerchSaleCreateCashEntry(false)
+                }}
+                style={inputStyle}
+              >
+                <option value="bezahlt">Bezahlt</option>
+                <option value="offen">Offen</option>
+              </select>
+
+              <label style={checkboxLabelStyle}>
+                <input
+                  type="checkbox"
+                  checked={merchSaleSendInvoiceEmail}
+                  onChange={(event) => setMerchSaleSendInvoiceEmail(event.target.checked)}
+                  style={checkboxInputStyle}
+                />
+                Rechnung per E-Mail senden
+              </label>
+            </div>
+          )}
+
           <p style={mutedTextStyle}>
             Preis: <strong>{formatAmount(getMerchSaleUnitPriceCents())}</strong>
             <br />
@@ -504,11 +585,14 @@ export function MerchPage({
         merchSaleItems={merchSaleItems}
         merchVariants={merchVariants}
         merchItems={merchItems}
+        invoices={invoices}
         members={members}
         events={events}
         canManageMerch={canManageMerch}
         merchSaleCancellingId={merchSaleCancellingId}
         cancelMerchSale={cancelMerchSale}
+        openMerchSaleInvoice={openMerchSaleInvoice}
+        sendMerchSaleInvoice={sendMerchSaleInvoice}
       />
     </section>
   )
@@ -676,11 +760,14 @@ function MerchSalesList({
   merchSaleItems,
   merchVariants,
   merchItems,
+  invoices,
   members,
   events,
   canManageMerch,
   merchSaleCancellingId,
   cancelMerchSale,
+  openMerchSaleInvoice,
+  sendMerchSaleInvoice,
 }) {
   if (merchSales.length === 0) {
     return <p style={mutedTextStyle}>Noch keine Fanartikel-Verkaeufe erfasst.</p>
@@ -693,6 +780,7 @@ function MerchSalesList({
         const member = members.find((item) => item.id === sale.member_id)
         const event = events.find((item) => item.id === sale.event_id)
         const saleItems = merchSaleItems.filter((item) => item.merch_sale_id === sale.id)
+        const invoice = invoices.find((item) => item.id === sale.invoice_id)
 
         return (
           <div key={sale.id} style={cardStyle}>
@@ -705,14 +793,56 @@ function MerchSalesList({
             Event: {event?.name || '-'}
             <br />
             Rabatt: {formatAmount(sale.discount_cents)}
+            {sale.invoice_id && (
+              <>
+                <br />
+                Rechnung:{' '}
+                <strong>{invoice?.invoice_number || sale.invoice_id}</strong>
+                {invoice?.status === 'storniert' && (
+                  <>
+                    {' '}
+                    <strong style={{ color: colors.red }}>storniert</strong>
+                  </>
+                )}
+                {!invoice && (
+                  <>
+                    {' '}
+                    <span style={mutedTextStyle}>nicht geladen</span>
+                  </>
+                )}
+              </>
+            )}
             <MerchSaleItemsList
               saleItems={saleItems}
               merchVariants={merchVariants}
               merchItems={merchItems}
             />
+            {sale.invoice_id && (
+              <>
+                <br />
+                <button onClick={() => openMerchSaleInvoice(sale)} style={secondaryButtonStyle}>
+                  Rechnung oeffnen
+                </button>
+                <button
+                  onClick={() => sendMerchSaleInvoice(sale)}
+                  disabled={invoice?.status === 'storniert' || (invoice && !invoice.customer_email)}
+                  style={secondaryButtonStyle}
+                >
+                  Rechnung senden
+                </button>
+              </>
+            )}
             {canManageMerch() && sale.status === 'completed' && (
               <>
                 <br />
+                {sale.invoice_id && (
+                  <>
+                    <span style={mutedTextStyle}>
+                      Beim Storno werden Rechnung, Kassa und Bestand gemeinsam storniert.
+                    </span>
+                    <br />
+                  </>
+                )}
                 <button
                   onClick={() => cancelMerchSale(sale)}
                   disabled={merchSaleCancellingId === sale.id}
