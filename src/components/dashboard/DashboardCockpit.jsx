@@ -179,16 +179,35 @@ export function DashboardCockpit({ tasks = [], onNavigate }) {
                           >
                             {areaLabels[task.area] || task.area}
                           </span>
-                          {task.count > 0 && <span style={{ color: colors.muted }}>{task.count} offen</span>}
+                          {task.count > 0 && <span style={{ color: colors.muted }}>Anzahl: {task.count}</span>}
                           {task.dueDate && <span style={{ color: colors.muted }}>Faellig: {formatDueDate(task.dueDate)}</span>}
                         </div>
 
                         <strong>{task.title}</strong>
-                        <p style={{ ...mutedTextStyle, marginTop: 6, marginBottom: 8 }}>{task.message}</p>
+                        <p style={{ marginTop: 6, marginBottom: 6, fontWeight: 800 }}>{task.message}</p>
+
+                        {task.summary && (
+                          <p style={{ ...mutedTextStyle, marginTop: 0, marginBottom: 8 }}>{task.summary}</p>
+                        )}
+
+                        {task.nextAction && (
+                          <div
+                            style={{
+                              marginBottom: 8,
+                              padding: '6px 8px',
+                              borderRadius: 8,
+                              background: colors.offWhite,
+                              border: `1px solid ${colors.border}`,
+                              fontWeight: 900,
+                            }}
+                          >
+                            Naechster Schritt: {task.nextAction}
+                          </div>
+                        )}
 
                         {task.items?.length > 0 && (
-                          <ul style={{ marginTop: 0, marginBottom: 10, paddingLeft: 18 }}>
-                            {task.items.slice(0, 3).map((item, index) => {
+                          <ul style={{ marginTop: 0, marginBottom: 10, paddingLeft: 18, color: colors.muted }}>
+                            {task.items.slice(0, 2).map((item, index) => {
                               const label = getItemLabel(item)
                               const issue = item.issue ? ` - ${item.issue}` : ''
 

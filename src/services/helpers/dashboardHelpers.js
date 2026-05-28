@@ -309,6 +309,8 @@ function createCockpitTask({
   area,
   title,
   message,
+  summary = '',
+  nextAction = '',
   count = 0,
   amount = null,
   dueDate = null,
@@ -322,6 +324,8 @@ function createCockpitTask({
     area,
     title,
     message,
+    summary,
+    nextAction,
     count,
     amount,
     dueDate,
@@ -356,6 +360,12 @@ export function getDashboardCockpitTasks({
   const pendingInvoices = openInvoices.filter((invoice) => !overdueInvoices.some((candidate) => candidate.id === invoice.id))
   const pendingInvoiceTotal = pendingInvoices.reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0)
   const overdueInvoiceTotal = overdueInvoices.reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0)
+  const oldestOverdueInvoice = overdueInvoices
+    .slice()
+    .sort((a, b) => new Date(a.due_date || 0) - new Date(b.due_date || 0))[0]
+  const nextPendingInvoice = pendingInvoices
+    .slice()
+    .sort((a, b) => new Date(a.due_date || '9999-12-31') - new Date(b.due_date || '9999-12-31'))[0]
   const openFeeMembers = members.filter((member) => {
     if (member.is_test) return false
 
@@ -382,6 +392,8 @@ export function getDashboardCockpitTasks({
   const emptyStockVariants = activeMerchVariants.filter((variant) => Number(variant.stock_quantity || 0) <= 0)
   const lowStockVariants = (commercialData?.lowStockVariants || [])
     .filter((variant) => !emptyStockVariants.some((candidate) => candidate.id === variant.id))
+  const lowestEmptyStockVariant = emptyStockVariants[0]
+  const lowestLowStockVariant = lowStockVariants[0]
   const draftMediaItems = mediaItems.filter((item) => item.status === 'draft')
   const scheduledMediaItems = mediaItems.filter((item) => {
     if (item.status !== 'published' || !item.published_at) return false
@@ -394,7 +406,9 @@ export function getDashboardCockpitTasks({
       priority: 'critical',
       area: 'cash',
       title: 'Kassastand negativ',
-      message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} EUR.`,
+      message: `Kassastand ${currentBalance.toFixed(2)} EUR.`,
+      summary: 'Die Kassa ist im Minus. Zahlungseingaenge und offene Ausgaben sollten sofort abgeglichen werden.',
+      nextAction: 'Kassa pruefen',
       amount: currentBalance,
       targetPage: 'cash',
       target: { page: 'cash', action: 'filter', filter: { type: 'alle' } },
@@ -405,7 +419,9 @@ export function getDashboardCockpitTasks({
       priority: 'important',
       area: 'cash',
       title: 'Kassastand niedrig',
-      message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} EUR.`,
+      message: `Kassastand ${currentBalance.toFixed(2)} EUR.`,
+      summary: 'Der Kassastand liegt unter 200 EUR. Offene Einnahmen und geplante Ausgaben pruefen.',
+      nextAction: 'Liquiditaet pruefen',
       amount: currentBalance,
       targetPage: 'cash',
       target: { page: 'cash', action: 'filter', filter: { type: 'alle' } },
@@ -418,18 +434,20 @@ export function getDashboardCockpitTasks({
       priority: 'critical',
       area: 'invoices',
       title: 'Rechnungen ueberfaellig',
-      message: `${overdueInvoices.length} offene Rechnung(en) sind ueberfaellig. Summe: ${overdueInvoiceTotal.toFixed(2)} EUR.`,
+      message: `${overdueInvoices.length} ueberfaellig · ${overdueInvoiceTotal.toFixed(2)} EUR offen.`,
+      summary: `Aelteste Rechnung: ${oldestOverdueInvoice?.invoice_number || '-'} · ${oldestOverdueInvoice?.customer_name || '-'} · faellig seit ${oldestOverdueInvoice?.due_date || '-'}.`,
+      nextAction: 'Zahlung pruefen',
       count: overdueInvoices.length,
       amount: overdueInvoiceTotal,
-      dueDate: overdueInvoices[0]?.due_date || null,
+      dueDate: oldestOverdueInvoice?.due_date || null,
       targetPage: 'invoices',
       target: {
         page: 'invoices',
         action: 'filter',
-        id: overdueInvoices[0]?.id || null,
+        id: oldestOverdueInvoice?.id || null,
         filter: {
           status: 'offen',
-          search: overdueInvoices[0]?.invoice_number || overdueInvoices[0]?.customer_name || '',
+          search: oldestOverdueInvoice?.invoice_number || oldestOverdueInvoice?.customer_name || '',
         },
       },
       items: overdueInvoices.slice(0, 5),
@@ -442,17 +460,19 @@ export function getDashboardCockpitTasks({
       priority: 'important',
       area: 'invoices',
       title: 'Offene Rechnungen',
-      message: `${pendingInvoices.length} Rechnung(en) sind offen. Summe: ${pendingInvoiceTotal.toFixed(2)} EUR.`,
+      message: `${pendingInvoices.length} offen · ${pendingInvoiceTotal.toFixed(2)} EUR ausstaendig.`,
+      summary: `Naechste Faelligkeit: ${nextPendingInvoice?.invoice_number || '-'} · ${nextPendingInvoice?.customer_name || '-'} · ${nextPendingInvoice?.due_date || '-'}.`,
+      nextAction: 'Zahlung pruefen',
       count: pendingInvoices.length,
       amount: pendingInvoiceTotal,
       targetPage: 'invoices',
       target: {
         page: 'invoices',
         action: 'filter',
-        id: pendingInvoices[0]?.id || null,
+        id: nextPendingInvoice?.id || null,
         filter: {
           status: 'offen',
-          search: pendingInvoices[0]?.invoice_number || pendingInvoices[0]?.customer_name || '',
+          search: nextPendingInvoice?.invoice_number || nextPendingInvoice?.customer_name || '',
         },
       },
       items: pendingInvoices.slice(0, 5),
@@ -465,7 +485,9 @@ export function getDashboardCockpitTasks({
       priority: 'important',
       area: 'fees',
       title: 'Offene Mitgliedsbeitraege',
-      message: `${openFeeMembers.length} Mitglied(er) haben offene Beitraege. Summe: ${openFeesTotal.toFixed(2)} EUR.`,
+      message: `${openFeeMembers.length} Mitglied(er) · ${openFeesTotal.toFixed(2)} EUR offen.`,
+      summary: `Erster offener Beitrag: ${openFeeMembers[0]?.first_name || ''} ${openFeeMembers[0]?.last_name || ''}`.trim(),
+      nextAction: 'Beitrag pruefen',
       count: openFeeMembers.length,
       amount: openFeesTotal,
       targetPage: 'members',
@@ -480,10 +502,12 @@ export function getDashboardCockpitTasks({
       priority: 'critical',
       area: 'merch',
       title: 'Fanartikel ausverkauft',
-      message: `${emptyStockVariants.length} aktive Variante(n) haben keinen Bestand mehr.`,
+      message: `${emptyStockVariants.length} Variante(n) mit Bestand 0.`,
+      summary: `Betroffen: ${lowestEmptyStockVariant?.variant_name || lowestEmptyStockVariant?.sku || lowestEmptyStockVariant?.id || '-'} · Mindestbestand ${Number(lowestEmptyStockVariant?.reorder_level || 0)}.`,
+      nextAction: 'Bestand nachbestellen',
       count: emptyStockVariants.length,
       targetPage: 'merch',
-      target: { page: 'merch', action: 'edit-variant', id: emptyStockVariants[0]?.id || null },
+      target: { page: 'merch', action: 'edit-variant', id: lowestEmptyStockVariant?.id || null },
       items: emptyStockVariants.slice(0, 5),
     }))
   }
@@ -494,10 +518,12 @@ export function getDashboardCockpitTasks({
       priority: 'important',
       area: 'merch',
       title: 'Fanartikelbestand niedrig',
-      message: `${lowStockVariants.length} aktive Variante(n) liegen am oder unter dem Mindestbestand.`,
+      message: `${lowStockVariants.length} Variante(n) am Mindestbestand.`,
+      summary: `Niedrigster Bestand: ${lowestLowStockVariant?.variant_name || lowestLowStockVariant?.sku || lowestLowStockVariant?.id || '-'} · ${Number(lowestLowStockVariant?.stock_quantity || 0)} lagernd.`,
+      nextAction: 'Bestand nachbestellen',
       count: lowStockVariants.length,
       targetPage: 'merch',
-      target: { page: 'merch', action: 'edit-variant', id: lowStockVariants[0]?.id || null },
+      target: { page: 'merch', action: 'edit-variant', id: lowestLowStockVariant?.id || null },
       items: lowStockVariants.slice(0, 5),
     }))
   }
@@ -508,7 +534,9 @@ export function getDashboardCockpitTasks({
       priority: 'critical',
       area: 'sponsors',
       title: 'Sponsorvertraege laufen bald aus',
-      message: `${criticalContracts.length} aktive Vertrag(e) laufen innerhalb von 7 Tagen aus.`,
+      message: `${criticalContracts.length} Vertrag(e) laufen innerhalb von 7 Tagen aus.`,
+      summary: `Naechster Vertrag: ${criticalContracts[0]?.title || 'Ohne Titel'} · bis ${criticalContracts[0]?.ends_on || '-'}.`,
+      nextAction: 'Vertrag verlaengern',
       count: criticalContracts.length,
       dueDate: criticalContracts[0]?.ends_on || null,
       targetPage: 'sponsors',
@@ -523,7 +551,9 @@ export function getDashboardCockpitTasks({
       priority: 'important',
       area: 'sponsors',
       title: 'Sponsorvertraege pruefen',
-      message: `${expiringContracts.length} aktive Vertrag(e) laufen innerhalb von 30 Tagen aus.`,
+      message: `${expiringContracts.length} Vertrag(e) laufen innerhalb von 30 Tagen aus.`,
+      summary: `Naechste Faelligkeit: ${expiringContracts[0]?.title || 'Ohne Titel'} · bis ${expiringContracts[0]?.ends_on || '-'}.`,
+      nextAction: 'Vertrag verlaengern',
       count: expiringContracts.length,
       dueDate: expiringContracts[0]?.ends_on || null,
       targetPage: 'sponsors',
@@ -539,6 +569,8 @@ export function getDashboardCockpitTasks({
       area: 'events',
       title: 'Bevorstehende Events',
       message: `${upcomingEvents.length} Event(s) in den naechsten 14 Tagen.`,
+      summary: `Naechstes Event: ${upcomingEvents[0]?.name || '-'} · ${upcomingEvents[0]?.event_date || '-'}.`,
+      nextAction: 'Event pruefen',
       count: upcomingEvents.length,
       dueDate: upcomingEvents[0]?.event_date || null,
       targetPage: 'events',
@@ -553,7 +585,9 @@ export function getDashboardCockpitTasks({
       priority: 'info',
       area: 'events',
       title: 'Events im Blick behalten',
-      message: `${laterEvents.length} weitere Event(s) stehen in den naechsten 30 Tagen an.`,
+      message: `${laterEvents.length} weitere Event(s) in den naechsten 30 Tagen.`,
+      summary: `Naechstes spaeteres Event: ${laterEvents[0]?.name || '-'} · ${laterEvents[0]?.event_date || '-'}.`,
+      nextAction: 'Event vorbereiten',
       count: laterEvents.length,
       dueDate: laterEvents[0]?.event_date || null,
       targetPage: 'events',
@@ -568,7 +602,9 @@ export function getDashboardCockpitTasks({
       priority: 'important',
       area: 'media',
       title: 'Medien- und Presse-Entwuerfe',
-      message: `${draftMediaItems.length} Beitrag/Beitraege sind noch Entwurf.`,
+      message: `${draftMediaItems.length} Beitrag/Beitraege sind Entwurf.`,
+      summary: `Naechster Entwurf: ${draftMediaItems[0]?.title || draftMediaItems[0]?.id || '-'}.`,
+      nextAction: 'Beitrag fertigstellen',
       count: draftMediaItems.length,
       targetPage: 'media',
       target: { page: 'media', action: 'edit', id: draftMediaItems[0]?.id || null },
@@ -582,7 +618,9 @@ export function getDashboardCockpitTasks({
       priority: 'info',
       area: 'media',
       title: 'Geplante Medienbeitraege',
-      message: `${scheduledMediaItems.length} veroeffentlichte Beitrag/Beitraege sind fuer spaeter terminiert.`,
+      message: `${scheduledMediaItems.length} Beitrag/Beitraege sind terminiert.`,
+      summary: `Naechste Veroeffentlichung: ${scheduledMediaItems[0]?.title || '-'} · ${String(scheduledMediaItems[0]?.published_at || '').slice(0, 10) || '-'}.`,
+      nextAction: 'Beitrag pruefen',
       count: scheduledMediaItems.length,
       dueDate: scheduledMediaItems[0]?.published_at || null,
       targetPage: 'media',
@@ -651,7 +689,9 @@ export function getDashboardCockpitTasks({
       priority: 'critical',
       area: 'public',
       title: 'Oeffentliche Events unvollstaendig',
-      message: `${publicEventIssues.length} oeffentliche Event(s) brauchen Pflicht- oder Anzeigefelder.`,
+      message: `${publicEventIssues.length} Event(s) mit fehlenden oeffentlichen Feldern.`,
+      summary: `Betroffen: ${publicEventIssues[0]?.entity?.name || '-'} · fehlt: ${publicEventIssues[0]?.issue || '-'}.`,
+      nextAction: 'Oeffentliche Felder ergaenzen',
       count: publicEventIssues.length,
       targetPage: 'events',
       target: { page: 'events', action: 'edit', id: publicEventIssues[0]?.entity?.id || null },
@@ -665,7 +705,11 @@ export function getDashboardCockpitTasks({
       priority: 'critical',
       area: 'public',
       title: 'Oeffentliche Fanartikel unvollstaendig',
-      message: `${publicMerchIssues.length + hiddenPublicMerchVariants.length} oeffentliche Fanartikel-Eintrag/Eintraege brauchen Pflichtfelder oder Varianten.`,
+      message: `${publicMerchIssues.length + hiddenPublicMerchVariants.length} Fanartikel-Eintrag/Eintraege unvollstaendig.`,
+      summary: publicMerchIssues[0]
+        ? `Betroffen: ${publicMerchIssues[0].entity?.name || '-'} · fehlt: ${publicMerchIssues[0].issue || '-'}.`
+        : `Betroffen: ${hiddenPublicMerchVariants[0]?.name || '-'} · keine oeffentliche Variante.`,
+      nextAction: 'Oeffentliche Felder ergaenzen',
       count: publicMerchIssues.length + hiddenPublicMerchVariants.length,
       targetPage: 'merch',
       target: {
@@ -686,7 +730,9 @@ export function getDashboardCockpitTasks({
       priority: 'critical',
       area: 'public',
       title: 'Oeffentliche Sponsoren unvollstaendig',
-      message: `${publicSponsorIssues.length} oeffentliche Sponsor(en) brauchen Pflicht- oder Anzeigefelder.`,
+      message: `${publicSponsorIssues.length} Sponsor(en) mit fehlenden oeffentlichen Feldern.`,
+      summary: `Betroffen: ${publicSponsorIssues[0]?.entity?.name || '-'} · fehlt: ${publicSponsorIssues[0]?.issue || '-'}.`,
+      nextAction: 'Oeffentliche Felder ergaenzen',
       count: publicSponsorIssues.length,
       targetPage: 'sponsors',
       target: { page: 'sponsors', action: 'edit-sponsor', id: publicSponsorIssues[0]?.entity?.id || null },
@@ -700,7 +746,9 @@ export function getDashboardCockpitTasks({
       priority: 'critical',
       area: 'public',
       title: 'Oeffentliche Medienbeitraege unvollstaendig',
-      message: `${publicMediaIssues.length} oeffentliche Medienbeitrag/Medienbeitraege brauchen Pflicht- oder Anzeigefelder.`,
+      message: `${publicMediaIssues.length} Medienbeitrag/Medienbeitraege unvollstaendig.`,
+      summary: `Betroffen: ${publicMediaIssues[0]?.entity?.title || '-'} · fehlt: ${publicMediaIssues[0]?.issue || '-'}.`,
+      nextAction: 'Oeffentliche Felder ergaenzen',
       count: publicMediaIssues.length,
       targetPage: 'media',
       target: { page: 'media', action: 'edit', id: publicMediaIssues[0]?.entity?.id || null },
