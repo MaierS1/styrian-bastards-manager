@@ -419,7 +419,7 @@ export function getDashboardCockpitTasks({
       amount: overdueInvoiceTotal,
       dueDate: overdueInvoices[0]?.due_date || null,
       targetPage: 'invoices',
-      items: overdueInvoices.slice(0, 5),
+      items: overdueInvoices,
     }))
   }
 
@@ -433,7 +433,7 @@ export function getDashboardCockpitTasks({
       count: pendingInvoices.length,
       amount: pendingInvoiceTotal,
       targetPage: 'invoices',
-      items: pendingInvoices.slice(0, 5),
+      items: pendingInvoices,
     }))
   }
 
@@ -447,7 +447,7 @@ export function getDashboardCockpitTasks({
       count: openFeeMembers.length,
       amount: openFeesTotal,
       targetPage: 'members',
-      items: openFeeMembers.slice(0, 5),
+      items: openFeeMembers,
     }))
   }
 
@@ -460,7 +460,7 @@ export function getDashboardCockpitTasks({
       message: `${emptyStockVariants.length} aktive Variante(n) haben keinen Bestand mehr.`,
       count: emptyStockVariants.length,
       targetPage: 'merch',
-      items: emptyStockVariants.slice(0, 5),
+      items: emptyStockVariants,
     }))
   }
 
@@ -473,7 +473,7 @@ export function getDashboardCockpitTasks({
       message: `${lowStockVariants.length} aktive Variante(n) liegen am oder unter dem Mindestbestand.`,
       count: lowStockVariants.length,
       targetPage: 'merch',
-      items: lowStockVariants.slice(0, 5),
+      items: lowStockVariants,
     }))
   }
 
@@ -487,7 +487,7 @@ export function getDashboardCockpitTasks({
       count: criticalContracts.length,
       dueDate: criticalContracts[0]?.ends_on || null,
       targetPage: 'sponsors',
-      items: criticalContracts.slice(0, 5),
+      items: criticalContracts,
     }))
   }
 
@@ -501,7 +501,7 @@ export function getDashboardCockpitTasks({
       count: expiringContracts.length,
       dueDate: expiringContracts[0]?.ends_on || null,
       targetPage: 'sponsors',
-      items: expiringContracts.slice(0, 5),
+      items: expiringContracts,
     }))
   }
 
@@ -515,7 +515,7 @@ export function getDashboardCockpitTasks({
       count: upcomingEvents.length,
       dueDate: upcomingEvents[0]?.event_date || null,
       targetPage: 'events',
-      items: upcomingEvents.slice(0, 5),
+      items: upcomingEvents,
     }))
   }
 
@@ -529,7 +529,7 @@ export function getDashboardCockpitTasks({
       count: laterEvents.length,
       dueDate: laterEvents[0]?.event_date || null,
       targetPage: 'events',
-      items: laterEvents.slice(0, 5),
+      items: laterEvents,
     }))
   }
 
@@ -542,7 +542,7 @@ export function getDashboardCockpitTasks({
       message: `${draftMediaItems.length} Beitrag/Beitraege sind noch Entwurf.`,
       count: draftMediaItems.length,
       targetPage: 'media',
-      items: draftMediaItems.slice(0, 5),
+      items: draftMediaItems,
     }))
   }
 
@@ -556,7 +556,7 @@ export function getDashboardCockpitTasks({
       count: scheduledMediaItems.length,
       dueDate: scheduledMediaItems[0]?.published_at || null,
       targetPage: 'media',
-      items: scheduledMediaItems.slice(0, 5),
+      items: scheduledMediaItems,
     }))
   }
 
@@ -623,7 +623,7 @@ export function getDashboardCockpitTasks({
       message: `${publicEventIssues.length} oeffentliche Event(s) brauchen Pflicht- oder Anzeigefelder.`,
       count: publicEventIssues.length,
       targetPage: 'events',
-      items: publicEventIssues.map((item) => ({ type: 'event', ...item })).slice(0, 5),
+      items: publicEventIssues.map((item) => ({ type: 'event', ...item })),
     }))
   }
 
@@ -639,7 +639,7 @@ export function getDashboardCockpitTasks({
       items: [
         ...publicMerchIssues.map((item) => ({ type: 'merch', ...item })),
         ...hiddenPublicMerchVariants.map((entity) => ({ type: 'merch_variant', entity, issue: 'Keine oeffentliche Variante' })),
-      ].slice(0, 5),
+      ],
     }))
   }
 
@@ -652,7 +652,7 @@ export function getDashboardCockpitTasks({
       message: `${publicSponsorIssues.length} oeffentliche Sponsor(en) brauchen Pflicht- oder Anzeigefelder.`,
       count: publicSponsorIssues.length,
       targetPage: 'sponsors',
-      items: publicSponsorIssues.map((item) => ({ type: 'sponsor', ...item })).slice(0, 5),
+      items: publicSponsorIssues.map((item) => ({ type: 'sponsor', ...item })),
     }))
   }
 
@@ -665,7 +665,7 @@ export function getDashboardCockpitTasks({
       message: `${publicMediaIssues.length} oeffentliche Medienbeitrag/Medienbeitraege brauchen Pflicht- oder Anzeigefelder.`,
       count: publicMediaIssues.length,
       targetPage: 'media',
-      items: publicMediaIssues.map((item) => ({ type: 'media', ...item })).slice(0, 5),
+      items: publicMediaIssues.map((item) => ({ type: 'media', ...item })),
     }))
   }
 

@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import {
   buttonStyle,
   cardStyle,
@@ -6,6 +7,8 @@ import {
   mutedTextStyle,
   secondaryButtonStyle,
 } from '../../styles/appStyles'
+
+const dismissedTasksStorageKey = 'dashboardCockpitDismissedTasks'
 
 const priorityConfig = {
   critical: {
@@ -54,6 +57,22 @@ function getTasksByPriority(tasks, priority) {
   return tasks.filter((task) => task.priority === priority)
 }
 
+function readDismissedTasks() {
+  try {
+    return JSON.parse(localStorage.getItem(dismissedTasksStorageKey) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function writeDismissedTasks(dismissedTasks) {
+  try {
+    localStorage.setItem(dismissedTasksStorageKey, JSON.stringify(dismissedTasks))
+  } catch {
+    // Local cockpit dismissals are optional; storage failures should not block the dashboard.
+  }
+}
+
 function getItemLabel(item) {
   if (!item) return ''
 
@@ -78,10 +97,64 @@ function formatDueDate(dateValue) {
   return String(dateValue).slice(0, 10)
 }
 
+function getDismissedItemSignature(item) {
+  const entity = item?.entity || item || {}
+
+  return [
+    item?.type || '',
+    entity.id || '',
+    entity.invoice_number || '',
+    entity.status || '',
+    entity.due_date || '',
+    entity.ends_on || '',
+    entity.event_date || '',
+    entity.published_at || '',
+    entity.stock_quantity ?? '',
+    entity.reorder_level ?? '',
+    item?.issue || '',
+  ].join(':')
+}
+
+function getTaskDismissSignature(task) {
+  return [
+    task.id,
+    task.priority,
+    task.count ?? 0,
+    task.amount ?? '',
+    task.dueDate || '',
+    task.targetPage || '',
+    task.items?.map(getDismissedItemSignature).join('|') || '',
+  ].join('::')
+}
+
 export function DashboardCockpit({ tasks = [], onNavigate }) {
-  const totalCritical = getTasksByPriority(tasks, 'critical').length
-  const totalImportant = getTasksByPriority(tasks, 'important').length
-  const totalInfo = getTasksByPriority(tasks, 'info').length
+  const [dismissedTasks, setDismissedTasks] = useState(() => readDismissedTasks())
+  const taskSignatures = useMemo(() => {
+    return tasks.reduce((signatures, task) => {
+      signatures[task.id] = getTaskDismissSignature(task)
+      return signatures
+    }, {})
+  }, [tasks])
+  const visibleTasks = tasks.filter((task) => dismissedTasks[task.id] !== taskSignatures[task.id])
+  const hiddenTasksCount = tasks.length - visibleTasks.length
+  const totalCritical = getTasksByPriority(visibleTasks, 'critical').length
+  const totalImportant = getTasksByPriority(visibleTasks, 'important').length
+  const totalInfo = getTasksByPriority(visibleTasks, 'info').length
+
+  function dismissTask(task) {
+    const nextDismissedTasks = {
+      ...dismissedTasks,
+      [task.id]: taskSignatures[task.id],
+    }
+
+    setDismissedTasks(nextDismissedTasks)
+    writeDismissedTasks(nextDismissedTasks)
+  }
+
+  function showAllTasks() {
+    setDismissedTasks({})
+    writeDismissedTasks({})
+  }
 
   return (
     <div style={{ ...cardStyle, borderTop: `6px solid ${colors.black}` }}>
@@ -123,17 +196,47 @@ export function DashboardCockpit({ tasks = [], onNavigate }) {
         </div>
       </div>
 
+      {(hiddenTasksCount > 0 || tasks.length > 0) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+          <span style={mutedTextStyle}>
+            {hiddenTasksCount > 0 ? `${hiddenTasksCount} Aufgabe(n) lokal ausgeblendet.` : 'Keine lokal ausgeblendeten Aufgaben.'}
+          </span>
+          <button
+            type="button"
+            onClick={showAllTasks}
+            disabled={hiddenTasksCount === 0}
+            style={{
+              ...secondaryButtonStyle,
+              width: 'auto',
+              marginTop: 0,
+              marginRight: 0,
+              marginBottom: 0,
+              opacity: hiddenTasksCount === 0 ? 0.55 : 1,
+              cursor: hiddenTasksCount === 0 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Alle wieder anzeigen
+          </button>
+        </div>
+      )}
+
       {tasks.length === 0 ? (
         <div style={{ ...cardStyle, marginTop: 14, marginBottom: 0, borderTop: `4px solid ${colors.successText}` }}>
           <strong>Keine offenen Aufgaben</strong>
           <br />
           <span style={mutedTextStyle}>Aktuell sind keine kritischen, wichtigen oder informativen Cockpit-Aufgaben vorhanden.</span>
         </div>
+      ) : visibleTasks.length === 0 ? (
+        <div style={{ ...cardStyle, marginTop: 14, marginBottom: 0, borderTop: `4px solid ${colors.successText}` }}>
+          <strong>Alle Aufgaben ausgeblendet</strong>
+          <br />
+          <span style={mutedTextStyle}>Es gibt offene Cockpit-Aufgaben, sie sind aber lokal fuer dich ausgeblendet.</span>
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 14 }}>
           {['critical', 'important', 'info'].map((priority) => {
             const config = priorityConfig[priority]
-            const priorityTasks = getTasksByPriority(tasks, priority)
+            const priorityTasks = getTasksByPriority(visibleTasks, priority)
 
             return (
               <section
@@ -197,19 +300,36 @@ export function DashboardCockpit({ tasks = [], onNavigate }) {
                           </ul>
                         )}
 
-                        <button
-                          type="button"
-                          onClick={() => onNavigate?.(task.targetPage)}
-                          style={{
-                            ...(task.priority === 'critical' ? buttonStyle : secondaryButtonStyle),
-                            width: '100%',
-                            marginTop: 0,
-                            marginRight: 0,
-                            marginBottom: 0,
-                          }}
-                        >
-                          {targetLabels[task.targetPage] || 'Oeffnen'}
-                        </button>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => onNavigate?.(task.targetPage)}
+                            style={{
+                              ...(task.priority === 'critical' ? buttonStyle : secondaryButtonStyle),
+                              flex: '1 1 160px',
+                              width: 'auto',
+                              marginTop: 0,
+                              marginRight: 0,
+                              marginBottom: 0,
+                            }}
+                          >
+                            {targetLabels[task.targetPage] || 'Oeffnen'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => dismissTask(task)}
+                            style={{
+                              ...secondaryButtonStyle,
+                              flex: '1 1 160px',
+                              width: 'auto',
+                              marginTop: 0,
+                              marginRight: 0,
+                              marginBottom: 0,
+                            }}
+                          >
+                            Fuer mich ausblenden
+                          </button>
+                        </div>
                       </article>
                     ))}
                   </div>
