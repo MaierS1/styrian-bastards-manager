@@ -313,6 +313,7 @@ function createCockpitTask({
   amount = null,
   dueDate = null,
   targetPage = 'dashboard',
+  target = null,
   items = [],
 }) {
   return {
@@ -325,6 +326,7 @@ function createCockpitTask({
     amount,
     dueDate,
     targetPage,
+    target,
     items,
   }
 }
@@ -395,6 +397,7 @@ export function getDashboardCockpitTasks({
       message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} EUR.`,
       amount: currentBalance,
       targetPage: 'cash',
+      target: { page: 'cash', action: 'filter', filter: { type: 'alle' } },
     }))
   } else if (currentBalance < 200) {
     tasks.push(createCockpitTask({
@@ -405,6 +408,7 @@ export function getDashboardCockpitTasks({
       message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} EUR.`,
       amount: currentBalance,
       targetPage: 'cash',
+      target: { page: 'cash', action: 'filter', filter: { type: 'alle' } },
     }))
   }
 
@@ -419,6 +423,15 @@ export function getDashboardCockpitTasks({
       amount: overdueInvoiceTotal,
       dueDate: overdueInvoices[0]?.due_date || null,
       targetPage: 'invoices',
+      target: {
+        page: 'invoices',
+        action: 'filter',
+        id: overdueInvoices[0]?.id || null,
+        filter: {
+          status: 'offen',
+          search: overdueInvoices[0]?.invoice_number || overdueInvoices[0]?.customer_name || '',
+        },
+      },
       items: overdueInvoices.slice(0, 5),
     }))
   }
@@ -433,6 +446,15 @@ export function getDashboardCockpitTasks({
       count: pendingInvoices.length,
       amount: pendingInvoiceTotal,
       targetPage: 'invoices',
+      target: {
+        page: 'invoices',
+        action: 'filter',
+        id: pendingInvoices[0]?.id || null,
+        filter: {
+          status: 'offen',
+          search: pendingInvoices[0]?.invoice_number || pendingInvoices[0]?.customer_name || '',
+        },
+      },
       items: pendingInvoices.slice(0, 5),
     }))
   }
@@ -447,6 +469,7 @@ export function getDashboardCockpitTasks({
       count: openFeeMembers.length,
       amount: openFeesTotal,
       targetPage: 'members',
+      target: { page: 'members', action: 'filter', id: openFeeMembers[0]?.id || null, filter: { fee: 'offen' } },
       items: openFeeMembers.slice(0, 5),
     }))
   }
@@ -460,6 +483,7 @@ export function getDashboardCockpitTasks({
       message: `${emptyStockVariants.length} aktive Variante(n) haben keinen Bestand mehr.`,
       count: emptyStockVariants.length,
       targetPage: 'merch',
+      target: { page: 'merch', action: 'edit-variant', id: emptyStockVariants[0]?.id || null },
       items: emptyStockVariants.slice(0, 5),
     }))
   }
@@ -473,6 +497,7 @@ export function getDashboardCockpitTasks({
       message: `${lowStockVariants.length} aktive Variante(n) liegen am oder unter dem Mindestbestand.`,
       count: lowStockVariants.length,
       targetPage: 'merch',
+      target: { page: 'merch', action: 'edit-variant', id: lowStockVariants[0]?.id || null },
       items: lowStockVariants.slice(0, 5),
     }))
   }
@@ -487,6 +512,7 @@ export function getDashboardCockpitTasks({
       count: criticalContracts.length,
       dueDate: criticalContracts[0]?.ends_on || null,
       targetPage: 'sponsors',
+      target: { page: 'sponsors', action: 'edit-contract', id: criticalContracts[0]?.id || null },
       items: criticalContracts.slice(0, 5),
     }))
   }
@@ -501,6 +527,7 @@ export function getDashboardCockpitTasks({
       count: expiringContracts.length,
       dueDate: expiringContracts[0]?.ends_on || null,
       targetPage: 'sponsors',
+      target: { page: 'sponsors', action: 'edit-contract', id: expiringContracts[0]?.id || null },
       items: expiringContracts.slice(0, 5),
     }))
   }
@@ -515,6 +542,7 @@ export function getDashboardCockpitTasks({
       count: upcomingEvents.length,
       dueDate: upcomingEvents[0]?.event_date || null,
       targetPage: 'events',
+      target: { page: 'events', action: 'edit', id: upcomingEvents[0]?.id || null },
       items: upcomingEvents.slice(0, 5),
     }))
   }
@@ -529,6 +557,7 @@ export function getDashboardCockpitTasks({
       count: laterEvents.length,
       dueDate: laterEvents[0]?.event_date || null,
       targetPage: 'events',
+      target: { page: 'events', action: 'edit', id: laterEvents[0]?.id || null },
       items: laterEvents.slice(0, 5),
     }))
   }
@@ -542,6 +571,7 @@ export function getDashboardCockpitTasks({
       message: `${draftMediaItems.length} Beitrag/Beitraege sind noch Entwurf.`,
       count: draftMediaItems.length,
       targetPage: 'media',
+      target: { page: 'media', action: 'edit', id: draftMediaItems[0]?.id || null },
       items: draftMediaItems.slice(0, 5),
     }))
   }
@@ -556,6 +586,7 @@ export function getDashboardCockpitTasks({
       count: scheduledMediaItems.length,
       dueDate: scheduledMediaItems[0]?.published_at || null,
       targetPage: 'media',
+      target: { page: 'media', action: 'edit', id: scheduledMediaItems[0]?.id || null },
       items: scheduledMediaItems.slice(0, 5),
     }))
   }
@@ -623,6 +654,7 @@ export function getDashboardCockpitTasks({
       message: `${publicEventIssues.length} oeffentliche Event(s) brauchen Pflicht- oder Anzeigefelder.`,
       count: publicEventIssues.length,
       targetPage: 'events',
+      target: { page: 'events', action: 'edit', id: publicEventIssues[0]?.entity?.id || null },
       items: publicEventIssues.map((item) => ({ type: 'event', ...item })).slice(0, 5),
     }))
   }
@@ -636,6 +668,11 @@ export function getDashboardCockpitTasks({
       message: `${publicMerchIssues.length + hiddenPublicMerchVariants.length} oeffentliche Fanartikel-Eintrag/Eintraege brauchen Pflichtfelder oder Varianten.`,
       count: publicMerchIssues.length + hiddenPublicMerchVariants.length,
       targetPage: 'merch',
+      target: {
+        page: 'merch',
+        action: 'edit-item',
+        id: publicMerchIssues[0]?.entity?.id || hiddenPublicMerchVariants[0]?.id || null,
+      },
       items: [
         ...publicMerchIssues.map((item) => ({ type: 'merch', ...item })),
         ...hiddenPublicMerchVariants.map((entity) => ({ type: 'merch_variant', entity, issue: 'Keine oeffentliche Variante' })),
@@ -652,6 +689,7 @@ export function getDashboardCockpitTasks({
       message: `${publicSponsorIssues.length} oeffentliche Sponsor(en) brauchen Pflicht- oder Anzeigefelder.`,
       count: publicSponsorIssues.length,
       targetPage: 'sponsors',
+      target: { page: 'sponsors', action: 'edit-sponsor', id: publicSponsorIssues[0]?.entity?.id || null },
       items: publicSponsorIssues.map((item) => ({ type: 'sponsor', ...item })).slice(0, 5),
     }))
   }
@@ -665,6 +703,7 @@ export function getDashboardCockpitTasks({
       message: `${publicMediaIssues.length} oeffentliche Medienbeitrag/Medienbeitraege brauchen Pflicht- oder Anzeigefelder.`,
       count: publicMediaIssues.length,
       targetPage: 'media',
+      target: { page: 'media', action: 'edit', id: publicMediaIssues[0]?.entity?.id || null },
       items: publicMediaIssues.map((item) => ({ type: 'media', ...item })).slice(0, 5),
     }))
   }

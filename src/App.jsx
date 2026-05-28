@@ -1105,6 +1105,61 @@ export default function App() {
     })
   }
 
+  function handleCockpitNavigate(taskOrPage) {
+    const fallbackPage = typeof taskOrPage === 'string' ? taskOrPage : taskOrPage?.targetPage
+    const target = typeof taskOrPage === 'string'
+      ? { page: taskOrPage }
+      : taskOrPage?.target || { page: fallbackPage }
+    const page = target?.page || fallbackPage || 'dashboard'
+
+    if (page === 'invoices') {
+      if (target.filter?.status) setInvoiceStatusFilter(target.filter.status)
+      if (target.filter?.search !== undefined) setInvoiceSearch(target.filter.search)
+      if (target.filter?.test) setInvoiceTestFilter(target.filter.test)
+    }
+
+    if (page === 'members') {
+      if (target.filter?.fee) setFeeFilter(target.filter.fee)
+
+      const member = members.find((item) => item.id === target.id)
+      if (member) {
+        setMemberSearch(`${member.first_name || ''} ${member.last_name || ''}`.trim())
+      }
+    }
+
+    setActivePage(page)
+
+    if (page === 'events' && target.action === 'edit') {
+      const event = events.find((item) => item.id === target.id)
+      if (event) editEvent(event)
+    }
+
+    if (page === 'merch') {
+      if (target.action === 'edit-variant') {
+        const variant = merchVariants.find((item) => item.id === target.id)
+        if (variant) editMerchVariant(variant)
+      } else if (target.action === 'edit-item') {
+        const item = merchItems.find((candidate) => candidate.id === target.id)
+        if (item) editMerchItem(item)
+      }
+    }
+
+    if (page === 'sponsors') {
+      if (target.action === 'edit-contract') {
+        const contract = sponsorContracts.find((item) => item.id === target.id)
+        if (contract) editSponsorContract(contract)
+      } else if (target.action === 'edit-sponsor') {
+        const sponsor = sponsors.find((item) => item.id === target.id)
+        if (sponsor) editSponsor(sponsor)
+      }
+    }
+
+    if (page === 'media' && target.action === 'edit') {
+      const mediaItem = mediaItems.find((item) => item.id === target.id)
+      if (mediaItem) editMediaItem(mediaItem)
+    }
+  }
+
   function getAlertStyle(type) {
     return buildAlertStyle(type, colors)
   }
@@ -4804,7 +4859,7 @@ export default function App() {
         <DashboardPage
           alerts={getDashboardAlerts()}
           cockpitTasks={getDashboardCockpitTasks()}
-          onNavigate={setActivePage}
+          onNavigate={handleCockpitNavigate}
           getAlertStyle={getAlertStyle}
           cashBalance={getCashBalance()}
           incomeTotal={getIncomeTotal()}

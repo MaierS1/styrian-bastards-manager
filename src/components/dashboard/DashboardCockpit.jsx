@@ -78,6 +78,10 @@ function formatDueDate(dateValue) {
   return String(dateValue).slice(0, 10)
 }
 
+function getTaskTargetPage(task) {
+  return task?.target?.page || task?.targetPage
+}
+
 export function DashboardCockpit({ tasks = [], onNavigate }) {
   const totalCritical = getTasksByPriority(tasks, 'critical').length
   const totalImportant = getTasksByPriority(tasks, 'important').length
@@ -199,7 +203,7 @@ export function DashboardCockpit({ tasks = [], onNavigate }) {
 
                         <button
                           type="button"
-                          onClick={() => onNavigate?.(task.targetPage)}
+                          onClick={() => onNavigate?.(task)}
                           style={{
                             ...(task.priority === 'critical' ? buttonStyle : secondaryButtonStyle),
                             width: '100%',
@@ -208,7 +212,7 @@ export function DashboardCockpit({ tasks = [], onNavigate }) {
                             marginBottom: 0,
                           }}
                         >
-                          {targetLabels[task.targetPage] || 'Oeffnen'}
+                          {targetLabels[getTaskTargetPage(task)] || 'Oeffnen'}
                         </button>
                       </article>
                     ))}
