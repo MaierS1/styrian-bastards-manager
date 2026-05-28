@@ -593,6 +593,19 @@ export function getDashboardCockpitTasks({
     }))
     .filter((item) => item.issue)
 
+  const publicMediaIssues = mediaItems
+    .filter((item) => item.is_public && item.status === 'published')
+    .map((item) => ({
+      entity: item,
+      issue: getPublicIssueLabel(item, [
+        ['title', 'Titel'],
+        ['summary', 'Kurzbeschreibung'],
+        ['content', 'Inhalt'],
+        ['image_alt', 'Bild-Alt-Text'],
+      ]),
+    }))
+    .filter((item) => item.issue)
+
   const hiddenPublicMerchVariants = merchItems
     .filter((item) => item.is_public && item.status === 'active')
     .filter((item) => !merchVariants.some((variant) => (
@@ -601,26 +614,58 @@ export function getDashboardCockpitTasks({
       && ['active', 'sold_out'].includes(variant.status)
     )))
 
-  const publicIssueCount = publicEventIssues.length
-    + publicMerchIssues.length
-    + publicSponsorIssues.length
-    + hiddenPublicMerchVariants.length
-
-  if (publicIssueCount > 0) {
+  if (publicEventIssues.length > 0) {
     tasks.push(createCockpitTask({
-      id: 'public-required-fields',
+      id: 'public-events-missing-fields',
       priority: 'critical',
       area: 'public',
-      title: 'Oeffentliche Inhalte unvollstaendig',
-      message: `${publicIssueCount} oeffentliche Eintrag/Eintraege brauchen Pflicht- oder Anzeigefelder.`,
-      count: publicIssueCount,
-      targetPage: 'dashboard',
+      title: 'Oeffentliche Events unvollstaendig',
+      message: `${publicEventIssues.length} oeffentliche Event(s) brauchen Pflicht- oder Anzeigefelder.`,
+      count: publicEventIssues.length,
+      targetPage: 'events',
+      items: publicEventIssues.map((item) => ({ type: 'event', ...item })).slice(0, 5),
+    }))
+  }
+
+  if (publicMerchIssues.length > 0 || hiddenPublicMerchVariants.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'public-merch-missing-fields',
+      priority: 'critical',
+      area: 'public',
+      title: 'Oeffentliche Fanartikel unvollstaendig',
+      message: `${publicMerchIssues.length + hiddenPublicMerchVariants.length} oeffentliche Fanartikel-Eintrag/Eintraege brauchen Pflichtfelder oder Varianten.`,
+      count: publicMerchIssues.length + hiddenPublicMerchVariants.length,
+      targetPage: 'merch',
       items: [
-        ...publicEventIssues.map((item) => ({ type: 'event', ...item })),
         ...publicMerchIssues.map((item) => ({ type: 'merch', ...item })),
-        ...publicSponsorIssues.map((item) => ({ type: 'sponsor', ...item })),
         ...hiddenPublicMerchVariants.map((entity) => ({ type: 'merch_variant', entity, issue: 'Keine oeffentliche Variante' })),
-      ].slice(0, 8),
+      ].slice(0, 5),
+    }))
+  }
+
+  if (publicSponsorIssues.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'public-sponsors-missing-fields',
+      priority: 'critical',
+      area: 'public',
+      title: 'Oeffentliche Sponsoren unvollstaendig',
+      message: `${publicSponsorIssues.length} oeffentliche Sponsor(en) brauchen Pflicht- oder Anzeigefelder.`,
+      count: publicSponsorIssues.length,
+      targetPage: 'sponsors',
+      items: publicSponsorIssues.map((item) => ({ type: 'sponsor', ...item })).slice(0, 5),
+    }))
+  }
+
+  if (publicMediaIssues.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'public-media-missing-fields',
+      priority: 'critical',
+      area: 'public',
+      title: 'Oeffentliche Medienbeitraege unvollstaendig',
+      message: `${publicMediaIssues.length} oeffentliche Medienbeitrag/Medienbeitraege brauchen Pflicht- oder Anzeigefelder.`,
+      count: publicMediaIssues.length,
+      targetPage: 'media',
+      items: publicMediaIssues.map((item) => ({ type: 'media', ...item })).slice(0, 5),
     }))
   }
 

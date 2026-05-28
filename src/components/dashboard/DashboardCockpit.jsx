@@ -40,13 +40,13 @@ const areaLabels = {
 }
 
 const targetLabels = {
-  cash: 'Kassa oeffnen',
-  invoices: 'Rechnungen oeffnen',
-  members: 'Mitglieder oeffnen',
-  merch: 'Fanartikel oeffnen',
-  sponsors: 'Sponsoren oeffnen',
-  events: 'Events oeffnen',
-  media: 'Medien oeffnen',
+  cash: 'Kassa pruefen',
+  invoices: 'Rechnungen pruefen',
+  members: 'Mitglieder pruefen',
+  merch: 'Fanartikel pruefen',
+  sponsors: 'Sponsoren pruefen',
+  events: 'Events pruefen',
+  media: 'Medien pruefen',
   dashboard: 'Dashboard pruefen',
 }
 
