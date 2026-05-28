@@ -1,5 +1,6 @@
 import { headingStyle, sectionStyle } from '../../styles/appStyles'
 import { DashboardSmartAlerts } from './DashboardSmartAlerts'
+import { DashboardCockpit } from './DashboardCockpit'
 import { DashboardSummaryCards } from './DashboardSummaryCards'
 import { DashboardMonthlyChart } from './DashboardMonthlyChart'
 import { DashboardStats } from './DashboardStats'
@@ -30,6 +31,8 @@ export function DashboardPage(props) {
     getCategorySummary,
     cashEntries,
     documents,
+    cockpitTasks,
+    onNavigate,
   } = props
 
   return (
@@ -37,6 +40,8 @@ export function DashboardPage(props) {
       <h2 style={headingStyle}>Dashboard</h2>
 
       <DashboardSmartAlerts alerts={alerts} getAlertStyle={getAlertStyle} />
+
+      <DashboardCockpit tasks={cockpitTasks} onNavigate={onNavigate} />
 
       <DashboardSummaryCards
         cashBalance={cashBalance}

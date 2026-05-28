@@ -282,6 +282,372 @@ export function getDashboardAlerts({
   return alerts
 }
 
+function getDaysUntil(dateValue, today = new Date()) {
+  if (!dateValue) return null
+
+  const startOfToday = new Date(today)
+  startOfToday.setHours(0, 0, 0, 0)
+
+  const targetDate = new Date(dateValue)
+  targetDate.setHours(0, 0, 0, 0)
+
+  return Math.ceil((targetDate - startOfToday) / (1000 * 60 * 60 * 24))
+}
+
+function isBlank(value) {
+  return String(value || '').trim().length === 0
+}
+
+function getPublicIssueLabel(entity, fields) {
+  const missingFields = fields.filter(([field]) => isBlank(entity?.[field])).map(([, label]) => label)
+  return missingFields.join(', ')
+}
+
+function createCockpitTask({
+  id,
+  priority,
+  area,
+  title,
+  message,
+  count = 0,
+  amount = null,
+  dueDate = null,
+  targetPage = 'dashboard',
+  items = [],
+}) {
+  return {
+    id,
+    priority,
+    area,
+    title,
+    message,
+    count,
+    amount,
+    dueDate,
+    targetPage,
+    items,
+  }
+}
+
+export function getDashboardCockpitTasks({
+  members = [],
+  fees = [],
+  invoices = [],
+  events = [],
+  mediaItems = [],
+  sponsors = [],
+  sponsorContracts = [],
+  merchItems = [],
+  merchVariants = [],
+  getMemberById,
+  getFee,
+  getCashBalance,
+  getUpcomingEvents,
+  isInvoiceOverdue,
+  commercialData,
+  today = new Date(),
+}) {
+  const tasks = []
+  const currentBalance = Number(getCashBalance?.() || 0)
+  const openInvoices = invoices.filter((invoice) => invoice.status === 'offen' && !invoice.is_test)
+  const overdueInvoices = openInvoices.filter((invoice) => isInvoiceOverdue?.(invoice))
+  const pendingInvoices = openInvoices.filter((invoice) => !overdueInvoices.some((candidate) => candidate.id === invoice.id))
+  const pendingInvoiceTotal = pendingInvoices.reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0)
+  const overdueInvoiceTotal = overdueInvoices.reduce((sum, invoice) => sum + Number(invoice.total_amount || 0), 0)
+  const openFeeMembers = members.filter((member) => {
+    if (member.is_test) return false
+
+    const fee = getFee?.(member.id)
+    return fee && !fee.paid && Number(fee.amount || 0) > 0
+  })
+  const openFeesTotal = getOpenFeesTotal(fees, getMemberById)
+  const upcomingEvents = getUpcomingEvents?.(14) || []
+  const next30DayEvents = getUpcomingEvents?.(30) || []
+  const laterEvents = next30DayEvents.filter((event) => !upcomingEvents.some((candidate) => candidate.id === event.id))
+  const activeContracts = sponsorContracts.filter((contract) => contract.status === 'active')
+  const criticalContracts = activeContracts
+    .filter((contract) => {
+      const daysUntil = getDaysUntil(contract.ends_on, today)
+      return daysUntil !== null && daysUntil >= 0 && daysUntil <= 7
+    })
+    .sort((a, b) => new Date(a.ends_on) - new Date(b.ends_on))
+  const expiringContracts = (commercialData?.expiringContracts || [])
+    .filter((contract) => !criticalContracts.some((candidate) => candidate.id === contract.id))
+  const activeMerchVariants = merchVariants.filter((variant) => {
+    const item = merchItems.find((candidate) => candidate.id === variant.merch_item_id)
+    return variant.status === 'active' && item?.status === 'active'
+  })
+  const emptyStockVariants = activeMerchVariants.filter((variant) => Number(variant.stock_quantity || 0) <= 0)
+  const lowStockVariants = (commercialData?.lowStockVariants || [])
+    .filter((variant) => !emptyStockVariants.some((candidate) => candidate.id === variant.id))
+  const draftMediaItems = mediaItems.filter((item) => item.status === 'draft')
+  const scheduledMediaItems = mediaItems.filter((item) => {
+    if (item.status !== 'published' || !item.published_at) return false
+    return new Date(item.published_at) > today
+  })
+
+  if (currentBalance < 0) {
+    tasks.push(createCockpitTask({
+      id: 'cash-negative-balance',
+      priority: 'critical',
+      area: 'cash',
+      title: 'Kassastand negativ',
+      message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} EUR.`,
+      amount: currentBalance,
+      targetPage: 'cash',
+    }))
+  } else if (currentBalance < 200) {
+    tasks.push(createCockpitTask({
+      id: 'cash-low-balance',
+      priority: 'important',
+      area: 'cash',
+      title: 'Kassastand niedrig',
+      message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} EUR.`,
+      amount: currentBalance,
+      targetPage: 'cash',
+    }))
+  }
+
+  if (overdueInvoices.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'invoices-overdue',
+      priority: 'critical',
+      area: 'invoices',
+      title: 'Rechnungen ueberfaellig',
+      message: `${overdueInvoices.length} offene Rechnung(en) sind ueberfaellig. Summe: ${overdueInvoiceTotal.toFixed(2)} EUR.`,
+      count: overdueInvoices.length,
+      amount: overdueInvoiceTotal,
+      dueDate: overdueInvoices[0]?.due_date || null,
+      targetPage: 'invoices',
+      items: overdueInvoices.slice(0, 5),
+    }))
+  }
+
+  if (pendingInvoices.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'invoices-open',
+      priority: 'important',
+      area: 'invoices',
+      title: 'Offene Rechnungen',
+      message: `${pendingInvoices.length} Rechnung(en) sind offen. Summe: ${pendingInvoiceTotal.toFixed(2)} EUR.`,
+      count: pendingInvoices.length,
+      amount: pendingInvoiceTotal,
+      targetPage: 'invoices',
+      items: pendingInvoices.slice(0, 5),
+    }))
+  }
+
+  if (openFeeMembers.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'fees-open',
+      priority: 'important',
+      area: 'fees',
+      title: 'Offene Mitgliedsbeitraege',
+      message: `${openFeeMembers.length} Mitglied(er) haben offene Beitraege. Summe: ${openFeesTotal.toFixed(2)} EUR.`,
+      count: openFeeMembers.length,
+      amount: openFeesTotal,
+      targetPage: 'members',
+      items: openFeeMembers.slice(0, 5),
+    }))
+  }
+
+  if (emptyStockVariants.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'merch-empty-stock',
+      priority: 'critical',
+      area: 'merch',
+      title: 'Fanartikel ausverkauft',
+      message: `${emptyStockVariants.length} aktive Variante(n) haben keinen Bestand mehr.`,
+      count: emptyStockVariants.length,
+      targetPage: 'merch',
+      items: emptyStockVariants.slice(0, 5),
+    }))
+  }
+
+  if (lowStockVariants.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'merch-low-stock',
+      priority: 'important',
+      area: 'merch',
+      title: 'Fanartikelbestand niedrig',
+      message: `${lowStockVariants.length} aktive Variante(n) liegen am oder unter dem Mindestbestand.`,
+      count: lowStockVariants.length,
+      targetPage: 'merch',
+      items: lowStockVariants.slice(0, 5),
+    }))
+  }
+
+  if (criticalContracts.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'sponsors-contracts-critical',
+      priority: 'critical',
+      area: 'sponsors',
+      title: 'Sponsorvertraege laufen bald aus',
+      message: `${criticalContracts.length} aktive Vertrag(e) laufen innerhalb von 7 Tagen aus.`,
+      count: criticalContracts.length,
+      dueDate: criticalContracts[0]?.ends_on || null,
+      targetPage: 'sponsors',
+      items: criticalContracts.slice(0, 5),
+    }))
+  }
+
+  if (expiringContracts.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'sponsors-contracts-expiring',
+      priority: 'important',
+      area: 'sponsors',
+      title: 'Sponsorvertraege pruefen',
+      message: `${expiringContracts.length} aktive Vertrag(e) laufen innerhalb von 30 Tagen aus.`,
+      count: expiringContracts.length,
+      dueDate: expiringContracts[0]?.ends_on || null,
+      targetPage: 'sponsors',
+      items: expiringContracts.slice(0, 5),
+    }))
+  }
+
+  if (upcomingEvents.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'events-upcoming',
+      priority: 'important',
+      area: 'events',
+      title: 'Bevorstehende Events',
+      message: `${upcomingEvents.length} Event(s) in den naechsten 14 Tagen.`,
+      count: upcomingEvents.length,
+      dueDate: upcomingEvents[0]?.event_date || null,
+      targetPage: 'events',
+      items: upcomingEvents.slice(0, 5),
+    }))
+  }
+
+  if (laterEvents.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'events-next-30-days',
+      priority: 'info',
+      area: 'events',
+      title: 'Events im Blick behalten',
+      message: `${laterEvents.length} weitere Event(s) stehen in den naechsten 30 Tagen an.`,
+      count: laterEvents.length,
+      dueDate: laterEvents[0]?.event_date || null,
+      targetPage: 'events',
+      items: laterEvents.slice(0, 5),
+    }))
+  }
+
+  if (draftMediaItems.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'media-drafts',
+      priority: 'important',
+      area: 'media',
+      title: 'Medien- und Presse-Entwuerfe',
+      message: `${draftMediaItems.length} Beitrag/Beitraege sind noch Entwurf.`,
+      count: draftMediaItems.length,
+      targetPage: 'media',
+      items: draftMediaItems.slice(0, 5),
+    }))
+  }
+
+  if (scheduledMediaItems.length > 0) {
+    tasks.push(createCockpitTask({
+      id: 'media-scheduled',
+      priority: 'info',
+      area: 'media',
+      title: 'Geplante Medienbeitraege',
+      message: `${scheduledMediaItems.length} veroeffentlichte Beitrag/Beitraege sind fuer spaeter terminiert.`,
+      count: scheduledMediaItems.length,
+      dueDate: scheduledMediaItems[0]?.published_at || null,
+      targetPage: 'media',
+      items: scheduledMediaItems.slice(0, 5),
+    }))
+  }
+
+  const publicEventIssues = events
+    .filter((event) => event.is_public)
+    .map((event) => ({
+      entity: event,
+      issue: getPublicIssueLabel(event, [
+        ['public_title', 'Titel'],
+        ['public_description', 'Beschreibung'],
+      ]),
+    }))
+    .filter((item) => item.issue)
+
+  const publicMerchIssues = merchItems
+    .filter((item) => item.is_public && item.status === 'active')
+    .map((item) => ({
+      entity: item,
+      issue: getPublicIssueLabel(item, [
+        ['public_title', 'Titel'],
+        ['public_description', 'Beschreibung'],
+        ['public_image_alt', 'Bild-Alt-Text'],
+      ]),
+    }))
+    .filter((item) => item.issue)
+
+  const publicSponsorIssues = sponsors
+    .filter((sponsor) => sponsor.is_public && sponsor.status === 'active')
+    .map((sponsor) => ({
+      entity: sponsor,
+      issue: getPublicIssueLabel(sponsor, [
+        ['public_description', 'Beschreibung'],
+      ]),
+    }))
+    .filter((item) => item.issue)
+
+  const hiddenPublicMerchVariants = merchItems
+    .filter((item) => item.is_public && item.status === 'active')
+    .filter((item) => !merchVariants.some((variant) => (
+      variant.merch_item_id === item.id
+      && variant.is_public
+      && ['active', 'sold_out'].includes(variant.status)
+    )))
+
+  const publicIssueCount = publicEventIssues.length
+    + publicMerchIssues.length
+    + publicSponsorIssues.length
+    + hiddenPublicMerchVariants.length
+
+  if (publicIssueCount > 0) {
+    tasks.push(createCockpitTask({
+      id: 'public-required-fields',
+      priority: 'critical',
+      area: 'public',
+      title: 'Oeffentliche Inhalte unvollstaendig',
+      message: `${publicIssueCount} oeffentliche Eintrag/Eintraege brauchen Pflicht- oder Anzeigefelder.`,
+      count: publicIssueCount,
+      targetPage: 'dashboard',
+      items: [
+        ...publicEventIssues.map((item) => ({ type: 'event', ...item })),
+        ...publicMerchIssues.map((item) => ({ type: 'merch', ...item })),
+        ...publicSponsorIssues.map((item) => ({ type: 'sponsor', ...item })),
+        ...hiddenPublicMerchVariants.map((entity) => ({ type: 'merch_variant', entity, issue: 'Keine oeffentliche Variante' })),
+      ].slice(0, 8),
+    }))
+  }
+
+  const priorityOrder = { critical: 0, important: 1, info: 2 }
+  const areaOrder = {
+    cash: 0,
+    invoices: 1,
+    fees: 2,
+    merch: 3,
+    sponsors: 4,
+    events: 5,
+    media: 6,
+    public: 7,
+  }
+
+  return tasks.sort((a, b) => {
+    const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority]
+    if (priorityDiff !== 0) return priorityDiff
+
+    if (a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate)
+    if (a.dueDate) return -1
+    if (b.dueDate) return 1
+
+    return areaOrder[a.area] - areaOrder[b.area]
+  })
+}
+
 export function getAlertStyle(type, colors) {
   if (type === 'danger') {
     return {

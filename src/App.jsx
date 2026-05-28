@@ -35,6 +35,7 @@ import {
   getCashEntrySignedAmount as buildCashEntrySignedAmount,
   getCommercialDashboardData as buildCommercialDashboardData,
   getDashboardAlerts as buildDashboardAlerts,
+  getDashboardCockpitTasks as buildDashboardCockpitTasks,
   getFinanceDashboardData as buildFinanceDashboardData,
   getFinanceHealthStatus as buildFinanceHealthStatus,
   isValidCashEntry as buildIsValidCashEntry,
@@ -1080,6 +1081,26 @@ export default function App() {
       getCashBalance,
       getFee,
       getMemberById,
+      commercialData: getCommercialDashboardData(),
+    })
+  }
+
+  function getDashboardCockpitTasks() {
+    return buildDashboardCockpitTasks({
+      members,
+      fees,
+      invoices,
+      events,
+      mediaItems,
+      sponsors,
+      sponsorContracts,
+      merchItems,
+      merchVariants,
+      getMemberById,
+      getFee,
+      getCashBalance,
+      getUpcomingEvents,
+      isInvoiceOverdue,
       commercialData: getCommercialDashboardData(),
     })
   }
@@ -4782,6 +4803,8 @@ export default function App() {
       {activePage === 'dashboard' && (
         <DashboardPage
           alerts={getDashboardAlerts()}
+          cockpitTasks={getDashboardCockpitTasks()}
+          onNavigate={setActivePage}
           getAlertStyle={getAlertStyle}
           cashBalance={getCashBalance()}
           incomeTotal={getIncomeTotal()}
