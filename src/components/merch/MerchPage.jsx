@@ -10,13 +10,45 @@ import {
 } from '../../styles/appStyles'
 
 const checkboxLabelStyle = {
-  display: 'block',
-  margin: '10px 0',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  margin: '8px 0',
   color: colors.text,
+  fontWeight: 700,
 }
 
 const checkboxInputStyle = {
-  marginRight: 8,
+  width: 18,
+  height: 18,
+  flex: '0 0 auto',
+}
+
+const formGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+  gap: 12,
+}
+
+const textareaStyle = {
+  ...inputStyle,
+  minHeight: 92,
+  resize: 'vertical',
+}
+
+const badgeStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 24,
+  padding: '2px 8px',
+  marginRight: 6,
+  marginBottom: 6,
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 900,
+  background: colors.infoBg,
+  color: colors.infoText,
+  border: `1px solid ${colors.blue}`,
 }
 
 export function MerchPage({
@@ -42,12 +74,36 @@ export function MerchPage({
   setMerchItemStatus,
   merchItemBasePrice,
   setMerchItemBasePrice,
+  merchItemPurchasePrice,
+  setMerchItemPurchasePrice,
+  merchItemMemberPrice,
+  setMerchItemMemberPrice,
   merchItemTaxRate,
   setMerchItemTaxRate,
   merchItemSkuPrefix,
   setMerchItemSkuPrefix,
+  merchItemShortDescription,
+  setMerchItemShortDescription,
   merchItemDescription,
   setMerchItemDescription,
+  merchItemStorageLocation,
+  setMerchItemStorageLocation,
+  merchItemIsPreorder,
+  setMerchItemIsPreorder,
+  merchItemIsLimited,
+  setMerchItemIsLimited,
+  merchItemIsBestseller,
+  setMerchItemIsBestseller,
+  merchItemIsNew,
+  setMerchItemIsNew,
+  merchItemIsClearance,
+  setMerchItemIsClearance,
+  merchItemPickupAvailable,
+  setMerchItemPickupAvailable,
+  merchItemShippingAvailable,
+  setMerchItemShippingAvailable,
+  merchItemShippingCost,
+  setMerchItemShippingCost,
   merchItemIsPublic,
   setMerchItemIsPublic,
   merchItemPublicSortOrder,
@@ -137,11 +193,12 @@ export function MerchPage({
 
   return (
     <section style={sectionStyle}>
-      <h2 style={headingStyle}>Fanartikel</h2>
+      <h2 style={headingStyle}>Shop & Fanartikel</h2>
 
       {canManageMerch() && (
         <>
-          <h3 style={headingStyle}>{merchItemEditingId ? 'Fanartikel bearbeiten' : 'Fanartikel anlegen'}</h3>
+          <h3 style={headingStyle}>{merchItemEditingId ? 'Shop-Artikel bearbeiten' : 'Shop-Artikel anlegen'}</h3>
+          <h4>Produktdaten</h4>
 
           <input
             placeholder="Artikelnummer"
@@ -165,10 +222,17 @@ export function MerchPage({
           />
 
           <input
-            placeholder="Bild-Pfad"
-            value={merchItemImagePath}
-            onChange={(event) => setMerchItemImagePath(event.target.value)}
+            placeholder="Kurzbeschreibung"
+            value={merchItemShortDescription}
+            onChange={(event) => setMerchItemShortDescription(event.target.value)}
             style={inputStyle}
+          />
+
+          <textarea
+            placeholder="Ausführliche Beschreibung"
+            value={merchItemDescription}
+            onChange={(event) => setMerchItemDescription(event.target.value)}
+            style={textareaStyle}
           />
 
           <select value={merchItemStatus} onChange={(event) => setMerchItemStatus(event.target.value)} style={inputStyle}>
@@ -177,13 +241,35 @@ export function MerchPage({
             <option value="archived">Archiviert</option>
           </select>
 
+          <h4>Preis & Verkauf</h4>
+
           <input
             type="number"
             min="0"
             step="0.01"
-            placeholder="Basispreis in EUR"
+            placeholder="Verkaufspreis in EUR"
             value={merchItemBasePrice}
             onChange={(event) => setMerchItemBasePrice(event.target.value)}
+            style={inputStyle}
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Einkaufspreis intern in EUR"
+            value={merchItemPurchasePrice}
+            onChange={(event) => setMerchItemPurchasePrice(event.target.value)}
+            style={inputStyle}
+          />
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Mitgliederpreis in EUR"
+            value={merchItemMemberPrice}
+            onChange={(event) => setMerchItemMemberPrice(event.target.value)}
             style={inputStyle}
           />
 
@@ -205,12 +291,59 @@ export function MerchPage({
             style={inputStyle}
           />
 
+          <h4>Lagerbestand</h4>
+
           <input
-            placeholder="Beschreibung"
-            value={merchItemDescription}
-            onChange={(event) => setMerchItemDescription(event.target.value)}
+            placeholder="Lagerort"
+            value={merchItemStorageLocation}
+            onChange={(event) => setMerchItemStorageLocation(event.target.value)}
             style={inputStyle}
           />
+
+          <p style={mutedTextStyle}>Lagerstand und Mindestbestand werden pro Variante geführt.</p>
+
+          <h4>Bilder</h4>
+
+          <input
+            placeholder="Bild-Pfad"
+            value={merchItemImagePath}
+            onChange={(event) => setMerchItemImagePath(event.target.value)}
+            style={inputStyle}
+          />
+
+          <h4>Versand & Ausgabe</h4>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchItemPickupAvailable}
+              onChange={(event) => setMerchItemPickupAvailable(event.target.checked)}
+              style={checkboxInputStyle}
+            />
+            Abholung möglich
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchItemShippingAvailable}
+              onChange={(event) => setMerchItemShippingAvailable(event.target.checked)}
+              style={checkboxInputStyle}
+            />
+            Versand möglich
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Versandkosten in EUR"
+            value={merchItemShippingCost}
+            onChange={(event) => setMerchItemShippingCost(event.target.value)}
+            style={inputStyle}
+          />
+
+          <h4>Einstellungen</h4>
 
           <label style={checkboxLabelStyle}>
             <input
@@ -219,7 +352,57 @@ export function MerchPage({
               onChange={(event) => setMerchItemIsPublic(event.target.checked)}
               style={checkboxInputStyle}
             />
-            Oeffentlich anzeigen
+            Aktiv im Shop anzeigen
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchItemIsNew}
+              onChange={(event) => setMerchItemIsNew(event.target.checked)}
+              style={checkboxInputStyle}
+            />
+            Neu im Shop
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchItemIsBestseller}
+              onChange={(event) => setMerchItemIsBestseller(event.target.checked)}
+              style={checkboxInputStyle}
+            />
+            Bestseller
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchItemIsPreorder}
+              onChange={(event) => setMerchItemIsPreorder(event.target.checked)}
+              style={checkboxInputStyle}
+            />
+            Vorbestellung
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchItemIsLimited}
+              onChange={(event) => setMerchItemIsLimited(event.target.checked)}
+              style={checkboxInputStyle}
+            />
+            Limitierte Auflage
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={merchItemIsClearance}
+              onChange={(event) => setMerchItemIsClearance(event.target.checked)}
+              style={checkboxInputStyle}
+            />
+            Restposten
           </label>
 
           <input
@@ -556,14 +739,14 @@ export function MerchPage({
       )}
 
       <p>
-        Fanartikel: <strong>{merchItems.length}</strong>
+        Shop-Artikel: <strong>{merchItems.length}</strong>
         <br />
         Varianten: <strong>{merchVariants.length}</strong>
         <br />
         Verkaeufe: <strong>{merchSales.length}</strong>
       </p>
 
-      {merchItems.length === 0 && <p style={mutedTextStyle}>Noch keine Fanartikel angelegt.</p>}
+      {merchItems.length === 0 && <p style={mutedTextStyle}>Noch keine Shop-Artikel angelegt.</p>}
 
       {merchItems.map((item) => (
         <MerchItemCard
@@ -609,33 +792,68 @@ function MerchItemCard({
   merchItemDeletingId,
   merchVariantDeletingId,
 }) {
+  const badges = getMerchItemBadges(item, variants)
+  const totalStock = variants.reduce((sum, variant) => sum + Number(variant.stock_quantity || 0), 0)
+  const displayName = item.public_title || item.name
+  const displayDescription = item.public_description || item.short_description || item.description || '-'
+
   return (
     <div
       style={{
         ...cardStyle,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: 16,
         borderLeft: `6px solid ${item.status === 'active' ? colors.blue : colors.muted}`,
         opacity: item.status === 'archived' ? 0.72 : 1,
       }}
     >
-      <strong>{item.item_number ? `${item.item_number} - ${item.name}` : item.name}</strong>
-      <br />
-      Kategorie: {item.category || '-'} - Status: {getItemStatusLabel(item.status)}
-      <br />
-      Basispreis: {formatAmount(item.base_price_cents)} - Steuer: {Number(item.tax_rate || 0).toFixed(2)} %
-      <br />
-      SKU-Prefix: {item.sku_prefix || '-'} - Bild: {item.image_path || '-'}
-      <br />
-      Beschreibung: {item.description || '-'}
-      <br />
-      Oeffentlich: {item.is_public ? 'Ja' : 'Nein'} - Sortierung: {item.public_sort_order ?? 0}
-      <br />
-      Oeffentlicher Titel: {item.public_title || '-'}
-      <br />
-      Oeffentliche Beschreibung: {item.public_description || '-'}
-      <br />
-      Bild-Alt-Text: {item.public_image_alt || '-'}
-      <br />
-      CTA: {getCtaLabel(item)}
+      <div
+        style={{
+          minHeight: 150,
+          borderRadius: 10,
+          border: `1px solid ${colors.border}`,
+          background: colors.offWhite,
+          overflow: 'hidden',
+        }}
+      >
+        {item.image_path ? (
+          <img
+            src={item.image_path}
+            alt={item.public_image_alt || displayName}
+            style={{ width: '100%', height: '100%', minHeight: 150, objectFit: 'cover', display: 'block' }}
+          />
+        ) : (
+          <div style={{ padding: 16, color: colors.muted, fontWeight: 800 }}>Kein Bild</div>
+        )}
+      </div>
+
+      <div>
+        <div>
+          {badges.map((badge) => (
+            <span key={badge} style={badgeStyle}>{badge}</span>
+          ))}
+        </div>
+        <strong style={{ display: 'block', fontSize: 20, lineHeight: 1.25 }}>
+          {item.item_number ? `${item.item_number} - ${displayName}` : displayName}
+        </strong>
+        <p style={{ ...mutedTextStyle, marginTop: 6 }}>{displayDescription}</p>
+        <div style={formGridStyle}>
+          <span>Kategorie: <strong>{item.category || '-'}</strong></span>
+          <span>Preis: <strong>{formatAmount(item.base_price_cents)}</strong></span>
+          <span>Mitgliederpreis: <strong>{item.member_price_cents ? formatAmount(item.member_price_cents) : '-'}</strong></span>
+          <span>Bestand: <strong>{totalStock}</strong></span>
+          <span>Lagerort: <strong>{item.storage_location || '-'}</strong></span>
+          <span>Shop: <strong>{item.is_public ? 'Aktiv' : 'Intern'}</strong></span>
+        </div>
+        <p style={mutedTextStyle}>
+          Status: {getItemStatusLabel(item.status)} - Steuer: {Number(item.tax_rate || 0).toFixed(2)} %
+          <br />
+          Abholung: {item.pickup_available === false ? 'Nein' : 'Ja'} - Versand: {item.shipping_available ? 'Ja' : 'Nein'}
+          {item.shipping_available ? ` (${formatAmount(item.shipping_cost_cents)})` : ''}
+          <br />
+          CTA: {getCtaLabel(item)}
+        </p>
 
       <MerchVariantsList
         variants={variants}
@@ -660,6 +878,7 @@ function MerchItemCard({
           </button>
         </>
       )}
+      </div>
     </div>
   )
 }
@@ -731,6 +950,21 @@ function MerchVariantsList({
       })}
     </div>
   )
+}
+
+function getMerchItemBadges(item, variants) {
+  const badges = []
+  const totalStock = variants.reduce((sum, variant) => sum + Number(variant.stock_quantity || 0), 0)
+
+  if (item.is_new) badges.push('Neu')
+  if (item.is_bestseller) badges.push('Bestseller')
+  if (item.is_preorder) badges.push('Vorbestellung')
+  if (item.is_limited) badges.push('Limitiert')
+  if (item.status === 'inactive' || variants.some((variant) => variant.status === 'sold_out') || (variants.length > 0 && totalStock <= 0)) {
+    badges.push('Ausverkauft')
+  }
+
+  return badges
 }
 
 function getItemStatusLabel(status) {

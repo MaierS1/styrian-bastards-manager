@@ -417,9 +417,21 @@ export default function App() {
   const [merchItemImagePath, setMerchItemImagePath] = useState('')
   const [merchItemStatus, setMerchItemStatus] = useState('active')
   const [merchItemBasePrice, setMerchItemBasePrice] = useState('')
+  const [merchItemPurchasePrice, setMerchItemPurchasePrice] = useState('')
+  const [merchItemMemberPrice, setMerchItemMemberPrice] = useState('')
   const [merchItemTaxRate, setMerchItemTaxRate] = useState('0')
   const [merchItemSkuPrefix, setMerchItemSkuPrefix] = useState('')
+  const [merchItemShortDescription, setMerchItemShortDescription] = useState('')
   const [merchItemDescription, setMerchItemDescription] = useState('')
+  const [merchItemStorageLocation, setMerchItemStorageLocation] = useState('')
+  const [merchItemIsPreorder, setMerchItemIsPreorder] = useState(false)
+  const [merchItemIsLimited, setMerchItemIsLimited] = useState(false)
+  const [merchItemIsBestseller, setMerchItemIsBestseller] = useState(false)
+  const [merchItemIsNew, setMerchItemIsNew] = useState(false)
+  const [merchItemIsClearance, setMerchItemIsClearance] = useState(false)
+  const [merchItemPickupAvailable, setMerchItemPickupAvailable] = useState(true)
+  const [merchItemShippingAvailable, setMerchItemShippingAvailable] = useState(false)
+  const [merchItemShippingCost, setMerchItemShippingCost] = useState('')
   const [merchItemIsPublic, setMerchItemIsPublic] = useState(false)
   const [merchItemPublicSortOrder, setMerchItemPublicSortOrder] = useState('0')
   const [merchItemPublicTitle, setMerchItemPublicTitle] = useState('')
@@ -1946,9 +1958,21 @@ export default function App() {
     setMerchItemImagePath('')
     setMerchItemStatus('active')
     setMerchItemBasePrice('')
+    setMerchItemPurchasePrice('')
+    setMerchItemMemberPrice('')
     setMerchItemTaxRate('0')
     setMerchItemSkuPrefix('')
+    setMerchItemShortDescription('')
     setMerchItemDescription('')
+    setMerchItemStorageLocation('')
+    setMerchItemIsPreorder(false)
+    setMerchItemIsLimited(false)
+    setMerchItemIsBestseller(false)
+    setMerchItemIsNew(false)
+    setMerchItemIsClearance(false)
+    setMerchItemPickupAvailable(true)
+    setMerchItemShippingAvailable(false)
+    setMerchItemShippingCost('')
     setMerchItemIsPublic(false)
     setMerchItemPublicSortOrder('0')
     setMerchItemPublicTitle('')
@@ -2343,9 +2367,21 @@ export default function App() {
     setMerchItemImagePath(item.image_path || '')
     setMerchItemStatus(item.status || 'active')
     setMerchItemBasePrice(item.base_price_cents ? String((Number(item.base_price_cents) / 100).toFixed(2)) : '')
+    setMerchItemPurchasePrice(item.purchase_price_cents ? String((Number(item.purchase_price_cents) / 100).toFixed(2)) : '')
+    setMerchItemMemberPrice(item.member_price_cents ? String((Number(item.member_price_cents) / 100).toFixed(2)) : '')
     setMerchItemTaxRate(String(item.tax_rate ?? 0))
     setMerchItemSkuPrefix(item.sku_prefix || '')
+    setMerchItemShortDescription(item.short_description || '')
     setMerchItemDescription(item.description || '')
+    setMerchItemStorageLocation(item.storage_location || '')
+    setMerchItemIsPreorder(Boolean(item.is_preorder))
+    setMerchItemIsLimited(Boolean(item.is_limited))
+    setMerchItemIsBestseller(Boolean(item.is_bestseller))
+    setMerchItemIsNew(Boolean(item.is_new))
+    setMerchItemIsClearance(Boolean(item.is_clearance))
+    setMerchItemPickupAvailable(item.pickup_available !== false)
+    setMerchItemShippingAvailable(Boolean(item.shipping_available))
+    setMerchItemShippingCost(item.shipping_cost_cents ? String((Number(item.shipping_cost_cents) / 100).toFixed(2)) : '')
     setMerchItemIsPublic(Boolean(item.is_public))
     setMerchItemPublicSortOrder(String(item.public_sort_order ?? 0))
     setMerchItemPublicTitle(item.public_title || '')
@@ -2367,11 +2403,29 @@ export default function App() {
     }
 
     const basePriceNumber = merchItemBasePrice ? Number(String(merchItemBasePrice).replace(',', '.')) : 0
+    const purchasePriceNumber = merchItemPurchasePrice ? Number(String(merchItemPurchasePrice).replace(',', '.')) : null
+    const memberPriceNumber = merchItemMemberPrice ? Number(String(merchItemMemberPrice).replace(',', '.')) : null
+    const shippingCostNumber = merchItemShippingCost ? Number(String(merchItemShippingCost).replace(',', '.')) : 0
     const taxRateNumber = merchItemTaxRate ? Number(String(merchItemTaxRate).replace(',', '.')) : 0
     const publicSortOrderNumber = merchItemPublicSortOrder ? Number(merchItemPublicSortOrder) : 0
 
     if (Number.isNaN(basePriceNumber) || basePriceNumber < 0) {
-      alert('Basispreis muss eine positive Zahl sein.')
+      alert('Verkaufspreis muss eine positive Zahl sein.')
+      return
+    }
+
+    if (purchasePriceNumber !== null && (Number.isNaN(purchasePriceNumber) || purchasePriceNumber < 0)) {
+      alert('Einkaufspreis muss eine positive Zahl sein.')
+      return
+    }
+
+    if (memberPriceNumber !== null && (Number.isNaN(memberPriceNumber) || memberPriceNumber < 0)) {
+      alert('Mitgliederpreis muss eine positive Zahl sein.')
+      return
+    }
+
+    if (Number.isNaN(shippingCostNumber) || shippingCostNumber < 0) {
+      alert('Versandkosten müssen eine positive Zahl sein.')
       return
     }
 
@@ -2388,13 +2442,25 @@ export default function App() {
     const payload = {
       item_number: merchItemNumber.trim() || null,
       name: merchItemName.trim(),
+      short_description: merchItemShortDescription.trim() || null,
       description: merchItemDescription.trim() || null,
       category: merchItemCategory.trim() || 'other',
       image_path: merchItemImagePath.trim() || null,
       status: merchItemStatus || 'active',
       base_price_cents: Math.round(basePriceNumber * 100),
+      purchase_price_cents: purchasePriceNumber === null ? null : Math.round(purchasePriceNumber * 100),
+      member_price_cents: memberPriceNumber === null ? null : Math.round(memberPriceNumber * 100),
       tax_rate: taxRateNumber,
       sku_prefix: merchItemSkuPrefix.trim() || null,
+      storage_location: merchItemStorageLocation.trim() || null,
+      is_preorder: merchItemIsPreorder,
+      is_limited: merchItemIsLimited,
+      is_bestseller: merchItemIsBestseller,
+      is_new: merchItemIsNew,
+      is_clearance: merchItemIsClearance,
+      pickup_available: merchItemPickupAvailable,
+      shipping_available: merchItemShippingAvailable,
+      shipping_cost_cents: Math.round(shippingCostNumber * 100),
       is_public: merchItemIsPublic,
       public_sort_order: publicSortOrderNumber,
       public_title: merchItemPublicTitle.trim() || null,
@@ -5074,12 +5140,36 @@ export default function App() {
           setMerchItemStatus={setMerchItemStatus}
           merchItemBasePrice={merchItemBasePrice}
           setMerchItemBasePrice={setMerchItemBasePrice}
+          merchItemPurchasePrice={merchItemPurchasePrice}
+          setMerchItemPurchasePrice={setMerchItemPurchasePrice}
+          merchItemMemberPrice={merchItemMemberPrice}
+          setMerchItemMemberPrice={setMerchItemMemberPrice}
           merchItemTaxRate={merchItemTaxRate}
           setMerchItemTaxRate={setMerchItemTaxRate}
           merchItemSkuPrefix={merchItemSkuPrefix}
           setMerchItemSkuPrefix={setMerchItemSkuPrefix}
+          merchItemShortDescription={merchItemShortDescription}
+          setMerchItemShortDescription={setMerchItemShortDescription}
           merchItemDescription={merchItemDescription}
           setMerchItemDescription={setMerchItemDescription}
+          merchItemStorageLocation={merchItemStorageLocation}
+          setMerchItemStorageLocation={setMerchItemStorageLocation}
+          merchItemIsPreorder={merchItemIsPreorder}
+          setMerchItemIsPreorder={setMerchItemIsPreorder}
+          merchItemIsLimited={merchItemIsLimited}
+          setMerchItemIsLimited={setMerchItemIsLimited}
+          merchItemIsBestseller={merchItemIsBestseller}
+          setMerchItemIsBestseller={setMerchItemIsBestseller}
+          merchItemIsNew={merchItemIsNew}
+          setMerchItemIsNew={setMerchItemIsNew}
+          merchItemIsClearance={merchItemIsClearance}
+          setMerchItemIsClearance={setMerchItemIsClearance}
+          merchItemPickupAvailable={merchItemPickupAvailable}
+          setMerchItemPickupAvailable={setMerchItemPickupAvailable}
+          merchItemShippingAvailable={merchItemShippingAvailable}
+          setMerchItemShippingAvailable={setMerchItemShippingAvailable}
+          merchItemShippingCost={merchItemShippingCost}
+          setMerchItemShippingCost={setMerchItemShippingCost}
           merchItemIsPublic={merchItemIsPublic}
           setMerchItemIsPublic={setMerchItemIsPublic}
           merchItemPublicSortOrder={merchItemPublicSortOrder}

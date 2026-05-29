@@ -9,7 +9,7 @@ export const navigationItems = [
   ['documents', 'Dokumente'],
   ['media', 'Medien / Presse'],
   ['sponsors', 'Sponsoren'],
-  ['merch', 'Fanartikel'],
+  ['merch', 'Shop & Fanartikel'],
   ['inventory', 'Inventar'],
   ['admin', 'Admin / Export'],
 ]
