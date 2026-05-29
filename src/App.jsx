@@ -2290,7 +2290,7 @@ export default function App() {
     setShopOrderBuyerPhone(order.buyer_phone || '')
     setShopOrderStatus(order.status || 'new')
     setShopOrderPaymentStatus(order.payment_status || 'open')
-    setShopOrderPaymentMethod(order.payment_method || 'bar')
+    setShopOrderPaymentMethod(order.payment_method === 'pending' ? 'sonstiges' : order.payment_method || 'bar')
     setShopOrderDeliveryMethod(order.delivery_method || 'pickup')
     setShopOrderNotes(order.notes || '')
     setShopOrderInternalNotes(order.internal_notes || '')

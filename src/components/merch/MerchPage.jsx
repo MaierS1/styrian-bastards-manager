@@ -1375,6 +1375,7 @@ function getShopPaymentStatusLabel(status) {
 }
 
 function getShopPaymentMethodLabel(paymentMethod) {
+  if (paymentMethod === 'pending') return 'Ausstehend'
   if (paymentMethod === 'bar') return 'Bar'
   if (paymentMethod === 'ueberweisung') return 'Ueberweisung'
   if (paymentMethod === 'vereinskonto') return 'Vereinskonto'
