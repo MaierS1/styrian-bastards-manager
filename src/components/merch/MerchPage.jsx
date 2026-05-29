@@ -56,6 +56,8 @@ export function MerchPage({
   merchVariants,
   merchSales,
   merchSaleItems,
+  shopOrders,
+  shopOrderItems,
   invoices,
   invoiceCustomers,
   members,
@@ -181,15 +183,50 @@ export function MerchPage({
   setMerchSaleSendInvoiceEmail,
   merchSaleSaving,
   merchSaleCancellingId,
+  shopOrderEditingId,
+  shopOrderVariantId,
+  setShopOrderVariantId,
+  shopOrderQuantity,
+  setShopOrderQuantity,
+  shopOrderDiscount,
+  setShopOrderDiscount,
+  shopOrderShippingCost,
+  setShopOrderShippingCost,
+  shopOrderMemberId,
+  setShopOrderMemberId,
+  shopOrderBuyerName,
+  setShopOrderBuyerName,
+  shopOrderBuyerEmail,
+  setShopOrderBuyerEmail,
+  shopOrderBuyerPhone,
+  setShopOrderBuyerPhone,
+  shopOrderStatus,
+  setShopOrderStatus,
+  shopOrderPaymentStatus,
+  setShopOrderPaymentStatus,
+  shopOrderPaymentMethod,
+  setShopOrderPaymentMethod,
+  shopOrderDeliveryMethod,
+  setShopOrderDeliveryMethod,
+  shopOrderNotes,
+  setShopOrderNotes,
+  shopOrderInternalNotes,
+  setShopOrderInternalNotes,
+  shopOrderSaving,
   saveMerchSale,
+  saveShopOrder,
+  editShopOrder,
   cancelMerchSale,
   openMerchSaleInvoice,
   sendMerchSaleInvoice,
   resetMerchSaleForm,
+  resetShopOrderForm,
   getMerchSaleUnitPriceCents,
   getMerchSaleTotals,
+  getShopOrderTotals,
 }) {
   const saleTotals = getMerchSaleTotals()
+  const shopOrderTotals = getShopOrderTotals()
 
   return (
     <section style={sectionStyle}>
@@ -735,6 +772,44 @@ export function MerchPage({
           <button onClick={resetMerchSaleForm} style={secondaryButtonStyle}>
             Verkauf zurücksetzen
           </button>
+          <ShopOrderForm
+            shopOrderEditingId={shopOrderEditingId}
+            shopOrderVariantId={shopOrderVariantId}
+            setShopOrderVariantId={setShopOrderVariantId}
+            shopOrderQuantity={shopOrderQuantity}
+            setShopOrderQuantity={setShopOrderQuantity}
+            shopOrderDiscount={shopOrderDiscount}
+            setShopOrderDiscount={setShopOrderDiscount}
+            shopOrderShippingCost={shopOrderShippingCost}
+            setShopOrderShippingCost={setShopOrderShippingCost}
+            shopOrderMemberId={shopOrderMemberId}
+            setShopOrderMemberId={setShopOrderMemberId}
+            shopOrderBuyerName={shopOrderBuyerName}
+            setShopOrderBuyerName={setShopOrderBuyerName}
+            shopOrderBuyerEmail={shopOrderBuyerEmail}
+            setShopOrderBuyerEmail={setShopOrderBuyerEmail}
+            shopOrderBuyerPhone={shopOrderBuyerPhone}
+            setShopOrderBuyerPhone={setShopOrderBuyerPhone}
+            shopOrderStatus={shopOrderStatus}
+            setShopOrderStatus={setShopOrderStatus}
+            shopOrderPaymentStatus={shopOrderPaymentStatus}
+            setShopOrderPaymentStatus={setShopOrderPaymentStatus}
+            shopOrderPaymentMethod={shopOrderPaymentMethod}
+            setShopOrderPaymentMethod={setShopOrderPaymentMethod}
+            shopOrderDeliveryMethod={shopOrderDeliveryMethod}
+            setShopOrderDeliveryMethod={setShopOrderDeliveryMethod}
+            shopOrderNotes={shopOrderNotes}
+            setShopOrderNotes={setShopOrderNotes}
+            shopOrderInternalNotes={shopOrderInternalNotes}
+            setShopOrderInternalNotes={setShopOrderInternalNotes}
+            shopOrderSaving={shopOrderSaving}
+            saveShopOrder={saveShopOrder}
+            resetShopOrderForm={resetShopOrderForm}
+            shopOrderTotals={shopOrderTotals}
+            merchItems={merchItems}
+            merchVariants={merchVariants}
+            members={members}
+          />
         </>
       )}
 
@@ -742,6 +817,8 @@ export function MerchPage({
         Shop-Artikel: <strong>{merchItems.length}</strong>
         <br />
         Varianten: <strong>{merchVariants.length}</strong>
+        <br />
+        Bestellungen: <strong>{shopOrders.length}</strong>
         <br />
         Verkaeufe: <strong>{merchSales.length}</strong>
       </p>
@@ -777,7 +854,214 @@ export function MerchPage({
         openMerchSaleInvoice={openMerchSaleInvoice}
         sendMerchSaleInvoice={sendMerchSaleInvoice}
       />
+
+      <ShopOrdersList
+        shopOrders={shopOrders}
+        shopOrderItems={shopOrderItems}
+        members={members}
+        canManageMerch={canManageMerch}
+        editShopOrder={editShopOrder}
+      />
     </section>
+  )
+}
+
+function ShopOrderForm({
+  shopOrderEditingId,
+  shopOrderVariantId,
+  setShopOrderVariantId,
+  shopOrderQuantity,
+  setShopOrderQuantity,
+  shopOrderDiscount,
+  setShopOrderDiscount,
+  shopOrderShippingCost,
+  setShopOrderShippingCost,
+  shopOrderMemberId,
+  setShopOrderMemberId,
+  shopOrderBuyerName,
+  setShopOrderBuyerName,
+  shopOrderBuyerEmail,
+  setShopOrderBuyerEmail,
+  shopOrderBuyerPhone,
+  setShopOrderBuyerPhone,
+  shopOrderStatus,
+  setShopOrderStatus,
+  shopOrderPaymentStatus,
+  setShopOrderPaymentStatus,
+  shopOrderPaymentMethod,
+  setShopOrderPaymentMethod,
+  shopOrderDeliveryMethod,
+  setShopOrderDeliveryMethod,
+  shopOrderNotes,
+  setShopOrderNotes,
+  shopOrderInternalNotes,
+  setShopOrderInternalNotes,
+  shopOrderSaving,
+  saveShopOrder,
+  resetShopOrderForm,
+  shopOrderTotals,
+  merchItems,
+  merchVariants,
+  members,
+}) {
+  return (
+    <>
+      <h3 style={headingStyle}>{shopOrderEditingId ? 'Shop-Bestellung bearbeiten' : 'Shop-Bestellung anlegen'}</h3>
+      <div style={{ ...cardStyle, background: colors.infoBg, borderColor: colors.blue }}>
+        <strong>Bestellsystem</strong>
+        <p style={mutedTextStyle}>
+          Bezahlte Bestellungen erzeugen automatisch eine Einnahme in der Kassa mit Kategorie Fanartikel.
+          Position und Menge werden beim Bearbeiten nicht geaendert, damit Lagerbewegungen nachvollziehbar bleiben.
+        </p>
+      </div>
+
+      <select
+        value={shopOrderVariantId}
+        onChange={(event) => setShopOrderVariantId(event.target.value)}
+        disabled={Boolean(shopOrderEditingId)}
+        style={inputStyle}
+      >
+        <option value="">Variante auswÃ¤hlen</option>
+        {merchVariants.filter((variant) => {
+          const item = merchItems.find((merchItem) => merchItem.id === variant.merch_item_id)
+          return shopOrderEditingId || (variant.status === 'active' && item?.status === 'active')
+        }).map((variant) => {
+          const item = merchItems.find((merchItem) => merchItem.id === variant.merch_item_id)
+          const variantLabel = [variant.variant_name, variant.size, variant.color, variant.sku]
+            .filter(Boolean)
+            .join(' / ')
+
+          return (
+            <option key={variant.id} value={variant.id}>
+              {item?.name || 'Fanartikel'} - {variantLabel || 'Variante'} - Bestand: {Number(variant.stock_quantity || 0)}
+            </option>
+          )
+        })}
+      </select>
+
+      <div style={formGridStyle}>
+        <input
+          type="number"
+          min="1"
+          step="1"
+          placeholder="Menge"
+          value={shopOrderQuantity}
+          onChange={(event) => setShopOrderQuantity(event.target.value)}
+          disabled={Boolean(shopOrderEditingId)}
+          style={inputStyle}
+        />
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Rabatt in EUR"
+          value={shopOrderDiscount}
+          onChange={(event) => setShopOrderDiscount(event.target.value)}
+          disabled={Boolean(shopOrderEditingId)}
+          style={inputStyle}
+        />
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Versandkosten in EUR"
+          value={shopOrderShippingCost}
+          onChange={(event) => setShopOrderShippingCost(event.target.value)}
+          disabled={Boolean(shopOrderEditingId)}
+          style={inputStyle}
+        />
+      </div>
+
+      <div style={formGridStyle}>
+        <select value={shopOrderMemberId} onChange={(event) => setShopOrderMemberId(event.target.value)} style={inputStyle}>
+          <option value="">Kein Mitglied zuordnen</option>
+          {members.map((member) => (
+            <option key={member.id} value={member.id}>
+              {`${member.first_name || ''} ${member.last_name || ''}`.trim() || member.email || member.id}
+            </option>
+          ))}
+        </select>
+        <input
+          placeholder="Kaufer Freitext"
+          value={shopOrderBuyerName}
+          onChange={(event) => setShopOrderBuyerName(event.target.value)}
+          style={inputStyle}
+        />
+        <input
+          placeholder="E-Mail"
+          value={shopOrderBuyerEmail}
+          onChange={(event) => setShopOrderBuyerEmail(event.target.value)}
+          style={inputStyle}
+        />
+        <input
+          placeholder="Telefon"
+          value={shopOrderBuyerPhone}
+          onChange={(event) => setShopOrderBuyerPhone(event.target.value)}
+          style={inputStyle}
+        />
+      </div>
+
+      <div style={formGridStyle}>
+        <select value={shopOrderStatus} onChange={(event) => setShopOrderStatus(event.target.value)} style={inputStyle}>
+          <option value="new">Neu</option>
+          <option value="processing">In Bearbeitung</option>
+          <option value="ready_for_pickup">Bereit zur Abholung</option>
+          <option value="shipped">Versendet</option>
+          <option value="completed">Abgeschlossen</option>
+          <option value="cancelled">Storniert</option>
+        </select>
+        <select value={shopOrderPaymentStatus} onChange={(event) => setShopOrderPaymentStatus(event.target.value)} style={inputStyle}>
+          <option value="open">Offen</option>
+          <option value="partially_paid">Teilweise bezahlt</option>
+          <option value="paid">Bezahlt</option>
+          <option value="refunded">RÃ¼ckerstattet</option>
+          <option value="cancelled">Storniert</option>
+        </select>
+        <select value={shopOrderPaymentMethod} onChange={(event) => setShopOrderPaymentMethod(event.target.value)} style={inputStyle}>
+          <option value="bar">Bar</option>
+          <option value="ueberweisung">Ãœberweisung</option>
+          <option value="vereinskonto">Vereinskonto</option>
+          <option value="sonstiges">Sonstiges</option>
+        </select>
+        <select value={shopOrderDeliveryMethod} onChange={(event) => setShopOrderDeliveryMethod(event.target.value)} style={inputStyle}>
+          <option value="pickup">Abholung</option>
+          <option value="shipping">Versand</option>
+          <option value="mixed">Abholung und Versand</option>
+        </select>
+      </div>
+
+      <textarea
+        placeholder="Hinweise fuer Bestellung"
+        value={shopOrderNotes}
+        onChange={(event) => setShopOrderNotes(event.target.value)}
+        style={textareaStyle}
+      />
+      <textarea
+        placeholder="Interne Notizen"
+        value={shopOrderInternalNotes}
+        onChange={(event) => setShopOrderInternalNotes(event.target.value)}
+        style={textareaStyle}
+      />
+
+      <p style={mutedTextStyle}>
+        Einzelpreis: <strong>{formatAmount(shopOrderTotals.unitPriceCents)}</strong>
+        <br />
+        Zwischensumme: <strong>{formatAmount(shopOrderTotals.subtotalCents)}</strong>
+        <br />
+        Rabatt: <strong>{formatAmount(shopOrderTotals.discountCents)}</strong>
+        <br />
+        Versand: <strong>{formatAmount(shopOrderTotals.shippingCostCents)}</strong>
+        <br />
+        Gesamt: <strong>{formatAmount(shopOrderTotals.totalCents)}</strong>
+      </p>
+
+      <button onClick={saveShopOrder} disabled={shopOrderSaving} style={buttonStyle}>
+        {shopOrderSaving ? 'Bestellung wird gespeichert...' : shopOrderEditingId ? 'Bestellung speichern' : 'Bestellung anlegen'}
+      </button>
+      <button onClick={resetShopOrderForm} style={secondaryButtonStyle}>
+        Bestellung zurÃ¼cksetzen
+      </button>
+    </>
   )
 }
 
@@ -987,6 +1271,122 @@ function getCtaLabel(item) {
   const url = item.public_cta_url || '-'
 
   return `${label} - ${url}`
+}
+
+function ShopOrdersList({
+  shopOrders,
+  shopOrderItems,
+  members,
+  canManageMerch,
+  editShopOrder,
+}) {
+  if (shopOrders.length === 0) {
+    return <p style={mutedTextStyle}>Noch keine Shop-Bestellungen erfasst.</p>
+  }
+
+  return (
+    <>
+      <h3 style={headingStyle}>Shop-Bestellungen</h3>
+      {shopOrders.map((order) => {
+        const member = members.find((item) => item.id === order.member_id)
+        const orderItems = shopOrderItems.filter((item) => item.shop_order_id === order.id)
+
+        return (
+          <div key={order.id} style={cardStyle}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <strong>{order.order_number || order.id}</strong>
+              <span style={badgeStyle}>{getShopOrderStatusLabel(order.status)}</span>
+              <span style={badgeStyle}>{getShopPaymentStatusLabel(order.payment_status)}</span>
+              {order.cash_entry_id && <span style={badgeStyle}>Kassa gebucht</span>}
+            </div>
+            <p style={mutedTextStyle}>
+              Datum: <strong>{order.order_date || '-'}</strong>
+              <br />
+              Kaufer: <strong>{getBuyerLabel(order, member)}</strong>
+              <br />
+              Zahlung: <strong>{getShopPaymentMethodLabel(order.payment_method)}</strong> - Ausgabe:{' '}
+              <strong>{getDeliveryMethodLabel(order.delivery_method)}</strong>
+              <br />
+              Rabatt: <strong>{formatAmount(order.discount_cents)}</strong> - Versand:{' '}
+              <strong>{formatAmount(order.shipping_cost_cents)}</strong> - Gesamt:{' '}
+              <strong>{formatAmount(order.total_cents)}</strong>
+            </p>
+            <ShopOrderItemsList orderItems={orderItems} />
+            {(order.notes || order.internal_notes) && (
+              <p style={mutedTextStyle}>
+                Hinweis: {order.notes || '-'}
+                <br />
+                Intern: {order.internal_notes || '-'}
+              </p>
+            )}
+            {canManageMerch() && (
+              <button onClick={() => editShopOrder(order)} style={buttonStyle}>
+                Bestellung bearbeiten
+              </button>
+            )}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+function ShopOrderItemsList({ orderItems }) {
+  if (orderItems.length === 0) {
+    return <p style={mutedTextStyle}>Keine Positionen geladen.</p>
+  }
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      {orderItems.map((item) => {
+        const variantLabel = [item.variant_name, item.size, item.color, item.sku].filter(Boolean).join(' / ')
+
+        return (
+          <div key={item.id} style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 8, marginTop: 8 }}>
+            <strong>{item.item_number ? `${item.item_number} - ${item.item_name}` : item.item_name}</strong>
+            <br />
+            {variantLabel || 'Variante'} - Menge: {item.quantity}
+            <br />
+            Einzelpreis: {formatAmount(item.unit_price_cents)} - Summe: {formatAmount(item.total_cents)}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function getShopOrderStatusLabel(status) {
+  if (status === 'new') return 'Neu'
+  if (status === 'processing') return 'In Bearbeitung'
+  if (status === 'ready_for_pickup') return 'Bereit zur Abholung'
+  if (status === 'shipped') return 'Versendet'
+  if (status === 'completed') return 'Abgeschlossen'
+  if (status === 'cancelled') return 'Storniert'
+  return status || '-'
+}
+
+function getShopPaymentStatusLabel(status) {
+  if (status === 'open') return 'Offen'
+  if (status === 'partially_paid') return 'Teilweise bezahlt'
+  if (status === 'paid') return 'Bezahlt'
+  if (status === 'refunded') return 'RÃ¼ckerstattet'
+  if (status === 'cancelled') return 'Storniert'
+  return status || '-'
+}
+
+function getShopPaymentMethodLabel(paymentMethod) {
+  if (paymentMethod === 'bar') return 'Bar'
+  if (paymentMethod === 'ueberweisung') return 'Ueberweisung'
+  if (paymentMethod === 'vereinskonto') return 'Vereinskonto'
+  if (paymentMethod === 'sonstiges') return 'Sonstiges'
+  return paymentMethod || '-'
+}
+
+function getDeliveryMethodLabel(deliveryMethod) {
+  if (deliveryMethod === 'pickup') return 'Abholung'
+  if (deliveryMethod === 'shipping') return 'Versand'
+  if (deliveryMethod === 'mixed') return 'Abholung und Versand'
+  return deliveryMethod || '-'
 }
 
 function MerchSalesList({

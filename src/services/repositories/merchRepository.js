@@ -31,6 +31,21 @@ export async function fetchMerchSaleItems() {
     .order('created_at', { ascending: true })
 }
 
+export async function fetchShopOrders() {
+  return supabase
+    .from('shop_orders')
+    .select('*')
+    .order('order_date', { ascending: false })
+    .order('created_at', { ascending: false })
+}
+
+export async function fetchShopOrderItems() {
+  return supabase
+    .from('shop_order_items')
+    .select('*')
+    .order('created_at', { ascending: true })
+}
+
 export async function saveMerchItemRecord({
   merchItemEditingId,
   payload,
@@ -258,4 +273,73 @@ export async function cancelMerchSaleRecord({
   alertFn('Fanartikel-Verkauf wurde storniert.')
 
   return { ok: true, sale: data }
+}
+
+export async function createShopOrderRecord({
+  rpcPayload,
+  createAuditLog,
+  loadShopOrders,
+  loadShopOrderItems,
+  loadMerchVariants,
+  loadCashEntries,
+  resetShopOrderForm,
+  alertFn = alert,
+}) {
+  const { data, error } = await supabase
+    .rpc('create_shop_order', rpcPayload)
+    .single()
+
+  if (error) return { error }
+
+  await createAuditLog('insert', 'shop_orders', data?.shop_order_id, null, {
+    rpc: 'create_shop_order',
+    result: data,
+  })
+
+  resetShopOrderForm()
+  await loadShopOrders()
+  await loadShopOrderItems()
+  await loadMerchVariants()
+
+  if (data?.cash_entry_id) {
+    await loadCashEntries()
+  }
+
+  alertFn('Shop-Bestellung wurde gespeichert.')
+
+  return { ok: true, order: data }
+}
+
+export async function updateShopOrderRecord({
+  rpcPayload,
+  shopOrders,
+  createAuditLog,
+  loadShopOrders,
+  loadCashEntries,
+  resetShopOrderForm,
+  alertFn = alert,
+}) {
+  const oldOrder = shopOrders.find((order) => order.id === rpcPayload.p_shop_order_id)
+
+  const { data, error } = await supabase
+    .rpc('update_shop_order', rpcPayload)
+    .single()
+
+  if (error) return { error }
+
+  await createAuditLog('update', 'shop_orders', data?.shop_order_id, oldOrder, {
+    rpc: 'update_shop_order',
+    result: data,
+  })
+
+  resetShopOrderForm()
+  await loadShopOrders()
+
+  if (data?.cash_entry_id && data.cash_entry_id !== oldOrder?.cash_entry_id) {
+    await loadCashEntries()
+  }
+
+  alertFn('Shop-Bestellung wurde aktualisiert.')
+
+  return { ok: true, order: data }
 }

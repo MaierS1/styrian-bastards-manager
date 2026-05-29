@@ -89,6 +89,8 @@ import {
   loadMerchSales as loadMerchSalesService,
   loadMerchVariants as loadMerchVariantsService,
   loadMembers as loadMembersService,
+  loadShopOrderItems as loadShopOrderItemsService,
+  loadShopOrders as loadShopOrdersService,
   loadSponsorContracts as loadSponsorContractsService,
   loadSponsors as loadSponsorsService,
 } from './services/loaders/appLoaders'
@@ -216,12 +218,14 @@ import {
 } from './services/repositories/sponsorsRepository'
 import {
   cancelMerchSaleRecord,
+  createShopOrderRecord,
   createMerchSaleWithInvoiceRecord,
   createMerchSaleWithItemRecord,
   deleteMerchItemRecord,
   deleteMerchVariantRecord,
   saveMerchItemRecord,
   saveMerchVariantRecord,
+  updateShopOrderRecord,
 } from './services/repositories/merchRepository'
 import { SponsorsPage } from './components/sponsors/SponsorsPage'
 import { MerchPage } from './components/merch/MerchPage'
@@ -255,6 +259,8 @@ export default function App() {
   const [merchVariants, setMerchVariants] = useState([])
   const [merchSales, setMerchSales] = useState([])
   const [merchSaleItems, setMerchSaleItems] = useState([])
+  const [shopOrders, setShopOrders] = useState([])
+  const [shopOrderItems, setShopOrderItems] = useState([])
 
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
   const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
@@ -470,6 +476,22 @@ export default function App() {
   const [merchSaleSendInvoiceEmail, setMerchSaleSendInvoiceEmail] = useState(false)
   const [merchSaleSaving, setMerchSaleSaving] = useState(false)
   const [merchSaleCancellingId, setMerchSaleCancellingId] = useState(null)
+  const [shopOrderEditingId, setShopOrderEditingId] = useState(null)
+  const [shopOrderVariantId, setShopOrderVariantId] = useState('')
+  const [shopOrderQuantity, setShopOrderQuantity] = useState('1')
+  const [shopOrderDiscount, setShopOrderDiscount] = useState('')
+  const [shopOrderShippingCost, setShopOrderShippingCost] = useState('')
+  const [shopOrderMemberId, setShopOrderMemberId] = useState('')
+  const [shopOrderBuyerName, setShopOrderBuyerName] = useState('')
+  const [shopOrderBuyerEmail, setShopOrderBuyerEmail] = useState('')
+  const [shopOrderBuyerPhone, setShopOrderBuyerPhone] = useState('')
+  const [shopOrderStatus, setShopOrderStatus] = useState('new')
+  const [shopOrderPaymentStatus, setShopOrderPaymentStatus] = useState('open')
+  const [shopOrderPaymentMethod, setShopOrderPaymentMethod] = useState('bar')
+  const [shopOrderDeliveryMethod, setShopOrderDeliveryMethod] = useState('pickup')
+  const [shopOrderNotes, setShopOrderNotes] = useState('')
+  const [shopOrderInternalNotes, setShopOrderInternalNotes] = useState('')
+  const [shopOrderSaving, setShopOrderSaving] = useState(false)
 
   const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
@@ -565,6 +587,8 @@ export default function App() {
       loadMerchVariantsFn: () => loadMerchVariantsService({ setMerchVariants }),
       loadMerchSalesFn: () => loadMerchSalesService({ setMerchSales }),
       loadMerchSaleItemsFn: () => loadMerchSaleItemsService({ setMerchSaleItems }),
+      loadShopOrdersFn: () => loadShopOrdersService({ setShopOrders }),
+      loadShopOrderItemsFn: () => loadShopOrderItemsService({ setShopOrderItems }),
     })
   }, [])
 
@@ -1000,6 +1024,18 @@ export default function App() {
   async function loadMerchSaleItems() {
     return loadMerchSaleItemsService({
       setMerchSaleItems,
+    })
+  }
+
+  async function loadShopOrders() {
+    return loadShopOrdersService({
+      setShopOrders,
+    })
+  }
+
+  async function loadShopOrderItems() {
+    return loadShopOrderItemsService({
+      setShopOrderItems,
     })
   }
 
@@ -2013,6 +2049,24 @@ export default function App() {
     setMerchSaleSendInvoiceEmail(false)
   }
 
+  function resetShopOrderForm() {
+    setShopOrderEditingId(null)
+    setShopOrderVariantId('')
+    setShopOrderQuantity('1')
+    setShopOrderDiscount('')
+    setShopOrderShippingCost('')
+    setShopOrderMemberId('')
+    setShopOrderBuyerName('')
+    setShopOrderBuyerEmail('')
+    setShopOrderBuyerPhone('')
+    setShopOrderStatus('new')
+    setShopOrderPaymentStatus('open')
+    setShopOrderPaymentMethod('bar')
+    setShopOrderDeliveryMethod('pickup')
+    setShopOrderNotes('')
+    setShopOrderInternalNotes('')
+  }
+
   function getMerchSaleUnitPriceCents(variantId = merchSaleVariantId) {
     const variant = merchVariants.find((item) => item.id === variantId)
 
@@ -2180,6 +2234,178 @@ export default function App() {
       subtotalCents,
       discountCents,
       totalCents: Math.max(0, subtotalCents - discountCents),
+    }
+  }
+
+  function getShopOrderUnitPriceCents(variantId = shopOrderVariantId) {
+    return getMerchSaleUnitPriceCents(variantId)
+  }
+
+  function getShopOrderSelectedVariant() {
+    return merchVariants.find((variant) => variant.id === shopOrderVariantId) || null
+  }
+
+  function getShopOrderTotals() {
+    const quantity = shopOrderQuantity ? Number(shopOrderQuantity) : 0
+    const discount = shopOrderDiscount ? Number(String(shopOrderDiscount).replace(',', '.')) : 0
+    const shipping = shopOrderShippingCost ? Number(String(shopOrderShippingCost).replace(',', '.')) : 0
+    const unitPriceCents = getShopOrderUnitPriceCents()
+    const subtotalCents = Number.isFinite(quantity) ? quantity * unitPriceCents : 0
+    const discountCents = Number.isFinite(discount) ? Math.round(discount * 100) : 0
+    const shippingCostCents = Number.isFinite(shipping) ? Math.round(shipping * 100) : 0
+
+    return {
+      unitPriceCents,
+      subtotalCents,
+      discountCents,
+      shippingCostCents,
+      totalCents: Math.max(0, subtotalCents - discountCents + shippingCostCents),
+    }
+  }
+
+  function getShopOrderErrorMessage(error) {
+    const message = error?.message || 'Shop-Bestellung konnte nicht gespeichert werden.'
+    const stockMatch = message.match(/not enough stock.*available\s+(\d+),\s+requested\s+(\d+)/i)
+
+    if (stockMatch) {
+      return `Nicht genug Bestand verfugbar. Verfugbar: ${stockMatch[1]}, angefragt: ${stockMatch[2]}.`
+    }
+
+    return message
+  }
+
+  function editShopOrder(order) {
+    if (!canManageMerch()) return alert('Keine Berechtigung für Shop-Bestellungen.')
+
+    const orderItem = shopOrderItems.find((item) => item.shop_order_id === order.id)
+
+    setShopOrderEditingId(order.id)
+    setShopOrderVariantId(orderItem?.merch_variant_id || '')
+    setShopOrderQuantity(orderItem?.quantity ? String(orderItem.quantity) : '1')
+    setShopOrderDiscount(order.discount_cents ? String((Number(order.discount_cents) / 100).toFixed(2)) : '')
+    setShopOrderShippingCost(order.shipping_cost_cents ? String((Number(order.shipping_cost_cents) / 100).toFixed(2)) : '')
+    setShopOrderMemberId(order.member_id || '')
+    setShopOrderBuyerName(order.buyer_name || '')
+    setShopOrderBuyerEmail(order.buyer_email || '')
+    setShopOrderBuyerPhone(order.buyer_phone || '')
+    setShopOrderStatus(order.status || 'new')
+    setShopOrderPaymentStatus(order.payment_status || 'open')
+    setShopOrderPaymentMethod(order.payment_method || 'bar')
+    setShopOrderDeliveryMethod(order.delivery_method || 'pickup')
+    setShopOrderNotes(order.notes || '')
+    setShopOrderInternalNotes(order.internal_notes || '')
+
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveShopOrder() {
+    if (!canManageMerch()) return alert('Keine Berechtigung für Shop-Bestellungen.')
+    if (shopOrderSaving) return
+
+    const isEditing = Boolean(shopOrderEditingId)
+    const variant = getShopOrderSelectedVariant()
+
+    if (!isEditing && !variant) {
+      alert('Variante ist Pflicht.')
+      return
+    }
+
+    if (!isEditing && variant.status !== 'active') {
+      alert('Diese Variante ist nicht für Bestellungen aktiv.')
+      return
+    }
+
+    const quantity = shopOrderQuantity ? Number(shopOrderQuantity) : 0
+
+    if (!isEditing && (!Number.isInteger(quantity) || quantity <= 0)) {
+      alert('Menge muss eine ganze positive Zahl sein.')
+      return
+    }
+
+    if (!isEditing && Number(variant.stock_quantity || 0) < quantity) {
+      alert(`Nicht genug Bestand verfugbar. Verfugbar: ${Number(variant.stock_quantity || 0)}, angefragt: ${quantity}.`)
+      return
+    }
+
+    const discount = shopOrderDiscount ? Number(String(shopOrderDiscount).replace(',', '.')) : 0
+    const shipping = shopOrderShippingCost ? Number(String(shopOrderShippingCost).replace(',', '.')) : 0
+
+    if (Number.isNaN(discount) || discount < 0) {
+      alert('Rabatt muss eine positive Zahl sein.')
+      return
+    }
+
+    if (Number.isNaN(shipping) || shipping < 0) {
+      alert('Versandkosten müssen eine positive Zahl sein.')
+      return
+    }
+
+    const totals = getShopOrderTotals()
+
+    if (!isEditing && totals.discountCents > totals.subtotalCents) {
+      alert('Rabatt darf nicht hoher als die Zwischensumme sein.')
+      return
+    }
+
+    const orderDate = getLocalDateString()
+    const receiptNumber = shopOrderPaymentStatus === 'paid'
+      ? getNextReceiptNumber(Number(orderDate.slice(0, 4)))
+      : null
+
+    const basePayload = {
+      p_status: shopOrderStatus,
+      p_payment_status: shopOrderPaymentStatus,
+      p_payment_method: shopOrderPaymentMethod,
+      p_delivery_method: shopOrderDeliveryMethod,
+      p_member_id: shopOrderMemberId || null,
+      p_buyer_name: shopOrderBuyerName.trim() || null,
+      p_buyer_email: shopOrderBuyerEmail.trim() || null,
+      p_buyer_phone: shopOrderBuyerPhone.trim() || null,
+      p_notes: shopOrderNotes.trim() || null,
+      p_internal_notes: shopOrderInternalNotes.trim() || null,
+      p_receipt_number: receiptNumber,
+    }
+
+    setShopOrderSaving(true)
+
+    try {
+      const result = isEditing
+        ? await updateShopOrderRecord({
+          rpcPayload: {
+            p_shop_order_id: shopOrderEditingId,
+            ...basePayload,
+          },
+          shopOrders,
+          createAuditLog,
+          loadShopOrders,
+          loadCashEntries,
+          resetShopOrderForm,
+        })
+        : await createShopOrderRecord({
+          rpcPayload: {
+            p_merch_variant_id: variant.id,
+            p_quantity: quantity,
+            p_unit_price_cents: totals.unitPriceCents,
+            p_discount_cents: totals.discountCents,
+            p_shipping_cost_cents: totals.shippingCostCents,
+            p_order_date: orderDate,
+            ...basePayload,
+          },
+          createAuditLog,
+          loadShopOrders,
+          loadShopOrderItems,
+          loadMerchVariants,
+          loadCashEntries,
+          resetShopOrderForm,
+        })
+
+      if (result?.error) {
+        alert(getShopOrderErrorMessage(result.error))
+      }
+    } catch (error) {
+      alert(getShopOrderErrorMessage(error))
+    } finally {
+      setShopOrderSaving(false)
     }
   }
 
@@ -5122,6 +5348,8 @@ export default function App() {
           merchVariants={merchVariants}
           merchSales={merchSales}
           merchSaleItems={merchSaleItems}
+          shopOrders={shopOrders}
+          shopOrderItems={shopOrderItems}
           invoices={invoices}
           invoiceCustomers={invoiceCustomers}
           members={members}
@@ -5247,13 +5475,47 @@ export default function App() {
           setMerchSaleSendInvoiceEmail={setMerchSaleSendInvoiceEmail}
           merchSaleSaving={merchSaleSaving}
           merchSaleCancellingId={merchSaleCancellingId}
+          shopOrderEditingId={shopOrderEditingId}
+          shopOrderVariantId={shopOrderVariantId}
+          setShopOrderVariantId={setShopOrderVariantId}
+          shopOrderQuantity={shopOrderQuantity}
+          setShopOrderQuantity={setShopOrderQuantity}
+          shopOrderDiscount={shopOrderDiscount}
+          setShopOrderDiscount={setShopOrderDiscount}
+          shopOrderShippingCost={shopOrderShippingCost}
+          setShopOrderShippingCost={setShopOrderShippingCost}
+          shopOrderMemberId={shopOrderMemberId}
+          setShopOrderMemberId={setShopOrderMemberId}
+          shopOrderBuyerName={shopOrderBuyerName}
+          setShopOrderBuyerName={setShopOrderBuyerName}
+          shopOrderBuyerEmail={shopOrderBuyerEmail}
+          setShopOrderBuyerEmail={setShopOrderBuyerEmail}
+          shopOrderBuyerPhone={shopOrderBuyerPhone}
+          setShopOrderBuyerPhone={setShopOrderBuyerPhone}
+          shopOrderStatus={shopOrderStatus}
+          setShopOrderStatus={setShopOrderStatus}
+          shopOrderPaymentStatus={shopOrderPaymentStatus}
+          setShopOrderPaymentStatus={setShopOrderPaymentStatus}
+          shopOrderPaymentMethod={shopOrderPaymentMethod}
+          setShopOrderPaymentMethod={setShopOrderPaymentMethod}
+          shopOrderDeliveryMethod={shopOrderDeliveryMethod}
+          setShopOrderDeliveryMethod={setShopOrderDeliveryMethod}
+          shopOrderNotes={shopOrderNotes}
+          setShopOrderNotes={setShopOrderNotes}
+          shopOrderInternalNotes={shopOrderInternalNotes}
+          setShopOrderInternalNotes={setShopOrderInternalNotes}
+          shopOrderSaving={shopOrderSaving}
           saveMerchSale={saveMerchSale}
+          saveShopOrder={saveShopOrder}
+          editShopOrder={editShopOrder}
           cancelMerchSale={cancelMerchSale}
           openMerchSaleInvoice={openMerchSaleInvoice}
           sendMerchSaleInvoice={sendMerchSaleInvoice}
           resetMerchSaleForm={resetMerchSaleForm}
+          resetShopOrderForm={resetShopOrderForm}
           getMerchSaleUnitPriceCents={getMerchSaleUnitPriceCents}
           getMerchSaleTotals={getMerchSaleTotals}
+          getShopOrderTotals={getShopOrderTotals}
         />
       )}
 

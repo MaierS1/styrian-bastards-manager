@@ -14,6 +14,8 @@ import {
   fetchMerchSaleItems,
   fetchMerchSales,
   fetchMerchVariants,
+  fetchShopOrderItems,
+  fetchShopOrders,
 } from '../repositories/merchRepository'
 import { fetchSponsorContracts, fetchSponsors } from '../repositories/sponsorsRepository'
 
@@ -224,6 +226,28 @@ export async function loadMerchSaleItems({ setMerchSaleItems }) {
   setMerchSaleItems(data || [])
 }
 
+export async function loadShopOrders({ setShopOrders }) {
+  const { data, error } = await fetchShopOrders()
+
+  if (error) {
+    console.warn(error.message)
+    return
+  }
+
+  setShopOrders(data || [])
+}
+
+export async function loadShopOrderItems({ setShopOrderItems }) {
+  const { data, error } = await fetchShopOrderItems()
+
+  if (error) {
+    console.warn(error.message)
+    return
+  }
+
+  setShopOrderItems(data || [])
+}
+
 export async function loadAll({
   loadMembersFn,
   loadFeesFn,
@@ -244,6 +268,8 @@ export async function loadAll({
   loadMerchVariantsFn,
   loadMerchSalesFn,
   loadMerchSaleItemsFn,
+  loadShopOrdersFn,
+  loadShopOrderItemsFn,
 }) {
   const loaders = [
     loadMembersFn(),
@@ -267,6 +293,8 @@ export async function loadAll({
   if (loadMerchVariantsFn) loaders.push(loadMerchVariantsFn())
   if (loadMerchSalesFn) loaders.push(loadMerchSalesFn())
   if (loadMerchSaleItemsFn) loaders.push(loadMerchSaleItemsFn())
+  if (loadShopOrdersFn) loaders.push(loadShopOrdersFn())
+  if (loadShopOrderItemsFn) loaders.push(loadShopOrderItemsFn())
 
   await Promise.all(loaders)
 }
