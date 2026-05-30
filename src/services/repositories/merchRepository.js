@@ -343,3 +343,31 @@ export async function updateShopOrderRecord({
 
   return { ok: true, order: data }
 }
+
+export async function deleteOpenMerchOrderRecord({
+  order,
+  shopOrders,
+  createAuditLog,
+  loadShopOrders,
+  loadShopOrderItems,
+  alertFn = alert,
+}) {
+  const oldOrder = shopOrders.find((item) => item.id === order.id) || order
+
+  const { data, error } = await supabase
+    .rpc('delete_open_merch_order', { p_shop_order_id: order.id })
+    .single()
+
+  if (error) return { error }
+
+  await createAuditLog('delete', 'shop_orders', data?.shop_order_id || order.id, oldOrder, {
+    rpc: 'delete_open_merch_order',
+    result: data,
+  })
+
+  await loadShopOrders()
+  await loadShopOrderItems()
+  alertFn('Offene Bestellung wurde gelöscht.')
+
+  return { ok: true, order: data }
+}

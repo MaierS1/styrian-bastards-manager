@@ -222,6 +222,7 @@ import {
   createMerchSaleWithInvoiceRecord,
   createMerchSaleWithItemRecord,
   deleteMerchItemRecord,
+  deleteOpenMerchOrderRecord,
   deleteMerchVariantRecord,
   saveMerchItemRecord,
   saveMerchVariantRecord,
@@ -501,6 +502,7 @@ export default function App() {
   const [shopOrderNotes, setShopOrderNotes] = useState('')
   const [shopOrderInternalNotes, setShopOrderInternalNotes] = useState('')
   const [shopOrderSaving, setShopOrderSaving] = useState(false)
+  const [shopOrderDeletingId, setShopOrderDeletingId] = useState(null)
 
   const [selectedInvoiceCustomerId, setSelectedInvoiceCustomerId] = useState('')
   const [invoiceCustomerName, setInvoiceCustomerName] = useState('')
@@ -2283,6 +2285,24 @@ export default function App() {
     return message
   }
 
+  function getShopOrderDeleteErrorMessage(error) {
+    const message = error?.message || 'Shop-Bestellung konnte nicht geloescht werden.'
+
+    if (/permission denied/i.test(message)) {
+      return 'Keine Berechtigung zum Löschen von Shop-Bestellungen.'
+    }
+
+    if (/Nur offene Shop-Bestellungen/i.test(message)) {
+      return 'Nur offene Bestellungen können gelöscht werden.'
+    }
+
+    if (/Kassa-Eintrag/i.test(message)) {
+      return 'Diese Bestellung ist bereits mit der Kassa verknüpft und kann nicht gelöscht werden.'
+    }
+
+    return message
+  }
+
   function editShopOrder(order) {
     if (!canManageMerch()) return alert('Keine Berechtigung für Shop-Bestellungen.')
 
@@ -2415,6 +2435,37 @@ export default function App() {
       alert(getShopOrderErrorMessage(error))
     } finally {
       setShopOrderSaving(false)
+    }
+  }
+
+  async function deleteShopOrder(order) {
+    if (!canManageMerch()) return alert('Keine Berechtigung für Shop-Bestellungen.')
+    if (shopOrderDeletingId) return
+
+    const confirmed = window.confirm(
+      'Offene Bestellung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.'
+    )
+
+    if (!confirmed) return
+
+    setShopOrderDeletingId(order.id)
+
+    try {
+      const result = await deleteOpenMerchOrderRecord({
+        order,
+        shopOrders,
+        createAuditLog,
+        loadShopOrders,
+        loadShopOrderItems,
+      })
+
+      if (result?.error) {
+        alert(getShopOrderDeleteErrorMessage(result.error))
+      }
+    } catch (error) {
+      alert(getShopOrderDeleteErrorMessage(error))
+    } finally {
+      setShopOrderDeletingId(null)
     }
   }
 
@@ -5567,9 +5618,11 @@ export default function App() {
           shopOrderInternalNotes={shopOrderInternalNotes}
           setShopOrderInternalNotes={setShopOrderInternalNotes}
           shopOrderSaving={shopOrderSaving}
+          shopOrderDeletingId={shopOrderDeletingId}
           saveMerchSale={saveMerchSale}
           saveShopOrder={saveShopOrder}
           editShopOrder={editShopOrder}
+          deleteShopOrder={deleteShopOrder}
           cancelMerchSale={cancelMerchSale}
           openMerchSaleInvoice={openMerchSaleInvoice}
           sendMerchSaleInvoice={sendMerchSaleInvoice}

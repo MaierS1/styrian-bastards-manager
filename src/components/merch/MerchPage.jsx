@@ -213,9 +213,11 @@ export function MerchPage({
   shopOrderInternalNotes,
   setShopOrderInternalNotes,
   shopOrderSaving,
+  shopOrderDeletingId,
   saveMerchSale,
   saveShopOrder,
   editShopOrder,
+  deleteShopOrder,
   cancelMerchSale,
   openMerchSaleInvoice,
   sendMerchSaleInvoice,
@@ -861,6 +863,8 @@ export function MerchPage({
         members={members}
         canManageMerch={canManageMerch}
         editShopOrder={editShopOrder}
+        deleteShopOrder={deleteShopOrder}
+        shopOrderDeletingId={shopOrderDeletingId}
       />
     </section>
   )
@@ -1279,6 +1283,8 @@ function ShopOrdersList({
   members,
   canManageMerch,
   editShopOrder,
+  deleteShopOrder,
+  shopOrderDeletingId,
 }) {
   if (shopOrders.length === 0) {
     return <p style={mutedTextStyle}>Noch keine Shop-Bestellungen erfasst.</p>
@@ -1290,6 +1296,7 @@ function ShopOrdersList({
       {shopOrders.map((order) => {
         const member = members.find((item) => item.id === order.member_id)
         const orderItems = shopOrderItems.filter((item) => item.shop_order_id === order.id)
+        const canDeleteOpenOrder = canManageMerch() && order.status === 'new' && order.payment_status === 'open'
 
         return (
           <div key={order.id} style={cardStyle}>
@@ -1322,6 +1329,21 @@ function ShopOrdersList({
             {canManageMerch() && (
               <button onClick={() => editShopOrder(order)} style={buttonStyle}>
                 Bestellung bearbeiten
+              </button>
+            )}
+            {canDeleteOpenOrder && (
+              <button
+                onClick={() => deleteShopOrder(order)}
+                disabled={shopOrderDeletingId === order.id}
+                style={{
+                  ...buttonStyle,
+                  marginLeft: 8,
+                  background: '#8b1e1e',
+                  color: '#ffffff',
+                  borderColor: '#8b1e1e',
+                }}
+              >
+                {shopOrderDeletingId === order.id ? 'Löschen...' : 'Löschen'}
               </button>
             )}
           </div>
