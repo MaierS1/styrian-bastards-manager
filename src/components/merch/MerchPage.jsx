@@ -1244,7 +1244,7 @@ function getMerchItemBadges(item, variants) {
   if (item.is_bestseller) badges.push('Bestseller')
   if (item.is_preorder) badges.push('Vorbestellung')
   if (item.is_limited) badges.push('Limitiert')
-  if (item.status === 'inactive' || variants.some((variant) => variant.status === 'sold_out') || (variants.length > 0 && totalStock <= 0)) {
+  if (item.status === 'inactive' || (variants.length > 0 && totalStock <= 0)) {
     badges.push('Ausverkauft')
   }
 

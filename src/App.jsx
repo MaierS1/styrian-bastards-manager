@@ -2826,7 +2826,7 @@ export default function App() {
       price_cents: variantPriceNumber === null ? null : Math.round(variantPriceNumber * 100),
       stock_quantity: stockNumber,
       reorder_level: reorderLevelNumber,
-      status: merchVariantStatus || 'active',
+      status: stockNumber > 0 && merchVariantStatus === 'sold_out' ? 'active' : (merchVariantStatus || 'active'),
       is_public: merchVariantIsPublic,
       public_sort_order: publicSortOrderNumber,
     }
