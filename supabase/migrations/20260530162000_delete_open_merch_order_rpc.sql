@@ -26,12 +26,16 @@ begin
     raise exception 'Shop-Bestellung nicht gefunden: %', p_shop_order_id;
   end if;
 
-  if v_order.status <> 'new' or v_order.payment_status <> 'open' then
+  if v_order.cash_entry_id is not null then
+    raise exception 'Diese Shop-Bestellung hat bereits einen Kassa-Eintrag und kann nicht gelöscht werden.';
+  end if;
+
+  if v_order.payment_status <> 'open' then
     raise exception 'Nur offene Shop-Bestellungen können gelöscht werden.';
   end if;
 
-  if v_order.cash_entry_id is not null then
-    raise exception 'Diese Shop-Bestellung hat bereits einen Kassa-Eintrag und kann nicht gelöscht werden.';
+  if v_order.status in ('shipped', 'completed', 'cancelled') then
+    raise exception 'Versendete, abgeschlossene oder stornierte Shop-Bestellungen können nicht gelöscht werden.';
   end if;
 
   delete from public.shop_orders

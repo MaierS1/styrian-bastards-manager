@@ -1296,7 +1296,11 @@ function ShopOrdersList({
       {shopOrders.map((order) => {
         const member = members.find((item) => item.id === order.member_id)
         const orderItems = shopOrderItems.filter((item) => item.shop_order_id === order.id)
-        const canDeleteOpenOrder = canManageMerch() && order.status === 'new' && order.payment_status === 'open'
+        const isTerminalShopOrder = ['shipped', 'completed', 'cancelled'].includes(order.status)
+        const canDeleteOpenOrder = canManageMerch()
+          && order.payment_status === 'open'
+          && !order.cash_entry_id
+          && !isTerminalShopOrder
 
         return (
           <div key={order.id} style={cardStyle}>

@@ -2296,6 +2296,10 @@ export default function App() {
       return 'Nur offene Bestellungen können gelöscht werden.'
     }
 
+    if (/Versendete, abgeschlossene oder stornierte/i.test(message)) {
+      return 'Versendete, abgeschlossene oder stornierte Bestellungen können nicht gelöscht werden.'
+    }
+
     if (/Kassa-Eintrag/i.test(message)) {
       return 'Diese Bestellung ist bereits mit der Kassa verknüpft und kann nicht gelöscht werden.'
     }
@@ -2460,9 +2464,11 @@ export default function App() {
       })
 
       if (result?.error) {
+        console.error('delete_open_merch_order failed', result.error)
         alert(getShopOrderDeleteErrorMessage(result.error))
       }
     } catch (error) {
+      console.error('delete_open_merch_order failed', error)
       alert(getShopOrderDeleteErrorMessage(error))
     } finally {
       setShopOrderDeletingId(null)
