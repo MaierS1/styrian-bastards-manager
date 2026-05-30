@@ -25,14 +25,19 @@ export function EventsList({
           <br />
           Datum: {event.event_date || '-'}
           <br />
+          Start: {event.starts_at || '-'}
+          {event.ends_at && <> · Ende: {event.ends_at}</>}
+          <br />
           Ort: {event.location || '-'}
+          <br />
+          Treffpunkt: {event.meeting_point || '-'}
           <br />
           Status: {event.status || '-'}
           <br />
-          Homepage: {event.is_public ? 'Ja' : 'Nein'}
+          Homepage: {event.is_public ? 'Ja' : 'Nein'} · {getPublicStatusLabel(event.public_status)}
           {event.is_public && (
             <>
-              {' '}Â· Titel: {event.public_title || '-'}
+              {' '}· Titel: {event.public_title || event.title || event.name || '-'}
             </>
           )}
           <br />
@@ -69,6 +74,12 @@ export function EventsList({
       ))}
     </>
   )
+}
+
+function getPublicStatusLabel(status) {
+  if (status === 'published') return 'Veröffentlicht'
+  if (status === 'hidden') return 'Ausgeblendet'
+  return 'Entwurf'
 }
 
 const categoryBadgeStyle = {

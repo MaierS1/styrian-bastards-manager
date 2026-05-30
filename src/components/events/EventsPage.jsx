@@ -9,24 +9,42 @@ export function EventsPage({
   setNewEventName,
   newEventDate,
   setNewEventDate,
+  newEventStartsAt,
+  setNewEventStartsAt,
+  newEventEndsAt,
+  setNewEventEndsAt,
   newEventCategory,
   setNewEventCategory,
   newEventLocation,
   setNewEventLocation,
+  newEventMeetingPoint,
+  setNewEventMeetingPoint,
   newEventNotes,
   setNewEventNotes,
   newEventIsPublic,
   setNewEventIsPublic,
+  newEventPublicStatus,
+  setNewEventPublicStatus,
   newEventPublicTitle,
   setNewEventPublicTitle,
+  newEventShortDescription,
+  setNewEventShortDescription,
   newEventPublicDescription,
   setNewEventPublicDescription,
+  newEventContactPerson,
+  setNewEventContactPerson,
+  newEventRegistrationDeadline,
+  setNewEventRegistrationDeadline,
+  newEventMaxParticipants,
+  setNewEventMaxParticipants,
   newEventPublicSortOrder,
   setNewEventPublicSortOrder,
   newEventPublicPublishedAt,
   setNewEventPublicPublishedAt,
   newEventPublicImagePath,
   setNewEventPublicImagePath,
+  newEventPublicImageUrl,
+  setNewEventPublicImageUrl,
   newEventPublicRegistrationUrl,
   setNewEventPublicRegistrationUrl,
   newEventPublicExternalUrl,
@@ -68,24 +86,42 @@ export function EventsPage({
           setNewEventName={setNewEventName}
           newEventDate={newEventDate}
           setNewEventDate={setNewEventDate}
+          newEventStartsAt={newEventStartsAt}
+          setNewEventStartsAt={setNewEventStartsAt}
+          newEventEndsAt={newEventEndsAt}
+          setNewEventEndsAt={setNewEventEndsAt}
           newEventCategory={newEventCategory}
           setNewEventCategory={setNewEventCategory}
           newEventLocation={newEventLocation}
           setNewEventLocation={setNewEventLocation}
+          newEventMeetingPoint={newEventMeetingPoint}
+          setNewEventMeetingPoint={setNewEventMeetingPoint}
           newEventNotes={newEventNotes}
           setNewEventNotes={setNewEventNotes}
           newEventIsPublic={newEventIsPublic}
           setNewEventIsPublic={setNewEventIsPublic}
+          newEventPublicStatus={newEventPublicStatus}
+          setNewEventPublicStatus={setNewEventPublicStatus}
           newEventPublicTitle={newEventPublicTitle}
           setNewEventPublicTitle={setNewEventPublicTitle}
+          newEventShortDescription={newEventShortDescription}
+          setNewEventShortDescription={setNewEventShortDescription}
           newEventPublicDescription={newEventPublicDescription}
           setNewEventPublicDescription={setNewEventPublicDescription}
+          newEventContactPerson={newEventContactPerson}
+          setNewEventContactPerson={setNewEventContactPerson}
+          newEventRegistrationDeadline={newEventRegistrationDeadline}
+          setNewEventRegistrationDeadline={setNewEventRegistrationDeadline}
+          newEventMaxParticipants={newEventMaxParticipants}
+          setNewEventMaxParticipants={setNewEventMaxParticipants}
           newEventPublicSortOrder={newEventPublicSortOrder}
           setNewEventPublicSortOrder={setNewEventPublicSortOrder}
           newEventPublicPublishedAt={newEventPublicPublishedAt}
           setNewEventPublicPublishedAt={setNewEventPublicPublishedAt}
           newEventPublicImagePath={newEventPublicImagePath}
           setNewEventPublicImagePath={setNewEventPublicImagePath}
+          newEventPublicImageUrl={newEventPublicImageUrl}
+          setNewEventPublicImageUrl={setNewEventPublicImageUrl}
           newEventPublicRegistrationUrl={newEventPublicRegistrationUrl}
           setNewEventPublicRegistrationUrl={setNewEventPublicRegistrationUrl}
           newEventPublicExternalUrl={newEventPublicExternalUrl}

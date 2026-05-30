@@ -271,15 +271,24 @@ export default function App() {
   const [editingEventId, setEditingEventId] = useState(null)
   const [newEventName, setNewEventName] = useState('')
   const [newEventDate, setNewEventDate] = useState(new Date().toISOString().slice(0, 10))
-  const [newEventCategory, setNewEventCategory] = useState('event')
+  const [newEventStartsAt, setNewEventStartsAt] = useState('')
+  const [newEventEndsAt, setNewEventEndsAt] = useState('')
+  const [newEventCategory, setNewEventCategory] = useState('treffen')
   const [newEventLocation, setNewEventLocation] = useState('')
+  const [newEventMeetingPoint, setNewEventMeetingPoint] = useState('')
   const [newEventNotes, setNewEventNotes] = useState('')
   const [newEventIsPublic, setNewEventIsPublic] = useState(false)
+  const [newEventPublicStatus, setNewEventPublicStatus] = useState('draft')
   const [newEventPublicTitle, setNewEventPublicTitle] = useState('')
+  const [newEventShortDescription, setNewEventShortDescription] = useState('')
   const [newEventPublicDescription, setNewEventPublicDescription] = useState('')
+  const [newEventContactPerson, setNewEventContactPerson] = useState('')
+  const [newEventRegistrationDeadline, setNewEventRegistrationDeadline] = useState('')
+  const [newEventMaxParticipants, setNewEventMaxParticipants] = useState('')
   const [newEventPublicSortOrder, setNewEventPublicSortOrder] = useState('0')
   const [newEventPublicPublishedAt, setNewEventPublicPublishedAt] = useState('')
   const [newEventPublicImagePath, setNewEventPublicImagePath] = useState('')
+  const [newEventPublicImageUrl, setNewEventPublicImageUrl] = useState('')
   const [newEventPublicRegistrationUrl, setNewEventPublicRegistrationUrl] = useState('')
   const [newEventPublicExternalUrl, setNewEventPublicExternalUrl] = useState('')
 
@@ -4213,15 +4222,24 @@ export default function App() {
     setEditingEventId(null)
     setNewEventName('')
     setNewEventDate(getTodayDate())
-    setNewEventCategory('event')
+    setNewEventStartsAt('')
+    setNewEventEndsAt('')
+    setNewEventCategory('treffen')
     setNewEventLocation('')
+    setNewEventMeetingPoint('')
     setNewEventNotes('')
     setNewEventIsPublic(false)
+    setNewEventPublicStatus('draft')
     setNewEventPublicTitle('')
+    setNewEventShortDescription('')
     setNewEventPublicDescription('')
+    setNewEventContactPerson('')
+    setNewEventRegistrationDeadline('')
+    setNewEventMaxParticipants('')
     setNewEventPublicSortOrder('0')
     setNewEventPublicPublishedAt('')
     setNewEventPublicImagePath('')
+    setNewEventPublicImageUrl('')
     setNewEventPublicRegistrationUrl('')
     setNewEventPublicExternalUrl('')
   }
@@ -4232,15 +4250,24 @@ export default function App() {
     setEditingEventId(event.id)
     setNewEventName(event.name || '')
     setNewEventDate(event.event_date || getTodayDate())
-    setNewEventCategory(event.event_category || 'event')
+    setNewEventStartsAt(formatDateTimeLocal(event.starts_at))
+    setNewEventEndsAt(formatDateTimeLocal(event.ends_at))
+    setNewEventCategory(event.event_category || 'treffen')
     setNewEventLocation(event.location || '')
+    setNewEventMeetingPoint(event.meeting_point || '')
     setNewEventNotes(event.notes || '')
     setNewEventIsPublic(Boolean(event.is_public))
+    setNewEventPublicStatus(event.public_status || 'draft')
     setNewEventPublicTitle(event.public_title || '')
+    setNewEventShortDescription(event.short_description || '')
     setNewEventPublicDescription(event.public_description || '')
+    setNewEventContactPerson(event.contact_person || '')
+    setNewEventRegistrationDeadline(formatDateTimeLocal(event.registration_deadline))
+    setNewEventMaxParticipants(event.max_participants ? String(event.max_participants) : '')
     setNewEventPublicSortOrder(String(event.public_sort_order ?? 0))
     setNewEventPublicPublishedAt(formatDateTimeLocal(event.public_published_at))
     setNewEventPublicImagePath(event.public_image_path || '')
+    setNewEventPublicImageUrl(event.public_image_url || '')
     setNewEventPublicRegistrationUrl(event.public_registration_url || '')
     setNewEventPublicExternalUrl(event.public_external_url || '')
 
@@ -4249,16 +4276,33 @@ export default function App() {
 
   function getEventPublicPayload() {
     const publicSortOrder = Number.parseInt(newEventPublicSortOrder, 10)
+    const maxParticipants = Number.parseInt(newEventMaxParticipants, 10)
+    const publicTitle = newEventPublicTitle.trim() || newEventName.trim()
+    const publicDescription = newEventPublicDescription.trim() || null
+    const startsAt = newEventStartsAt ? new Date(newEventStartsAt).toISOString() : null
+    const eventDate = startsAt ? startsAt.slice(0, 10) : (newEventDate || getTodayDate())
 
     return {
       is_public: newEventIsPublic,
-      public_title: newEventPublicTitle.trim() || null,
-      public_description: newEventPublicDescription.trim() || null,
+      public_status: newEventPublicStatus,
+      title: newEventName.trim(),
+      public_title: publicTitle || null,
+      short_description: newEventShortDescription.trim() || null,
+      description: publicDescription,
+      public_description: publicDescription,
+      starts_at: startsAt,
+      ends_at: newEventEndsAt ? new Date(newEventEndsAt).toISOString() : null,
+      meeting_point: newEventMeetingPoint.trim() || null,
+      contact_person: newEventContactPerson.trim() || null,
+      registration_deadline: newEventRegistrationDeadline ? new Date(newEventRegistrationDeadline).toISOString() : null,
+      max_participants: Number.isNaN(maxParticipants) ? null : Math.max(1, maxParticipants),
       public_sort_order: Number.isNaN(publicSortOrder) ? 0 : Math.max(0, publicSortOrder),
       public_published_at: newEventPublicPublishedAt ? new Date(newEventPublicPublishedAt).toISOString() : null,
       public_image_path: newEventPublicImagePath.trim() || null,
+      public_image_url: newEventPublicImageUrl.trim() || null,
       public_registration_url: newEventPublicRegistrationUrl.trim() || null,
       public_external_url: newEventPublicExternalUrl.trim() || null,
+      event_date: eventDate,
     }
   }
 
@@ -4270,8 +4314,8 @@ export default function App() {
       return
     }
 
-    if (newEventIsPublic && !newEventPublicTitle.trim()) {
-      alert('Bitte einen öffentlichen Titel eingeben.')
+    if (newEventIsPublic && newEventPublicStatus === 'published' && !newEventPublicDescription.trim()) {
+      alert('Bitte für veröffentlichte Homepage-Events eine Beschreibung eingeben.')
       return
     }
 
@@ -4279,7 +4323,7 @@ export default function App() {
       payload: {
         name: newEventName.trim(),
         event_date: newEventDate || getTodayDate(),
-        event_category: newEventCategory || 'event',
+        event_category: newEventCategory || 'treffen',
         location: newEventLocation.trim() || null,
         notes: newEventNotes.trim() || null,
         ...getEventPublicPayload(),
@@ -4305,8 +4349,8 @@ export default function App() {
       return
     }
 
-    if (newEventIsPublic && !newEventPublicTitle.trim()) {
-      alert('Bitte einen öffentlichen Titel eingeben.')
+    if (newEventIsPublic && newEventPublicStatus === 'published' && !newEventPublicDescription.trim()) {
+      alert('Bitte für veröffentlichte Homepage-Events eine Beschreibung eingeben.')
       return
     }
 
@@ -4315,7 +4359,7 @@ export default function App() {
       payload: {
         name: newEventName.trim(),
         event_date: newEventDate || getTodayDate(),
-        event_category: newEventCategory || 'event',
+        event_category: newEventCategory || 'treffen',
         location: newEventLocation.trim() || null,
         notes: newEventNotes.trim() || null,
         ...getEventPublicPayload(),
@@ -5042,24 +5086,42 @@ export default function App() {
           setNewEventName={setNewEventName}
           newEventDate={newEventDate}
           setNewEventDate={setNewEventDate}
+          newEventStartsAt={newEventStartsAt}
+          setNewEventStartsAt={setNewEventStartsAt}
+          newEventEndsAt={newEventEndsAt}
+          setNewEventEndsAt={setNewEventEndsAt}
           newEventCategory={newEventCategory}
           setNewEventCategory={setNewEventCategory}
           newEventLocation={newEventLocation}
           setNewEventLocation={setNewEventLocation}
+          newEventMeetingPoint={newEventMeetingPoint}
+          setNewEventMeetingPoint={setNewEventMeetingPoint}
           newEventNotes={newEventNotes}
           setNewEventNotes={setNewEventNotes}
           newEventIsPublic={newEventIsPublic}
           setNewEventIsPublic={setNewEventIsPublic}
+          newEventPublicStatus={newEventPublicStatus}
+          setNewEventPublicStatus={setNewEventPublicStatus}
           newEventPublicTitle={newEventPublicTitle}
           setNewEventPublicTitle={setNewEventPublicTitle}
+          newEventShortDescription={newEventShortDescription}
+          setNewEventShortDescription={setNewEventShortDescription}
           newEventPublicDescription={newEventPublicDescription}
           setNewEventPublicDescription={setNewEventPublicDescription}
+          newEventContactPerson={newEventContactPerson}
+          setNewEventContactPerson={setNewEventContactPerson}
+          newEventRegistrationDeadline={newEventRegistrationDeadline}
+          setNewEventRegistrationDeadline={setNewEventRegistrationDeadline}
+          newEventMaxParticipants={newEventMaxParticipants}
+          setNewEventMaxParticipants={setNewEventMaxParticipants}
           newEventPublicSortOrder={newEventPublicSortOrder}
           setNewEventPublicSortOrder={setNewEventPublicSortOrder}
           newEventPublicPublishedAt={newEventPublicPublishedAt}
           setNewEventPublicPublishedAt={setNewEventPublicPublishedAt}
           newEventPublicImagePath={newEventPublicImagePath}
           setNewEventPublicImagePath={setNewEventPublicImagePath}
+          newEventPublicImageUrl={newEventPublicImageUrl}
+          setNewEventPublicImageUrl={setNewEventPublicImageUrl}
           newEventPublicRegistrationUrl={newEventPublicRegistrationUrl}
           setNewEventPublicRegistrationUrl={setNewEventPublicRegistrationUrl}
           newEventPublicExternalUrl={newEventPublicExternalUrl}

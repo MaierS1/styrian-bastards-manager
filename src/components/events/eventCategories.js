@@ -1,10 +1,8 @@
 export const EVENT_CATEGORY_OPTIONS = [
-  { value: 'event', label: 'Event' },
-  { value: 'heimspiel', label: 'Heimspiel' },
-  { value: 'turnier', label: 'Turnier' },
-  { value: 'fanfahrt', label: 'Fanfahrt' },
   { value: 'treffen', label: 'Treffen' },
-  { value: 'sitzung', label: 'Sitzung' },
+  { value: 'fanfahrt', label: 'Fanfahrten' },
+  { value: 'cornhole', label: 'Cornhole' },
+  { value: 'vereinsveranstaltung', label: 'Vereinsveranstaltung' },
   { value: 'sonstiges', label: 'Sonstiges' },
 ]
 
