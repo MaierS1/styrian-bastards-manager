@@ -397,12 +397,14 @@ export default function App() {
   const [sponsorContractEditingId, setSponsorContractEditingId] = useState(null)
   const [contractSponsorId, setContractSponsorId] = useState('')
   const [contractTitle, setContractTitle] = useState('')
-  const [contractLevel, setContractLevel] = useState('bronze')
+  const [contractLevel, setContractLevel] = useState('premium')
   const [contractStatus, setContractStatus] = useState('draft')
   const [contractStartsOn, setContractStartsOn] = useState(new Date().toISOString().slice(0, 10))
   const [contractEndsOn, setContractEndsOn] = useState('')
   const [contractAmount, setContractAmount] = useState('')
+  const [contractPaymentStatus, setContractPaymentStatus] = useState('open')
   const [contractBillingCycle, setContractBillingCycle] = useState('one_time')
+  const [contractBenefits, setContractBenefits] = useState('')
   const [contractNotes, setContractNotes] = useState('')
   const [sponsorContractSaving, setSponsorContractSaving] = useState(false)
   const [sponsorContractDeletingId, setSponsorContractDeletingId] = useState(null)
@@ -2953,12 +2955,14 @@ export default function App() {
     setSponsorContractEditingId(null)
     setContractSponsorId(sponsors[0]?.id || '')
     setContractTitle('')
-    setContractLevel('bronze')
+    setContractLevel('premium')
     setContractStatus('draft')
     setContractStartsOn(new Date().toISOString().slice(0, 10))
     setContractEndsOn('')
     setContractAmount('')
+    setContractPaymentStatus('open')
     setContractBillingCycle('one_time')
+    setContractBenefits('')
     setContractNotes('')
   }
 
@@ -3061,12 +3065,14 @@ export default function App() {
     setSponsorContractEditingId(contract.id)
     setContractSponsorId(contract.sponsor_id || '')
     setContractTitle(contract.title || '')
-    setContractLevel(contract.category || 'bronze')
+    setContractLevel(contract.category || 'premium')
     setContractStatus(contract.status || 'draft')
     setContractStartsOn(contract.starts_on || new Date().toISOString().slice(0, 10))
     setContractEndsOn(contract.ends_on || '')
     setContractAmount(contract.amount_cents ? String((Number(contract.amount_cents) / 100).toFixed(2)) : '')
+    setContractPaymentStatus(contract.payment_status || 'open')
     setContractBillingCycle(contract.billing_cycle || 'one_time')
+    setContractBenefits(contract.benefits || '')
     setContractNotes(contract.notes || '')
 
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -3117,7 +3123,9 @@ export default function App() {
       ends_on: contractEndsOn || null,
       amount_cents: Math.round(amountNumber * 100),
       currency: 'EUR',
+      payment_status: contractPaymentStatus || 'open',
       billing_cycle: contractBillingCycle || 'one_time',
+      benefits: contractBenefits.trim() || null,
       notes: contractNotes.trim() || null,
     }
 
@@ -5448,8 +5456,12 @@ export default function App() {
           setContractEndsOn={setContractEndsOn}
           contractAmount={contractAmount}
           setContractAmount={setContractAmount}
+          contractPaymentStatus={contractPaymentStatus}
+          setContractPaymentStatus={setContractPaymentStatus}
           contractBillingCycle={contractBillingCycle}
           setContractBillingCycle={setContractBillingCycle}
+          contractBenefits={contractBenefits}
+          setContractBenefits={setContractBenefits}
           contractNotes={contractNotes}
           setContractNotes={setContractNotes}
           sponsorContractSaving={sponsorContractSaving}
