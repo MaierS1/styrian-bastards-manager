@@ -234,7 +234,7 @@ export function EventForm({
       </fieldset>
 
       <fieldset style={eventFieldsetStyle}>
-        <legend style={eventLegendStyle}>Anmeldung/Teilnehmer</legend>
+        <legend style={eventLegendStyle}>Anmeldung/Teams</legend>
 
         <label style={checkboxLabelStyle}>
           <input
@@ -308,11 +308,11 @@ export function EventForm({
         </label>
 
         <label style={fieldLabelStyle}>
-          Maximale Teilnehmerzahl
+          Max. Teams
           <input
             type="number"
             min="1"
-            placeholder="z.B. 40"
+            placeholder="z.B. 16"
             value={newEventMaxParticipants}
             onChange={(e) => setNewEventMaxParticipants(e.target.value)}
             style={{ ...inputStyle, marginTop: 6 }}

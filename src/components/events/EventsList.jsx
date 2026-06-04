@@ -41,7 +41,7 @@ export function EventsList({
             </>
           )}
           <br />
-          Anmeldung: {event.registration_enabled ? 'aktiv' : 'inaktiv'} · Status: {getRegistrationStatusLabel(event.registration_status)} · Angemeldet: {event.registered_count || 0} · Warteliste: {event.waitlist_count || 0}
+          Anmeldung: {event.registration_enabled ? 'aktiv' : 'inaktiv'} · Status: {getRegistrationStatusLabel(event.registration_status)} · Teams: {event.registered_count || 0} · Warteliste: {event.waitlist_count || 0}
           <br />
           Notizen: {event.notes || '-'}
           <br />

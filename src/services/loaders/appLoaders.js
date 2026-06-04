@@ -92,11 +92,9 @@ export async function loadEvents({ setEvents, selectedEventId, setSelectedEventI
       waitlist: 0,
       cancelled: 0,
     }
-    const participantCount = Number(registration.participant_count) || 0
-
-    if (registration.status === 'registered') eventCounts.registered += participantCount
-    if (registration.status === 'waitlist') eventCounts.waitlist += participantCount
-    if (registration.status === 'cancelled') eventCounts.cancelled += participantCount
+    if (registration.status === 'registered') eventCounts.registered += 1
+    if (registration.status === 'waitlist') eventCounts.waitlist += 1
+    if (registration.status === 'cancelled') eventCounts.cancelled += 1
 
     counts[registration.event_id] = eventCounts
     return counts

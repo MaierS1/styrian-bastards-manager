@@ -12,6 +12,7 @@ export function buildRegistrationConfirmationEmail({ event, registration }) {
       '',
       `deine Anmeldung für ${eventTitle} wurde eingetragen.`,
       buildEventLine(event),
+      buildTeamLine(registration),
       buildParticipantLine(registration),
       '',
       'Danke und sportliche Grüße',
@@ -32,6 +33,7 @@ export function buildWaitlistEmail({ event, registration }) {
       '',
       `das Event ${eventTitle} ist aktuell voll. Du wurdest auf die Warteliste gesetzt.`,
       buildEventLine(event),
+      buildTeamLine(registration),
       buildParticipantLine(registration),
       '',
       'Wir melden uns, sobald ein Platz frei wird.',
@@ -76,6 +78,7 @@ export function buildEventReminderEmail({ event, registration }) {
       `kurze Erinnerung an deine Anmeldung für ${eventTitle}.`,
       buildEventLine(event),
       event?.meeting_point ? `Treffpunkt: ${event.meeting_point}` : '',
+      buildTeamLine(registration),
       buildParticipantLine(registration),
       '',
       'Bis bald und sportliche Grüße',
@@ -117,7 +120,11 @@ function buildEventLine(event) {
 
 function buildParticipantLine(registration) {
   const participantCount = Number(registration?.participant_count) || 1
-  return `Teilnehmeranzahl: ${participantCount}`
+  return `Teamgröße: ${participantCount}`
+}
+
+function buildTeamLine(registration) {
+  return registration?.team_name ? `Team: ${registration.team_name}` : ''
 }
 
 function formatDateTime(value) {

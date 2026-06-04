@@ -15,6 +15,7 @@ import {
 } from '../../services/notifications/eventNotifications'
 
 const emptyForm = {
+  team_name: '',
   full_name: '',
   email: '',
   phone: '',
@@ -171,7 +172,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     const alreadySent = registeredRegistrations.filter((registration) => registration.reminder_sent_at)
 
     if (registeredRegistrations.length === 0) {
-      alert('Keine angemeldeten Teilnehmer gefunden.')
+      alert('Keine angemeldeten Teams gefunden.')
       return
     }
 
@@ -189,7 +190,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       return
     }
 
-    if (!window.confirm(`Erinnerungen an ${targets.length} angemeldete Teilnehmer senden?`)) return
+    if (!window.confirm(`Erinnerungen an ${targets.length} angemeldete Teams senden?`)) return
 
     setSendingBulk(true)
     let successCount = 0
@@ -226,6 +227,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
 
     return {
       event_id: event.id,
+      team_name: values.team_name.trim() || null,
       full_name: values.full_name.trim(),
       email: values.email.trim().toLowerCase(),
       phone: values.phone.trim() || null,
@@ -242,7 +244,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(values.email.trim())) return 'Bitte eine gültige E-Mail-Adresse eingeben.'
 
     const participantCount = Number.parseInt(values.participant_count, 10)
-    if (Number.isNaN(participantCount) || participantCount < 1) return 'Teilnehmeranzahl muss mindestens 1 sein.'
+    if (Number.isNaN(participantCount) || participantCount < 1) return 'Teamgröße muss mindestens 1 sein.'
 
     if (!['member', 'guest', 'unknown'].includes(values.member_status)) return 'Ungültiger Mitgliedsstatus.'
     if (!['registered', 'waitlist', 'cancelled'].includes(values.status)) return 'Ungültiger Anmeldestatus.'
@@ -253,15 +255,13 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
   function resolveStatusForLimit(values, existingRegistrationId = null) {
     if (values.status !== 'registered' || !event.max_participants) return values.status
 
-    const participantCount = Number.parseInt(values.participant_count, 10)
-    const requestedCount = Number.isNaN(participantCount) ? 1 : Math.max(1, participantCount)
     const currentRegisteredCount = registrations
       .filter((registration) => registration.status === 'registered' && registration.id !== existingRegistrationId)
-      .reduce((sum, registration) => sum + (Number(registration.participant_count) || 0), 0)
+      .length
 
-    if (currentRegisteredCount + requestedCount <= event.max_participants) return values.status
+    if (currentRegisteredCount + 1 <= event.max_participants) return values.status
 
-    const message = `Das Teilnehmerlimit ist voll (${currentRegisteredCount}/${event.max_participants}). Auf Warteliste setzen?`
+    const message = `Das Teamlimit ist voll (${currentRegisteredCount}/${event.max_participants}). Auf Warteliste setzen?`
     return window.confirm(message) ? 'waitlist' : ''
   }
 
@@ -287,7 +287,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       })
 
       if (notificationError) {
-        alert(`Teilnehmer gespeichert, E-Mail aber nicht gesendet: ${notificationError.message}`)
+        alert(`Team gespeichert, E-Mail aber nicht gesendet: ${notificationError.message}`)
       }
     }
 
@@ -344,7 +344,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
   }
 
   async function handleDelete(registration) {
-    if (!window.confirm(`Teilnehmer endgültig löschen?\n\n${registration.full_name}`)) return
+    if (!window.confirm(`Team/Anmeldung endgültig löschen?\n\n${registration.team_name || registration.full_name}`)) return
 
     const { error } = await deleteEventRegistration(registration.id)
     if (error) return alert(error.message)
@@ -362,11 +362,12 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
 
     const headers = [
       'Eventname',
+      'Teamname',
       'Name',
       'E-Mail',
       'Telefon',
       'Mitgliedsstatus',
-      'Teilnehmeranzahl',
+      'Teamgröße',
       'Status',
       'Check-in Status',
       'Check-in Zeit',
@@ -376,6 +377,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
 
     const rows = registrations.map((registration) => [
       getEventTitle(event),
+      registration.team_name || '',
       registration.full_name,
       registration.email,
       registration.phone || '',
@@ -409,6 +411,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       .map((registration) => `
         <tr>
           <td class="box"></td>
+          <td>${escapeHtml(registration.team_name || '')}</td>
           <td>${escapeHtml(registration.full_name)}</td>
           <td>${escapeHtml(String(registration.participant_count || 1))}</td>
           <td>${escapeHtml(registration.note || '')}</td>
@@ -440,7 +443,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
           <p>${escapeHtml(formatEventDate(event))}</p>
           <table>
             <thead>
-              <tr><th></th><th>Name</th><th>Anzahl</th><th>Notiz</th></tr>
+              <tr><th></th><th>Team</th><th>Name</th><th>Teamgröße</th><th>Notiz</th></tr>
             </thead>
             <tbody>${printableRows}</tbody>
           </table>
@@ -455,7 +458,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
   if (!event?.id) {
     return (
       <section style={sectionBoxStyle}>
-        <h3 style={headingStyle}>Teilnehmer verwalten</h3>
+        <h3 style={headingStyle}>Teams verwalten</h3>
         <p style={mutedTextStyle}>Bitte zuerst ein Event auswählen.</p>
       </section>
     )
@@ -463,15 +466,15 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
 
   return (
     <section style={sectionBoxStyle}>
-      <h3 style={headingStyle}>Teilnehmer verwalten</h3>
+      <h3 style={headingStyle}>Teams verwalten</h3>
 
       <div style={statsGridStyle}>
-        <StatCard label="Angemeldet" value={stats.registered} />
+        <StatCard label="Angemeldete Teams" value={stats.registered} />
         <StatCard label="Warteliste" value={stats.waitlist} />
         <StatCard label="Abgesagt" value={stats.cancelled} />
         <StatCard label="Eingecheckt" value={stats.checkedIn} />
         <StatCard label="Nicht erschienen" value={stats.noShow} />
-        <StatCard label="Registered gesamt" value={stats.registeredParticipants} />
+        <StatCard label="Teams gesamt" value={stats.registeredTeams} />
       </div>
 
       <div style={toolbarStyle}>
@@ -479,7 +482,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
           {sendingBulk ? 'Erinnerungen laufen...' : 'Erinnerungen an alle senden'}
         </button>
         <button type="button" onClick={exportCsv} disabled={registrations.length === 0} style={secondaryButtonStyle}>
-          Teilnehmer exportieren CSV
+          Teams exportieren CSV
         </button>
         <button type="button" onClick={printCheckinList} disabled={registrations.length === 0} style={secondaryButtonStyle}>
           Check-in-Liste drucken
@@ -487,6 +490,12 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       </div>
 
       <form onSubmit={handleCreate} style={formGridStyle}>
+        <input
+          placeholder="Teamname optional"
+          value={form.team_name}
+          onChange={(e) => updateFormValue('team_name', e.target.value)}
+          style={inputStyle}
+        />
         <input
           placeholder="Name"
           value={form.full_name}
@@ -546,12 +555,12 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
           Bestätigung sofort senden
         </label>
         <button type="submit" disabled={saving} style={buttonStyle}>
-          Teilnehmer hinzufügen
+          Team hinzufügen
         </button>
       </form>
 
-      {loading ? <p style={mutedTextStyle}>Teilnehmer werden geladen...</p> : null}
-      {!loading && registrations.length === 0 ? <p style={mutedTextStyle}>Noch keine Teilnehmer erfasst.</p> : null}
+      {loading ? <p style={mutedTextStyle}>Teams werden geladen...</p> : null}
+      {!loading && registrations.length === 0 ? <p style={mutedTextStyle}>Noch keine Teams erfasst.</p> : null}
 
       {emailPreview ? (
         <div style={previewStyle}>
@@ -573,6 +582,12 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
             <div key={registration.id} style={cardStyle}>
               {editValues ? (
                 <div style={formGridStyle}>
+                  <input
+                    value={editValues.team_name}
+                    onChange={(e) => updateEditValue(registration.id, 'team_name', e.target.value)}
+                    placeholder="Teamname optional"
+                    style={inputStyle}
+                  />
                   <input
                     value={editValues.full_name}
                     onChange={(e) => updateEditValue(registration.id, 'full_name', e.target.value)}
@@ -629,6 +644,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
               ) : (
                 <>
                   <strong>{registration.full_name}</strong>
+                  {registration.team_name ? <> · Team: <strong>{registration.team_name}</strong></> : null}
                   <span style={statusBadgeStyle}>{statusLabels[registration.status] || registration.status}</span>
                   <span style={checkinBadgeStyle}>{checkinStatusLabels[registration.checkin_status] || checkinStatusLabels.not_checked_in}</span>
                   <br />
@@ -638,7 +654,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
                   <br />
                   Mitgliedsstatus: {memberStatusLabels[registration.member_status] || registration.member_status}
                   <br />
-                  Teilnehmeranzahl: {registration.participant_count}
+                  Teamgröße: {registration.participant_count}
                   <br />
                   Check-in-Zeit: {formatDateTime(registration.checked_in_at)}
                   <br />
@@ -713,14 +729,8 @@ function buildStats(registrations) {
     cancelled: registrations.filter((registration) => registration.status === 'cancelled').length,
     checkedIn: registrations.filter((registration) => registration.checkin_status === 'checked_in').length,
     noShow: registrations.filter((registration) => registration.checkin_status === 'no_show').length,
-    registeredParticipants: getParticipantCount(registrations, 'registered'),
+    registeredTeams: registrations.filter((registration) => registration.status === 'registered').length,
   }
-}
-
-function getParticipantCount(registrations, status) {
-  return registrations
-    .filter((registration) => registration.status === status)
-    .reduce((sum, registration) => sum + (Number(registration.participant_count) || 0), 0)
 }
 
 function getConfirmationNotification(registration) {
@@ -746,6 +756,7 @@ function getConfirmationNotification(registration) {
 
 function toEditableRegistration(registration) {
   return {
+    team_name: registration.team_name || '',
     full_name: registration.full_name || '',
     email: registration.email || '',
     phone: registration.phone || '',
@@ -807,7 +818,7 @@ function buildCsvFilename(event) {
   const yearSource = event?.starts_at || event?.event_date || new Date().toISOString()
   const year = new Date(yearSource).getFullYear() || new Date().getFullYear()
   const slug = slugify(getEventTitle(event))
-  return `event-teilnehmer-${slug}-${year}.csv`
+  return `event-teams-${slug}-${year}.csv`
 }
 
 function slugify(value) {
