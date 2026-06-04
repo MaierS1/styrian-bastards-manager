@@ -1,4 +1,5 @@
-import { buttonStyle, headingStyle, inputStyle, secondaryButtonStyle } from '../../styles/appStyles'
+import { buttonStyle, headingStyle, inputStyle, mutedTextStyle, secondaryButtonStyle } from '../../styles/appStyles'
+import { RichTextEditor } from '../common/RichTextEditor'
 import { EVENT_CATEGORY_OPTIONS } from './eventCategories'
 
 export function EventForm({
@@ -29,6 +30,8 @@ export function EventForm({
   setNewEventShortDescription,
   newEventPublicDescription,
   setNewEventPublicDescription,
+  newEventPublicDescriptionHtml,
+  setNewEventPublicDescriptionHtml,
   newEventContactPerson,
   setNewEventContactPerson,
   newEventRegistrationDeadline,
@@ -180,6 +183,16 @@ export function EventForm({
           rows={3}
         />
 
+        <div style={richTextFieldStyle}>
+          <p style={richTextHintStyle}>Formatierte Beschreibung fuer Homepage-Ausgaben</p>
+          <RichTextEditor
+            value={newEventPublicDescriptionHtml}
+            onChange={setNewEventPublicDescriptionHtml}
+            placeholder="Formatierte Event-Beschreibung"
+            minHeight={160}
+          />
+        </div>
+
         <input
           type="number"
           min="0"
@@ -315,4 +328,14 @@ const textareaStyle = {
   ...inputStyle,
   minHeight: 92,
   resize: 'vertical',
+}
+
+const richTextFieldStyle = {
+  marginBottom: 12,
+}
+
+const richTextHintStyle = {
+  ...mutedTextStyle,
+  margin: '0 0 8px',
+  fontWeight: 700,
 }

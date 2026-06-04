@@ -26,6 +26,7 @@ import {
 } from './utils/permissions'
 import { navigationItems } from './app/navigation'
 import { formatCustomerAddressFromFields as buildFormatCustomerAddressFromFields } from './utils/formatters'
+import { normalizeRichTextHtml } from './utils/sanitizeHtml'
 import {
   getAlertStyle as buildAlertStyle,
   getAmountByType as buildAmountByType,
@@ -283,6 +284,7 @@ export default function App() {
   const [newEventPublicTitle, setNewEventPublicTitle] = useState('')
   const [newEventShortDescription, setNewEventShortDescription] = useState('')
   const [newEventPublicDescription, setNewEventPublicDescription] = useState('')
+  const [newEventPublicDescriptionHtml, setNewEventPublicDescriptionHtml] = useState('')
   const [newEventContactPerson, setNewEventContactPerson] = useState('')
   const [newEventRegistrationDeadline, setNewEventRegistrationDeadline] = useState('')
   const [newEventMaxParticipants, setNewEventMaxParticipants] = useState('')
@@ -390,6 +392,7 @@ export default function App() {
   const [sponsorLevel, setSponsorLevel] = useState('supporter')
   const [sponsorPublicSortOrder, setSponsorPublicSortOrder] = useState('0')
   const [sponsorPublicDescription, setSponsorPublicDescription] = useState('')
+  const [sponsorPublicDescriptionHtml, setSponsorPublicDescriptionHtml] = useState('')
   const [sponsorStatus, setSponsorStatus] = useState('active')
   const [sponsorNotes, setSponsorNotes] = useState('')
   const [sponsorSaving, setSponsorSaving] = useState(false)
@@ -415,6 +418,7 @@ export default function App() {
   const [mediaSourceName, setMediaSourceName] = useState('')
   const [mediaSummary, setMediaSummary] = useState('')
   const [mediaContent, setMediaContent] = useState('')
+  const [mediaContentHtml, setMediaContentHtml] = useState('')
   const [mediaExternalUrl, setMediaExternalUrl] = useState('')
   const [mediaAudioUrl, setMediaAudioUrl] = useState('')
   const [mediaImagePath, setMediaImagePath] = useState('')
@@ -454,6 +458,7 @@ export default function App() {
   const [merchItemPublicSortOrder, setMerchItemPublicSortOrder] = useState('0')
   const [merchItemPublicTitle, setMerchItemPublicTitle] = useState('')
   const [merchItemPublicDescription, setMerchItemPublicDescription] = useState('')
+  const [merchItemPublicDescriptionHtml, setMerchItemPublicDescriptionHtml] = useState('')
   const [merchItemPublicImageAlt, setMerchItemPublicImageAlt] = useState('')
   const [merchItemPublicCtaLabel, setMerchItemPublicCtaLabel] = useState('')
   const [merchItemPublicCtaUrl, setMerchItemPublicCtaUrl] = useState('')
@@ -2026,6 +2031,7 @@ export default function App() {
     setMerchItemPublicSortOrder('0')
     setMerchItemPublicTitle('')
     setMerchItemPublicDescription('')
+    setMerchItemPublicDescriptionHtml('')
     setMerchItemPublicImageAlt('')
     setMerchItemPublicCtaLabel('')
     setMerchItemPublicCtaUrl('')
@@ -2680,6 +2686,7 @@ export default function App() {
     setMerchItemPublicSortOrder(String(item.public_sort_order ?? 0))
     setMerchItemPublicTitle(item.public_title || '')
     setMerchItemPublicDescription(item.public_description || '')
+    setMerchItemPublicDescriptionHtml(item.public_description_html || '')
     setMerchItemPublicImageAlt(item.public_image_alt || '')
     setMerchItemPublicCtaLabel(item.public_cta_label || '')
     setMerchItemPublicCtaUrl(item.public_cta_url || '')
@@ -2759,6 +2766,7 @@ export default function App() {
       public_sort_order: publicSortOrderNumber,
       public_title: merchItemPublicTitle.trim() || null,
       public_description: merchItemPublicDescription.trim() || null,
+      public_description_html: normalizeRichTextHtml(merchItemPublicDescriptionHtml) || null,
       public_image_alt: merchItemPublicImageAlt.trim() || null,
       public_cta_label: merchItemPublicCtaLabel.trim() || null,
       public_cta_url: merchItemPublicCtaUrl.trim() || null,
@@ -2947,6 +2955,7 @@ export default function App() {
     setSponsorLevel('supporter')
     setSponsorPublicSortOrder('0')
     setSponsorPublicDescription('')
+    setSponsorPublicDescriptionHtml('')
     setSponsorStatus('active')
     setSponsorNotes('')
   }
@@ -2982,6 +2991,7 @@ export default function App() {
     setSponsorLevel(sponsor.sponsor_level || 'supporter')
     setSponsorPublicSortOrder(String(sponsor.public_sort_order ?? 0))
     setSponsorPublicDescription(sponsor.public_description || '')
+    setSponsorPublicDescriptionHtml(sponsor.public_description_html || '')
     setSponsorStatus(sponsor.status || 'active')
     setSponsorNotes(sponsor.notes || '')
 
@@ -3037,6 +3047,7 @@ export default function App() {
       sponsor_level: sponsorLevel || 'supporter',
       public_sort_order: sortOrderNumber,
       public_description: sponsorPublicDescription.trim() || null,
+      public_description_html: normalizeRichTextHtml(sponsorPublicDescriptionHtml) || null,
       status: sponsorStatus || 'active',
       notes: sponsorNotes.trim() || null,
     }
@@ -3206,6 +3217,7 @@ export default function App() {
     setMediaSourceName('')
     setMediaSummary('')
     setMediaContent('')
+    setMediaContentHtml('')
     setMediaExternalUrl('')
     setMediaAudioUrl('')
     setMediaImagePath('')
@@ -3229,6 +3241,7 @@ export default function App() {
     setMediaSourceName(mediaItem.source_name || '')
     setMediaSummary(mediaItem.summary || '')
     setMediaContent(mediaItem.content || '')
+    setMediaContentHtml(mediaItem.content_html || '')
     setMediaExternalUrl(mediaItem.external_url || '')
     setMediaAudioUrl(mediaItem.audio_url || '')
     setMediaImagePath(mediaItem.image_path || '')
@@ -3279,6 +3292,7 @@ export default function App() {
       source_name: mediaSourceName.trim() || null,
       summary: mediaSummary.trim() || null,
       content: mediaContent.trim() || null,
+      content_html: normalizeRichTextHtml(mediaContentHtml) || null,
       external_url: mediaExternalUrl.trim() || null,
       audio_url: mediaAudioUrl.trim() || null,
       image_path: mediaImagePath.trim() || null,
@@ -4298,6 +4312,7 @@ export default function App() {
     setNewEventPublicTitle('')
     setNewEventShortDescription('')
     setNewEventPublicDescription('')
+    setNewEventPublicDescriptionHtml('')
     setNewEventContactPerson('')
     setNewEventRegistrationDeadline('')
     setNewEventMaxParticipants('')
@@ -4326,6 +4341,7 @@ export default function App() {
     setNewEventPublicTitle(event.public_title || '')
     setNewEventShortDescription(event.short_description || '')
     setNewEventPublicDescription(event.public_description || '')
+    setNewEventPublicDescriptionHtml(event.public_description_html || '')
     setNewEventContactPerson(event.contact_person || '')
     setNewEventRegistrationDeadline(formatDateTimeLocal(event.registration_deadline))
     setNewEventMaxParticipants(event.max_participants ? String(event.max_participants) : '')
@@ -4344,6 +4360,7 @@ export default function App() {
     const maxParticipants = Number.parseInt(newEventMaxParticipants, 10)
     const publicTitle = newEventPublicTitle.trim() || newEventName.trim()
     const publicDescription = newEventPublicDescription.trim() || null
+    const publicDescriptionHtml = normalizeRichTextHtml(newEventPublicDescriptionHtml) || null
     const startsAt = newEventStartsAt ? new Date(newEventStartsAt).toISOString() : null
     const eventDate = startsAt ? startsAt.slice(0, 10) : (newEventDate || getTodayDate())
 
@@ -4355,6 +4372,7 @@ export default function App() {
       short_description: newEventShortDescription.trim() || null,
       description: publicDescription,
       public_description: publicDescription,
+      public_description_html: publicDescriptionHtml,
       starts_at: startsAt,
       ends_at: newEventEndsAt ? new Date(newEventEndsAt).toISOString() : null,
       meeting_point: newEventMeetingPoint.trim() || null,
@@ -4379,7 +4397,12 @@ export default function App() {
       return
     }
 
-    if (newEventIsPublic && newEventPublicStatus === 'published' && !newEventPublicDescription.trim()) {
+    if (
+      newEventIsPublic
+      && newEventPublicStatus === 'published'
+      && !newEventPublicDescription.trim()
+      && !normalizeRichTextHtml(newEventPublicDescriptionHtml)
+    ) {
       alert('Bitte für veröffentlichte Homepage-Events eine Beschreibung eingeben.')
       return
     }
@@ -4414,7 +4437,12 @@ export default function App() {
       return
     }
 
-    if (newEventIsPublic && newEventPublicStatus === 'published' && !newEventPublicDescription.trim()) {
+    if (
+      newEventIsPublic
+      && newEventPublicStatus === 'published'
+      && !newEventPublicDescription.trim()
+      && !normalizeRichTextHtml(newEventPublicDescriptionHtml)
+    ) {
       alert('Bitte für veröffentlichte Homepage-Events eine Beschreibung eingeben.')
       return
     }
@@ -5173,6 +5201,8 @@ export default function App() {
           setNewEventShortDescription={setNewEventShortDescription}
           newEventPublicDescription={newEventPublicDescription}
           setNewEventPublicDescription={setNewEventPublicDescription}
+          newEventPublicDescriptionHtml={newEventPublicDescriptionHtml}
+          setNewEventPublicDescriptionHtml={setNewEventPublicDescriptionHtml}
           newEventContactPerson={newEventContactPerson}
           setNewEventContactPerson={setNewEventContactPerson}
           newEventRegistrationDeadline={newEventRegistrationDeadline}
@@ -5370,6 +5400,8 @@ export default function App() {
           setMediaSummary={setMediaSummary}
           mediaContent={mediaContent}
           setMediaContent={setMediaContent}
+          mediaContentHtml={mediaContentHtml}
+          setMediaContentHtml={setMediaContentHtml}
           mediaExternalUrl={mediaExternalUrl}
           setMediaExternalUrl={setMediaExternalUrl}
           mediaAudioUrl={mediaAudioUrl}
@@ -5431,6 +5463,8 @@ export default function App() {
           setSponsorPublicSortOrder={setSponsorPublicSortOrder}
           sponsorPublicDescription={sponsorPublicDescription}
           setSponsorPublicDescription={setSponsorPublicDescription}
+          sponsorPublicDescriptionHtml={sponsorPublicDescriptionHtml}
+          setSponsorPublicDescriptionHtml={setSponsorPublicDescriptionHtml}
           sponsorStatus={sponsorStatus}
           setSponsorStatus={setSponsorStatus}
           sponsorNotes={sponsorNotes}
@@ -5537,6 +5571,8 @@ export default function App() {
           setMerchItemPublicTitle={setMerchItemPublicTitle}
           merchItemPublicDescription={merchItemPublicDescription}
           setMerchItemPublicDescription={setMerchItemPublicDescription}
+          merchItemPublicDescriptionHtml={merchItemPublicDescriptionHtml}
+          setMerchItemPublicDescriptionHtml={setMerchItemPublicDescriptionHtml}
           merchItemPublicImageAlt={merchItemPublicImageAlt}
           setMerchItemPublicImageAlt={setMerchItemPublicImageAlt}
           merchItemPublicCtaLabel={merchItemPublicCtaLabel}

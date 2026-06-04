@@ -8,6 +8,7 @@ import {
   secondaryButtonStyle,
   sectionStyle,
 } from '../../styles/appStyles'
+import { RichTextEditor } from '../common/RichTextEditor'
 
 export function SponsorsPage({
   sponsors,
@@ -38,6 +39,8 @@ export function SponsorsPage({
   setSponsorPublicSortOrder,
   sponsorPublicDescription,
   setSponsorPublicDescription,
+  sponsorPublicDescriptionHtml,
+  setSponsorPublicDescriptionHtml,
   sponsorStatus,
   setSponsorStatus,
   sponsorNotes,
@@ -196,6 +199,17 @@ export function SponsorsPage({
               onChange={(event) => setSponsorPublicDescription(event.target.value)}
               style={{ ...inputStyle, minHeight: 84, resize: 'vertical' }}
             />
+
+            <div style={richTextFieldStyle}>
+              <p style={richTextHintStyle}>Formatierte Beschreibung fuer Homepage-Ausgaben</p>
+              <RichTextEditor
+                value={sponsorPublicDescriptionHtml}
+                onChange={setSponsorPublicDescriptionHtml}
+                placeholder="Formatierte Sponsoren-Beschreibung"
+                disabled={sponsorSaving}
+                minHeight={150}
+              />
+            </div>
           </FormSection>
 
           <FormSection title="Notizen">
@@ -385,6 +399,8 @@ export function SponsorsPage({
           <br />
           Oeffentliche Beschreibung: {sponsor.public_description || '-'}
           <br />
+          Formatierte Beschreibung: {sponsor.public_description_html ? 'Vorhanden' : '-'}
+          <br />
           Interne Notizen: {sponsor.notes || '-'}
 
           <SponsorContractsList
@@ -560,4 +576,15 @@ const checkboxLabelStyle = {
   alignItems: 'center',
   gap: 8,
   margin: '8px 0 12px',
+}
+
+const richTextFieldStyle = {
+  marginTop: 4,
+  marginBottom: 12,
+}
+
+const richTextHintStyle = {
+  ...mutedTextStyle,
+  margin: '0 0 8px',
+  fontWeight: 700,
 }

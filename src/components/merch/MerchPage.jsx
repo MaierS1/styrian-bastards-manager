@@ -8,6 +8,8 @@ import {
   secondaryButtonStyle,
   sectionStyle,
 } from '../../styles/appStyles'
+import { supabase } from '../../lib/supabase'
+import { RichTextEditor } from '../common/RichTextEditor'
 
 const checkboxLabelStyle = {
   display: 'flex',
@@ -49,6 +51,16 @@ const badgeStyle = {
   background: colors.infoBg,
   color: colors.infoText,
   border: `1px solid ${colors.blue}`,
+}
+
+const richTextFieldStyle = {
+  marginBottom: 12,
+}
+
+const richTextHintStyle = {
+  ...mutedTextStyle,
+  margin: '0 0 8px',
+  fontWeight: 700,
 }
 
 export function MerchPage({
@@ -114,6 +126,8 @@ export function MerchPage({
   setMerchItemPublicTitle,
   merchItemPublicDescription,
   setMerchItemPublicDescription,
+  merchItemPublicDescriptionHtml,
+  setMerchItemPublicDescriptionHtml,
   merchItemPublicImageAlt,
   setMerchItemPublicImageAlt,
   merchItemPublicCtaLabel,
@@ -457,6 +471,17 @@ export function MerchPage({
             onChange={(event) => setMerchItemPublicDescription(event.target.value)}
             style={inputStyle}
           />
+
+          <div style={richTextFieldStyle}>
+            <p style={richTextHintStyle}>Formatierte Beschreibung fuer Homepage- und Detail-Ausgaben</p>
+            <RichTextEditor
+              value={merchItemPublicDescriptionHtml}
+              onChange={setMerchItemPublicDescriptionHtml}
+              placeholder="Formatierte Fanartikel-Beschreibung"
+              disabled={merchItemSaving}
+              minHeight={160}
+            />
+          </div>
 
           <input
             placeholder="Bild-Alt-Text"
@@ -1084,6 +1109,7 @@ function MerchItemCard({
   const totalStock = variants.reduce((sum, variant) => sum + Number(variant.stock_quantity || 0), 0)
   const displayName = item.public_title || item.name
   const displayDescription = item.public_description || item.short_description || item.description || '-'
+  const imageUrl = getPublicAssetUrl(item.image_path)
 
   return (
     <div
@@ -1105,9 +1131,9 @@ function MerchItemCard({
           overflow: 'hidden',
         }}
       >
-        {item.image_path ? (
+        {imageUrl ? (
           <img
-            src={item.image_path}
+            src={imageUrl}
             alt={item.public_image_alt || displayName}
             style={{ width: '100%', height: '100%', minHeight: 150, objectFit: 'cover', display: 'block' }}
           />
@@ -1141,6 +1167,8 @@ function MerchItemCard({
           {item.shipping_available ? ` (${formatAmount(item.shipping_cost_cents)})` : ''}
           <br />
           CTA: {getCtaLabel(item)}
+          <br />
+          Formatierte Beschreibung: {item.public_description_html ? 'Vorhanden' : '-'}
         </p>
 
       <MerchVariantsList
@@ -1248,11 +1276,19 @@ function getMerchItemBadges(item, variants) {
   if (item.is_bestseller) badges.push('Bestseller')
   if (item.is_preorder) badges.push('Vorbestellung')
   if (item.is_limited) badges.push('Limitiert')
-  if (item.status === 'inactive' || (variants.length > 0 && totalStock <= 0)) {
+  if (variants.length > 0 && totalStock <= 0) {
     badges.push('Ausverkauft')
   }
 
   return badges
+}
+
+function getPublicAssetUrl(path) {
+  if (!path) return ''
+  if (/^(https?:|data:)/i.test(path)) return path
+
+  const { data } = supabase.storage.from('public-assets').getPublicUrl(path)
+  return data?.publicUrl || ''
 }
 
 function getItemStatusLabel(status) {

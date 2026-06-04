@@ -31,6 +31,8 @@ export function EventsPage({
   setNewEventShortDescription,
   newEventPublicDescription,
   setNewEventPublicDescription,
+  newEventPublicDescriptionHtml,
+  setNewEventPublicDescriptionHtml,
   newEventContactPerson,
   setNewEventContactPerson,
   newEventRegistrationDeadline,
@@ -108,6 +110,8 @@ export function EventsPage({
           setNewEventShortDescription={setNewEventShortDescription}
           newEventPublicDescription={newEventPublicDescription}
           setNewEventPublicDescription={setNewEventPublicDescription}
+          newEventPublicDescriptionHtml={newEventPublicDescriptionHtml}
+          setNewEventPublicDescriptionHtml={setNewEventPublicDescriptionHtml}
           newEventContactPerson={newEventContactPerson}
           setNewEventContactPerson={setNewEventContactPerson}
           newEventRegistrationDeadline={newEventRegistrationDeadline}

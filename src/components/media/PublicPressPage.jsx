@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fetchPublicMediaItems } from '../../services/repositories/mediaRepository'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import {
   cardStyle,
   colors,
@@ -164,6 +165,7 @@ function PublicPressDetail({ item, loading, errorMessage }) {
   }
 
   const imageUrl = getPublicImageUrl(item.image_path)
+  const contentHtml = sanitizeHtml(item.content_html || '')
   const content = item.content || item.inhalt || ''
 
   return (
@@ -186,7 +188,12 @@ function PublicPressDetail({ item, loading, errorMessage }) {
       )}
 
       <div style={pressContentStyle}>
-        {content ? renderContent(content) : <p>Kein Inhalt hinterlegt.</p>}
+        {contentHtml ? (
+          <div
+            style={pressRichContentStyle}
+            dangerouslySetInnerHTML={{ __html: contentHtml }}
+          />
+        ) : content ? renderContent(content) : <p>Kein Inhalt hinterlegt.</p>}
       </div>
     </article>
   )
@@ -316,6 +323,10 @@ const pressLeadStyle = {
 const pressContentStyle = {
   maxWidth: 860,
   color: colors.text,
+}
+
+const pressRichContentStyle = {
+  lineHeight: 1.65,
 }
 
 const pressParagraphStyle = {

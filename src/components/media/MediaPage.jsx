@@ -8,6 +8,7 @@ import {
   secondaryButtonStyle,
   sectionStyle,
 } from '../../styles/appStyles'
+import { RichTextEditor } from '../common/RichTextEditor'
 
 const mediaCategories = [
   ['presseartikel', 'Presseartikel'],
@@ -56,6 +57,8 @@ export function MediaPage({
   setMediaSummary,
   mediaContent,
   setMediaContent,
+  mediaContentHtml,
+  setMediaContentHtml,
   mediaExternalUrl,
   setMediaExternalUrl,
   mediaAudioUrl,
@@ -128,11 +131,25 @@ export function MediaPage({
           />
 
           <textarea
-            placeholder="Inhalt"
+            placeholder="Inhalt als Plain Text / Fallback"
             value={mediaContent}
             onChange={(event) => setMediaContent(event.target.value)}
             style={{ ...textareaStyle, minHeight: 140 }}
           />
+
+          <div style={richTextFieldStyle}>
+            <strong>Formatierter Inhalt</strong>
+            <p style={richTextHintStyle}>
+              Optional. Wenn dieses Feld leer bleibt, wird öffentlich weiterhin der Plain-Text-Inhalt verwendet.
+            </p>
+            <RichTextEditor
+              value={mediaContentHtml}
+              onChange={setMediaContentHtml}
+              placeholder="Formatierten Presse-/News-Inhalt schreiben..."
+              disabled={mediaSaving}
+              minHeight={180}
+            />
+          </div>
 
           <input
             placeholder="Externer Link"
@@ -288,6 +305,8 @@ function MediaItemCard({
       <br />
       Inhalt: {item.content || '-'}
       <br />
+      Formatierter Inhalt: {item.content_html ? 'Vorhanden' : '-'}
+      <br />
       Interne Notizen: {item.internal_notes || '-'}
 
       {canManageMedia() && (
@@ -320,4 +339,14 @@ function getStatusLabel(status) {
 function formatDateTime(value) {
   if (!value) return '-'
   return String(value).replace('T', ' ').slice(0, 16)
+}
+
+const richTextFieldStyle = {
+  marginBottom: 12,
+}
+
+const richTextHintStyle = {
+  margin: '6px 0 10px',
+  color: colors.muted,
+  lineHeight: 1.45,
 }

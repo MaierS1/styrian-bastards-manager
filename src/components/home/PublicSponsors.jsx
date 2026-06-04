@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fetchPublicSponsors } from '../../services/repositories/sponsorsRepository'
 import { colors, isMobile, mutedTextStyle } from '../../styles/appStyles'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 
 const sponsorLevelLabels = {
   main: 'Hauptsponsor',
@@ -93,6 +94,7 @@ export function PublicSponsors() {
 
 function PublicSponsorCard({ sponsor }) {
   const logoUrl = getPublicLogoUrl(sponsor.logo_path)
+  const publicDescriptionHtml = sanitizeHtml(sponsor.public_description_html || '')
   const content = (
     <>
       <div style={publicSponsorLogoFrameStyle}>
@@ -110,7 +112,12 @@ function PublicSponsorCard({ sponsor }) {
 
       <strong style={publicSponsorNameStyle}>{sponsor.name}</strong>
 
-      {sponsor.public_description && (
+      {publicDescriptionHtml ? (
+        <div
+          style={publicSponsorDescriptionStyle}
+          dangerouslySetInnerHTML={{ __html: publicDescriptionHtml }}
+        />
+      ) : sponsor.public_description && (
         <p style={publicSponsorDescriptionStyle}>{sponsor.public_description}</p>
       )}
     </>
