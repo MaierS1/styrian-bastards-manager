@@ -51,6 +51,15 @@ export async function deleteEventRegistration(registrationId) {
     .eq('id', registrationId)
 }
 
+export async function sendEventRegistrationNotification({ type, registrationId }) {
+  return supabase.functions.invoke('event-notifications', {
+    body: {
+      type,
+      registration_id: registrationId,
+    },
+  })
+}
+
 export async function fetchEventCheckins() {
   return supabase
     .from('event_checkins')

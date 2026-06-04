@@ -4,8 +4,15 @@ import {
   createEventRegistration,
   deleteEventRegistration,
   fetchEventRegistrations,
+  sendEventRegistrationNotification,
   updateEventRegistration,
 } from '../../services/repositories/eventsRepository'
+import {
+  buildCancellationEmail,
+  buildEventReminderEmail,
+  buildRegistrationConfirmationEmail,
+  buildWaitlistEmail,
+} from '../../services/notifications/eventNotifications'
 
 const emptyForm = {
   full_name: '',
@@ -35,6 +42,8 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
   const [editingById, setEditingById] = useState({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [sendingId, setSendingId] = useState(null)
+  const [emailPreview, setEmailPreview] = useState(null)
 
   const registeredCount = useMemo(
     () => getParticipantCount(registrations, 'registered'),
@@ -93,6 +102,50 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       ...current,
       [registration.id]: toEditableRegistration(registration),
     }))
+  }
+
+  async function sendConfirmation(registration) {
+    const notification = getConfirmationNotification(registration)
+
+    setEmailPreview({
+      registrationId: registration.id,
+      type: 'confirmation',
+      email: notification.builder({ event, registration }),
+    })
+
+    await sendNotification(registration, notification.type)
+  }
+
+  async function sendReminder(registration) {
+    setEmailPreview({
+      registrationId: registration.id,
+      type: 'reminder',
+      email: buildEventReminderEmail({ event, registration }),
+    })
+
+    await sendNotification(registration, 'event_reminder')
+  }
+
+  async function sendNotification(registration, type) {
+    setSendingId(registration.id)
+
+    try {
+      const { error } = await sendEventRegistrationNotification({
+        type,
+        registrationId: registration.id,
+      })
+
+      if (error) {
+        alert(error.message || 'E-Mail konnte nicht gesendet werden.')
+        await reloadAfterChange()
+        return
+      }
+
+      alert('E-Mail wurde gesendet.')
+      await reloadAfterChange()
+    } finally {
+      setSendingId(null)
+    }
   }
 
   function cancelEdit(registrationId) {
@@ -288,6 +341,17 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       {loading ? <p style={mutedTextStyle}>Teilnehmer werden geladen...</p> : null}
       {!loading && registrations.length === 0 ? <p style={mutedTextStyle}>Noch keine Teilnehmer erfasst.</p> : null}
 
+      {emailPreview ? (
+        <div style={previewStyle}>
+          <strong>E-Mail-Vorschau</strong>
+          <br />
+          Typ: {emailPreview.type === 'reminder' ? 'Erinnerung' : 'Bestätigung'}
+          <br />
+          Betreff: {emailPreview.email.subject}
+          <pre style={previewTextStyle}>{emailPreview.email.text}</pre>
+        </div>
+      ) : null}
+
       <div style={listStyle}>
         {registrations.map((registration) => {
           const editValues = editingById[registration.id]
@@ -364,10 +428,19 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
                   <br />
                   Notiz: {registration.note || '-'}
                   <br />
+                  Benachrichtigung: {getNotificationLabel(registration)}
+                  {registration.notification_error ? <> · Fehler: {registration.notification_error}</> : null}
+                  <br />
                   Erstellt: {formatDateTime(registration.created_at)}
                   <br />
                   <button type="button" onClick={() => beginEdit(registration)} style={buttonStyle}>
                     Bearbeiten
+                  </button>
+                  <button type="button" onClick={() => sendConfirmation(registration)} disabled={sendingId === registration.id} style={secondaryButtonStyle}>
+                    Bestätigung senden
+                  </button>
+                  <button type="button" onClick={() => sendReminder(registration)} disabled={sendingId === registration.id} style={secondaryButtonStyle}>
+                    Erinnerung senden
                   </button>
                   {registration.status !== 'cancelled' ? (
                     <button type="button" onClick={() => handleCancel(registration)} style={secondaryButtonStyle}>
@@ -397,6 +470,27 @@ function getParticipantCount(registrations, status) {
     .reduce((sum, registration) => sum + (Number(registration.participant_count) || 0), 0)
 }
 
+function getConfirmationNotification(registration) {
+  if (registration.status === 'waitlist') {
+    return {
+      type: 'waitlist_confirmation',
+      builder: buildWaitlistEmail,
+    }
+  }
+
+  if (registration.status === 'cancelled') {
+    return {
+      type: 'cancellation_notification',
+      builder: buildCancellationEmail,
+    }
+  }
+
+  return {
+    type: 'registration_confirmation',
+    builder: buildRegistrationConfirmationEmail,
+  }
+}
+
 function toEditableRegistration(registration) {
   return {
     full_name: registration.full_name || '',
@@ -422,6 +516,12 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
+}
+
+function getNotificationLabel(registration) {
+  if (registration.notification_status === 'error') return 'Fehler'
+  if (registration.notification_status === 'sent' || registration.confirmation_sent_at || registration.reminder_sent_at) return 'gesendet'
+  return 'nicht gesendet'
 }
 
 const sectionBoxStyle = {
@@ -459,4 +559,17 @@ const statusBadgeStyle = {
   color: '#92400e',
   fontSize: 12,
   fontWeight: 800,
+}
+
+const previewStyle = {
+  ...cardStyle,
+  background: '#f8fafc',
+  borderColor: '#cbd5e1',
+  marginBottom: 16,
+}
+
+const previewTextStyle = {
+  whiteSpace: 'pre-wrap',
+  margin: '10px 0 0',
+  fontFamily: 'inherit',
 }
