@@ -1,6 +1,7 @@
 import { cardStyle, headingStyle, inputStyle, sectionStyle } from '../../styles/appStyles'
 import { EventCheckins } from './EventCheckins'
 import { EventForm } from './EventForm'
+import { EventRegistrationsManager } from './EventRegistrationsManager'
 import { EventsList } from './EventsList'
 
 export function EventsPage({
@@ -68,6 +69,7 @@ export function EventsPage({
   createEvent,
   updateEvent,
   resetEventForm,
+  loadEvents,
   selectedEventId,
   setSelectedEventId,
   setEventName,
@@ -91,6 +93,8 @@ export function EventsPage({
   getTodayCheckins,
   getMemberName,
 }) {
+  const registrationEvent = events.find((event) => event.id === (editingEventId || selectedEventId))
+
   return (
     <>
       <section style={sectionStyle}>
@@ -199,6 +203,11 @@ export function EventsPage({
             Ergebnis: {getSelectedEventBalance().toFixed(2)} €
           </div>
         )}
+
+        <EventRegistrationsManager
+          event={registrationEvent}
+          onRegistrationsChanged={loadEvents}
+        />
 
         <EventsList
           events={events}

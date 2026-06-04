@@ -5266,6 +5266,7 @@ export default function App() {
           createEvent={createEvent}
           updateEvent={updateEvent}
           resetEventForm={resetEventForm}
+          loadEvents={loadEvents}
           selectedEventId={selectedEventId}
           setSelectedEventId={setSelectedEventId}
           setEventName={setEventName}

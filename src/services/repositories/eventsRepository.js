@@ -19,6 +19,38 @@ export async function fetchEventRegistrationCounts() {
     .in('status', ['registered', 'waitlist', 'cancelled'])
 }
 
+export async function fetchEventRegistrations(eventId) {
+  return supabase
+    .from('event_registrations')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: true })
+}
+
+export async function createEventRegistration(payload) {
+  return supabase
+    .from('event_registrations')
+    .insert(payload)
+    .select()
+    .single()
+}
+
+export async function updateEventRegistration(registrationId, payload) {
+  return supabase
+    .from('event_registrations')
+    .update(payload)
+    .eq('id', registrationId)
+    .select()
+    .single()
+}
+
+export async function deleteEventRegistration(registrationId) {
+  return supabase
+    .from('event_registrations')
+    .delete()
+    .eq('id', registrationId)
+}
+
 export async function fetchEventCheckins() {
   return supabase
     .from('event_checkins')
