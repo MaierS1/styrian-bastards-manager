@@ -12,6 +12,13 @@ export async function fetchEvents() {
     .order('created_at', { ascending: false })
 }
 
+export async function fetchEventRegistrationCounts() {
+  return supabase
+    .from('event_registrations')
+    .select('event_id,status,participant_count')
+    .in('status', ['registered', 'waitlist', 'cancelled'])
+}
+
 export async function fetchEventCheckins() {
   return supabase
     .from('event_checkins')

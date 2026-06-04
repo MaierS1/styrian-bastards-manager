@@ -3,7 +3,7 @@ import { fetchMembershipFees } from '../repositories/membershipFeesRepository'
 import { fetchCurrentMemberByAuthUserId } from '../repositories/currentMemberRepository'
 import { fetchCashEntries, fetchCashMonthClosings } from '../repositories/cashRepository'
 import { fetchAuditLogs } from '../repositories/auditLogsRepository'
-import { fetchEventCheckins, fetchEvents } from '../repositories/eventsRepository'
+import { fetchEventCheckins, fetchEventRegistrationCounts, fetchEvents } from '../repositories/eventsRepository'
 import { fetchDocuments } from '../repositories/documentsRepository'
 import { fetchMediaItems } from '../repositories/mediaRepository'
 import { fetchInventoryItems } from '../repositories/inventoryRepository'
@@ -82,7 +82,37 @@ export async function loadEvents({ setEvents, selectedEventId, setSelectedEventI
 
   if (error) return alertFn(error.message)
 
-  const loadedEvents = data || []
+  const { data: registrationRows, error: registrationError } = await fetchEventRegistrationCounts()
+
+  if (registrationError) return alertFn(registrationError.message)
+
+  const registrationCountsByEventId = (registrationRows || []).reduce((counts, registration) => {
+    const eventCounts = counts[registration.event_id] || {
+      registered: 0,
+      waitlist: 0,
+      cancelled: 0,
+    }
+    const participantCount = Number(registration.participant_count) || 0
+
+    if (registration.status === 'registered') eventCounts.registered += participantCount
+    if (registration.status === 'waitlist') eventCounts.waitlist += participantCount
+    if (registration.status === 'cancelled') eventCounts.cancelled += participantCount
+
+    counts[registration.event_id] = eventCounts
+    return counts
+  }, {})
+
+  const loadedEvents = (data || []).map((event) => {
+    const registrationCounts = registrationCountsByEventId[event.id] || {}
+
+    return {
+      ...event,
+      registered_count: registrationCounts.registered || 0,
+      waitlist_count: registrationCounts.waitlist || 0,
+      cancelled_count: registrationCounts.cancelled || 0,
+    }
+  })
+
   setEvents(loadedEvents)
 
   if (!selectedEventId && loadedEvents.length > 0) {

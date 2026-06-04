@@ -32,12 +32,24 @@ export function EventForm({
   setNewEventPublicDescription,
   newEventPublicDescriptionHtml,
   setNewEventPublicDescriptionHtml,
+  newEventRegistrationEnabled,
+  setNewEventRegistrationEnabled,
+  newEventAllowWaitlist,
+  setNewEventAllowWaitlist,
   newEventContactPerson,
   setNewEventContactPerson,
+  newEventContactName,
+  setNewEventContactName,
+  newEventContactEmail,
+  setNewEventContactEmail,
+  newEventContactPhone,
+  setNewEventContactPhone,
   newEventRegistrationDeadline,
   setNewEventRegistrationDeadline,
   newEventMaxParticipants,
   setNewEventMaxParticipants,
+  newEventInternalNotes,
+  setNewEventInternalNotes,
   newEventPublicSortOrder,
   setNewEventPublicSortOrder,
   newEventPublicPublishedAt,
@@ -46,6 +58,8 @@ export function EventForm({
   setNewEventPublicImagePath,
   newEventPublicImageUrl,
   setNewEventPublicImageUrl,
+  newEventImageUrl,
+  setNewEventImageUrl,
   newEventPublicRegistrationUrl,
   setNewEventPublicRegistrationUrl,
   newEventPublicExternalUrl,
@@ -216,10 +230,52 @@ export function EventForm({
       <fieldset style={eventFieldsetStyle}>
         <legend style={eventLegendStyle}>Anmeldung/Teilnehmer</legend>
 
+        <label style={checkboxLabelStyle}>
+          <input
+            type="checkbox"
+            checked={newEventRegistrationEnabled}
+            onChange={(e) => setNewEventRegistrationEnabled(e.target.checked)}
+            style={checkboxInputStyle}
+          />
+          Direkte öffentliche Registrierung aktiv
+        </label>
+
+        <label style={checkboxLabelStyle}>
+          <input
+            type="checkbox"
+            checked={newEventAllowWaitlist}
+            onChange={(e) => setNewEventAllowWaitlist(e.target.checked)}
+            style={checkboxInputStyle}
+          />
+          Warteliste erlauben
+        </label>
+
         <input
-          placeholder="Kontaktperson"
+          placeholder="Interne Kontaktperson"
           value={newEventContactPerson}
           onChange={(e) => setNewEventContactPerson(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="Öffentlicher Kontaktname"
+          value={newEventContactName}
+          onChange={(e) => setNewEventContactName(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          type="email"
+          placeholder="Öffentliche Kontakt-E-Mail"
+          value={newEventContactEmail}
+          onChange={(e) => setNewEventContactEmail(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="Öffentliches Kontakt-Telefon"
+          value={newEventContactPhone}
+          onChange={(e) => setNewEventContactPhone(e.target.value)}
           style={inputStyle}
         />
 
@@ -242,6 +298,14 @@ export function EventForm({
           style={inputStyle}
         />
 
+        <textarea
+          placeholder="Interne Registrierungsnotizen"
+          value={newEventInternalNotes}
+          onChange={(e) => setNewEventInternalNotes(e.target.value)}
+          style={textareaStyle}
+          rows={3}
+        />
+
         <input
           placeholder="Anmelde-URL"
           value={newEventPublicRegistrationUrl}
@@ -254,7 +318,14 @@ export function EventForm({
         <legend style={eventLegendStyle}>Bild/Medien</legend>
 
         <input
-          placeholder="Bild-URL"
+          placeholder="Event-Bild-URL"
+          value={newEventImageUrl}
+          onChange={(e) => setNewEventImageUrl(e.target.value)}
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="Legacy öffentliche Bild-URL"
           value={newEventPublicImageUrl}
           onChange={(e) => setNewEventPublicImageUrl(e.target.value)}
           style={inputStyle}

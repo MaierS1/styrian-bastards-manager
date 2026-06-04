@@ -285,13 +285,20 @@ export default function App() {
   const [newEventShortDescription, setNewEventShortDescription] = useState('')
   const [newEventPublicDescription, setNewEventPublicDescription] = useState('')
   const [newEventPublicDescriptionHtml, setNewEventPublicDescriptionHtml] = useState('')
+  const [newEventRegistrationEnabled, setNewEventRegistrationEnabled] = useState(false)
+  const [newEventAllowWaitlist, setNewEventAllowWaitlist] = useState(true)
   const [newEventContactPerson, setNewEventContactPerson] = useState('')
+  const [newEventContactName, setNewEventContactName] = useState('')
+  const [newEventContactEmail, setNewEventContactEmail] = useState('')
+  const [newEventContactPhone, setNewEventContactPhone] = useState('')
   const [newEventRegistrationDeadline, setNewEventRegistrationDeadline] = useState('')
   const [newEventMaxParticipants, setNewEventMaxParticipants] = useState('')
+  const [newEventInternalNotes, setNewEventInternalNotes] = useState('')
   const [newEventPublicSortOrder, setNewEventPublicSortOrder] = useState('0')
   const [newEventPublicPublishedAt, setNewEventPublicPublishedAt] = useState('')
   const [newEventPublicImagePath, setNewEventPublicImagePath] = useState('')
   const [newEventPublicImageUrl, setNewEventPublicImageUrl] = useState('')
+  const [newEventImageUrl, setNewEventImageUrl] = useState('')
   const [newEventPublicRegistrationUrl, setNewEventPublicRegistrationUrl] = useState('')
   const [newEventPublicExternalUrl, setNewEventPublicExternalUrl] = useState('')
 
@@ -4313,13 +4320,20 @@ export default function App() {
     setNewEventShortDescription('')
     setNewEventPublicDescription('')
     setNewEventPublicDescriptionHtml('')
+    setNewEventRegistrationEnabled(false)
+    setNewEventAllowWaitlist(true)
     setNewEventContactPerson('')
+    setNewEventContactName('')
+    setNewEventContactEmail('')
+    setNewEventContactPhone('')
     setNewEventRegistrationDeadline('')
     setNewEventMaxParticipants('')
+    setNewEventInternalNotes('')
     setNewEventPublicSortOrder('0')
     setNewEventPublicPublishedAt('')
     setNewEventPublicImagePath('')
     setNewEventPublicImageUrl('')
+    setNewEventImageUrl('')
     setNewEventPublicRegistrationUrl('')
     setNewEventPublicExternalUrl('')
   }
@@ -4342,13 +4356,20 @@ export default function App() {
     setNewEventShortDescription(event.short_description || '')
     setNewEventPublicDescription(event.public_description || '')
     setNewEventPublicDescriptionHtml(event.public_description_html || '')
+    setNewEventRegistrationEnabled(Boolean(event.registration_enabled))
+    setNewEventAllowWaitlist(event.allow_waitlist !== false)
     setNewEventContactPerson(event.contact_person || '')
+    setNewEventContactName(event.contact_name || '')
+    setNewEventContactEmail(event.contact_email || '')
+    setNewEventContactPhone(event.contact_phone || '')
     setNewEventRegistrationDeadline(formatDateTimeLocal(event.registration_deadline))
     setNewEventMaxParticipants(event.max_participants ? String(event.max_participants) : '')
+    setNewEventInternalNotes(event.internal_notes || '')
     setNewEventPublicSortOrder(String(event.public_sort_order ?? 0))
     setNewEventPublicPublishedAt(formatDateTimeLocal(event.public_published_at))
     setNewEventPublicImagePath(event.public_image_path || '')
     setNewEventPublicImageUrl(event.public_image_url || '')
+    setNewEventImageUrl(event.event_image_url || '')
     setNewEventPublicRegistrationUrl(event.public_registration_url || '')
     setNewEventPublicExternalUrl(event.public_external_url || '')
 
@@ -4376,13 +4397,20 @@ export default function App() {
       starts_at: startsAt,
       ends_at: newEventEndsAt ? new Date(newEventEndsAt).toISOString() : null,
       meeting_point: newEventMeetingPoint.trim() || null,
+      registration_enabled: newEventRegistrationEnabled,
+      allow_waitlist: newEventAllowWaitlist,
       contact_person: newEventContactPerson.trim() || null,
+      contact_name: newEventContactName.trim() || null,
+      contact_email: newEventContactEmail.trim() || null,
+      contact_phone: newEventContactPhone.trim() || null,
       registration_deadline: newEventRegistrationDeadline ? new Date(newEventRegistrationDeadline).toISOString() : null,
       max_participants: Number.isNaN(maxParticipants) ? null : Math.max(1, maxParticipants),
+      internal_notes: newEventInternalNotes.trim() || null,
       public_sort_order: Number.isNaN(publicSortOrder) ? 0 : Math.max(0, publicSortOrder),
       public_published_at: newEventPublicPublishedAt ? new Date(newEventPublicPublishedAt).toISOString() : null,
       public_image_path: newEventPublicImagePath.trim() || null,
       public_image_url: newEventPublicImageUrl.trim() || null,
+      event_image_url: newEventImageUrl.trim() || null,
       public_registration_url: newEventPublicRegistrationUrl.trim() || null,
       public_external_url: newEventPublicExternalUrl.trim() || null,
       event_date: eventDate,
@@ -5203,12 +5231,24 @@ export default function App() {
           setNewEventPublicDescription={setNewEventPublicDescription}
           newEventPublicDescriptionHtml={newEventPublicDescriptionHtml}
           setNewEventPublicDescriptionHtml={setNewEventPublicDescriptionHtml}
+          newEventRegistrationEnabled={newEventRegistrationEnabled}
+          setNewEventRegistrationEnabled={setNewEventRegistrationEnabled}
+          newEventAllowWaitlist={newEventAllowWaitlist}
+          setNewEventAllowWaitlist={setNewEventAllowWaitlist}
           newEventContactPerson={newEventContactPerson}
           setNewEventContactPerson={setNewEventContactPerson}
+          newEventContactName={newEventContactName}
+          setNewEventContactName={setNewEventContactName}
+          newEventContactEmail={newEventContactEmail}
+          setNewEventContactEmail={setNewEventContactEmail}
+          newEventContactPhone={newEventContactPhone}
+          setNewEventContactPhone={setNewEventContactPhone}
           newEventRegistrationDeadline={newEventRegistrationDeadline}
           setNewEventRegistrationDeadline={setNewEventRegistrationDeadline}
           newEventMaxParticipants={newEventMaxParticipants}
           setNewEventMaxParticipants={setNewEventMaxParticipants}
+          newEventInternalNotes={newEventInternalNotes}
+          setNewEventInternalNotes={setNewEventInternalNotes}
           newEventPublicSortOrder={newEventPublicSortOrder}
           setNewEventPublicSortOrder={setNewEventPublicSortOrder}
           newEventPublicPublishedAt={newEventPublicPublishedAt}
@@ -5217,6 +5257,8 @@ export default function App() {
           setNewEventPublicImagePath={setNewEventPublicImagePath}
           newEventPublicImageUrl={newEventPublicImageUrl}
           setNewEventPublicImageUrl={setNewEventPublicImageUrl}
+          newEventImageUrl={newEventImageUrl}
+          setNewEventImageUrl={setNewEventImageUrl}
           newEventPublicRegistrationUrl={newEventPublicRegistrationUrl}
           setNewEventPublicRegistrationUrl={setNewEventPublicRegistrationUrl}
           newEventPublicExternalUrl={newEventPublicExternalUrl}

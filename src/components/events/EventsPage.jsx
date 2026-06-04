@@ -33,12 +33,24 @@ export function EventsPage({
   setNewEventPublicDescription,
   newEventPublicDescriptionHtml,
   setNewEventPublicDescriptionHtml,
+  newEventRegistrationEnabled,
+  setNewEventRegistrationEnabled,
+  newEventAllowWaitlist,
+  setNewEventAllowWaitlist,
   newEventContactPerson,
   setNewEventContactPerson,
+  newEventContactName,
+  setNewEventContactName,
+  newEventContactEmail,
+  setNewEventContactEmail,
+  newEventContactPhone,
+  setNewEventContactPhone,
   newEventRegistrationDeadline,
   setNewEventRegistrationDeadline,
   newEventMaxParticipants,
   setNewEventMaxParticipants,
+  newEventInternalNotes,
+  setNewEventInternalNotes,
   newEventPublicSortOrder,
   setNewEventPublicSortOrder,
   newEventPublicPublishedAt,
@@ -47,6 +59,8 @@ export function EventsPage({
   setNewEventPublicImagePath,
   newEventPublicImageUrl,
   setNewEventPublicImageUrl,
+  newEventImageUrl,
+  setNewEventImageUrl,
   newEventPublicRegistrationUrl,
   setNewEventPublicRegistrationUrl,
   newEventPublicExternalUrl,
@@ -112,12 +126,24 @@ export function EventsPage({
           setNewEventPublicDescription={setNewEventPublicDescription}
           newEventPublicDescriptionHtml={newEventPublicDescriptionHtml}
           setNewEventPublicDescriptionHtml={setNewEventPublicDescriptionHtml}
+          newEventRegistrationEnabled={newEventRegistrationEnabled}
+          setNewEventRegistrationEnabled={setNewEventRegistrationEnabled}
+          newEventAllowWaitlist={newEventAllowWaitlist}
+          setNewEventAllowWaitlist={setNewEventAllowWaitlist}
           newEventContactPerson={newEventContactPerson}
           setNewEventContactPerson={setNewEventContactPerson}
+          newEventContactName={newEventContactName}
+          setNewEventContactName={setNewEventContactName}
+          newEventContactEmail={newEventContactEmail}
+          setNewEventContactEmail={setNewEventContactEmail}
+          newEventContactPhone={newEventContactPhone}
+          setNewEventContactPhone={setNewEventContactPhone}
           newEventRegistrationDeadline={newEventRegistrationDeadline}
           setNewEventRegistrationDeadline={setNewEventRegistrationDeadline}
           newEventMaxParticipants={newEventMaxParticipants}
           setNewEventMaxParticipants={setNewEventMaxParticipants}
+          newEventInternalNotes={newEventInternalNotes}
+          setNewEventInternalNotes={setNewEventInternalNotes}
           newEventPublicSortOrder={newEventPublicSortOrder}
           setNewEventPublicSortOrder={setNewEventPublicSortOrder}
           newEventPublicPublishedAt={newEventPublicPublishedAt}
@@ -126,6 +152,8 @@ export function EventsPage({
           setNewEventPublicImagePath={setNewEventPublicImagePath}
           newEventPublicImageUrl={newEventPublicImageUrl}
           setNewEventPublicImageUrl={setNewEventPublicImageUrl}
+          newEventImageUrl={newEventImageUrl}
+          setNewEventImageUrl={setNewEventImageUrl}
           newEventPublicRegistrationUrl={newEventPublicRegistrationUrl}
           setNewEventPublicRegistrationUrl={setNewEventPublicRegistrationUrl}
           newEventPublicExternalUrl={newEventPublicExternalUrl}

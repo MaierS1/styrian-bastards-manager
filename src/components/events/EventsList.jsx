@@ -41,6 +41,8 @@ export function EventsList({
             </>
           )}
           <br />
+          Registrierung: {event.registration_enabled ? 'Aktiv' : 'Inaktiv'} · Angemeldet: {event.registered_count || 0} · Warteliste: {event.waitlist_count || 0} · Abgesagt: {event.cancelled_count || 0}
+          <br />
           Notizen: {event.notes || '-'}
           <br />
           Einnahmen: {getEventIncomeTotal(event.id).toFixed(2)} € · Ausgaben: {getEventExpenseTotal(event.id).toFixed(2)} € · Ergebnis: {getEventBalance(event.id).toFixed(2)} €
