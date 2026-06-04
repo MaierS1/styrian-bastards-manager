@@ -36,30 +36,29 @@ const statusLabels = {
   cancelled: 'Abgesagt',
 }
 
+const checkinStatusLabels = {
+  not_checked_in: 'Nicht eingecheckt',
+  checked_in: 'Eingecheckt',
+  no_show: 'Nicht erschienen',
+}
+
 export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
   const [registrations, setRegistrations] = useState([])
   const [form, setForm] = useState(emptyForm)
+  const [sendConfirmationOnCreate, setSendConfirmationOnCreate] = useState(false)
   const [editingById, setEditingById] = useState({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [sendingId, setSendingId] = useState(null)
+  const [sendingBulk, setSendingBulk] = useState(false)
+  const [updatingCheckinId, setUpdatingCheckinId] = useState(null)
   const [emailPreview, setEmailPreview] = useState(null)
 
-  const registeredCount = useMemo(
-    () => getParticipantCount(registrations, 'registered'),
-    [registrations]
-  )
-  const waitlistCount = useMemo(
-    () => getParticipantCount(registrations, 'waitlist'),
-    [registrations]
-  )
-  const cancelledCount = useMemo(
-    () => getParticipantCount(registrations, 'cancelled'),
-    [registrations]
-  )
+  const stats = useMemo(() => buildStats(registrations), [registrations])
 
   useEffect(() => {
     setForm(emptyForm)
+    setSendConfirmationOnCreate(false)
     setEditingById({})
     if (event?.id) {
       loadRegistrations()
@@ -107,19 +106,37 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
   async function sendConfirmation(registration) {
     const notification = getConfirmationNotification(registration)
 
+    if (registration.confirmation_sent_at && !window.confirm('Bestätigung wurde bereits gesendet. Jetzt erneut senden?')) {
+      return
+    }
+
     setEmailPreview({
       registrationId: registration.id,
-      type: 'confirmation',
+      type: notification.type,
       email: notification.builder({ event, registration }),
     })
 
     await sendNotification(registration, notification.type)
   }
 
-  async function sendReminder(registration) {
+  async function sendCancellation(registration) {
     setEmailPreview({
       registrationId: registration.id,
-      type: 'reminder',
+      type: 'cancellation_notification',
+      email: buildCancellationEmail({ event, registration }),
+    })
+
+    await sendNotification(registration, 'cancellation_notification')
+  }
+
+  async function sendReminder(registration) {
+    if (registration.reminder_sent_at && !window.confirm('Erinnerung wurde bereits gesendet. Jetzt erneut senden?')) {
+      return
+    }
+
+    setEmailPreview({
+      registrationId: registration.id,
+      type: 'event_reminder',
       email: buildEventReminderEmail({ event, registration }),
     })
 
@@ -138,14 +155,62 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       if (error) {
         alert(error.message || 'E-Mail konnte nicht gesendet werden.')
         await reloadAfterChange()
-        return
+        return { error }
       }
 
-      alert('E-Mail wurde gesendet.')
       await reloadAfterChange()
+      return { ok: true }
     } finally {
       setSendingId(null)
     }
+  }
+
+  async function sendAllReminders() {
+    const registeredRegistrations = registrations.filter((registration) => registration.status === 'registered')
+    const unsent = registeredRegistrations.filter((registration) => !registration.reminder_sent_at)
+    const alreadySent = registeredRegistrations.filter((registration) => registration.reminder_sent_at)
+
+    if (registeredRegistrations.length === 0) {
+      alert('Keine angemeldeten Teilnehmer gefunden.')
+      return
+    }
+
+    let targets = unsent
+
+    if (alreadySent.length > 0) {
+      const includeResend = window.confirm(
+        `${unsent.length} offene Erinnerung(en), ${alreadySent.length} bereits gesendet. Bereits gesendete Erinnerungen erneut senden?`
+      )
+      targets = includeResend ? registeredRegistrations : unsent
+    }
+
+    if (targets.length === 0) {
+      alert('Keine offenen Erinnerungen zu senden.')
+      return
+    }
+
+    if (!window.confirm(`Erinnerungen an ${targets.length} angemeldete Teilnehmer senden?`)) return
+
+    setSendingBulk(true)
+    let successCount = 0
+    let errorCount = 0
+
+    for (const registration of targets) {
+      const { error } = await sendEventRegistrationNotification({
+        type: 'event_reminder',
+        registrationId: registration.id,
+      })
+
+      if (error) {
+        errorCount += 1
+      } else {
+        successCount += 1
+      }
+    }
+
+    setSendingBulk(false)
+    await reloadAfterChange()
+    alert(`Erinnerungen gesendet: ${successCount}. Fehler: ${errorCount}.`)
   }
 
   function cancelEdit(registrationId) {
@@ -210,14 +275,28 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     if (!resolvedStatus) return
 
     setSaving(true)
-    const { error } = await createEventRegistration({
+    const { data, error } = await createEventRegistration({
       ...buildPayload({ ...form, status: resolvedStatus }),
     })
+
+    if (!error && sendConfirmationOnCreate && ['registered', 'waitlist'].includes(resolvedStatus)) {
+      const notificationType = resolvedStatus === 'waitlist' ? 'waitlist_confirmation' : 'registration_confirmation'
+      const { error: notificationError } = await sendEventRegistrationNotification({
+        type: notificationType,
+        registrationId: data.id,
+      })
+
+      if (notificationError) {
+        alert(`Teilnehmer gespeichert, E-Mail aber nicht gesendet: ${notificationError.message}`)
+      }
+    }
+
     setSaving(false)
 
     if (error) return alert(error.message)
 
     setForm(emptyForm)
+    setSendConfirmationOnCreate(false)
     await reloadAfterChange()
   }
 
@@ -250,6 +329,20 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     await reloadAfterChange()
   }
 
+  async function updateCheckin(registration, checkinStatus) {
+    const payload = checkinStatus === 'checked_in'
+      ? { checkin_status: 'checked_in', checked_in_at: new Date().toISOString() }
+      : { checkin_status: checkinStatus, checked_in_at: null }
+
+    setUpdatingCheckinId(registration.id)
+    const { error } = await updateEventRegistration(registration.id, payload)
+    setUpdatingCheckinId(null)
+
+    if (error) return alert(error.message)
+
+    await reloadAfterChange()
+  }
+
   async function handleDelete(registration) {
     if (!window.confirm(`Teilnehmer endgültig löschen?\n\n${registration.full_name}`)) return
 
@@ -262,6 +355,101 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
   async function reloadAfterChange() {
     await loadRegistrations()
     await onRegistrationsChanged?.()
+  }
+
+  function exportCsv() {
+    if (!event?.id) return
+
+    const headers = [
+      'Eventname',
+      'Name',
+      'E-Mail',
+      'Telefon',
+      'Mitgliedsstatus',
+      'Teilnehmeranzahl',
+      'Status',
+      'Check-in Status',
+      'Check-in Zeit',
+      'Notiz',
+      'Erstellt am',
+    ]
+
+    const rows = registrations.map((registration) => [
+      getEventTitle(event),
+      registration.full_name,
+      registration.email,
+      registration.phone || '',
+      memberStatusLabels[registration.member_status] || registration.member_status,
+      registration.participant_count,
+      statusLabels[registration.status] || registration.status,
+      checkinStatusLabels[registration.checkin_status] || registration.checkin_status || checkinStatusLabels.not_checked_in,
+      formatDateTime(registration.checked_in_at),
+      registration.note || '',
+      formatDateTime(registration.created_at),
+    ])
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map(formatCsvValue).join(';'))
+      .join('\r\n')
+
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = buildCsvFilename(event)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  function printCheckinList() {
+    const printableRows = registrations
+      .filter((registration) => registration.status === 'registered')
+      .map((registration) => `
+        <tr>
+          <td class="box"></td>
+          <td>${escapeHtml(registration.full_name)}</td>
+          <td>${escapeHtml(String(registration.participant_count || 1))}</td>
+          <td>${escapeHtml(registration.note || '')}</td>
+        </tr>
+      `)
+      .join('')
+
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer')
+    if (!printWindow) return alert('Druckfenster konnte nicht geöffnet werden.')
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Check-in-Liste ${escapeHtml(getEventTitle(event))}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
+            h1 { font-size: 22px; margin: 0 0 4px; }
+            p { margin: 0 0 18px; color: #4b5563; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border-bottom: 1px solid #d1d5db; padding: 10px 8px; text-align: left; }
+            th { background: #f3f4f6; }
+            .box { width: 22px; }
+            .box::before { content: ''; display: inline-block; width: 16px; height: 16px; border: 2px solid #111827; }
+          </style>
+        </head>
+        <body>
+          <h1>${escapeHtml(getEventTitle(event))}</h1>
+          <p>${escapeHtml(formatEventDate(event))}</p>
+          <table>
+            <thead>
+              <tr><th></th><th>Name</th><th>Anzahl</th><th>Notiz</th></tr>
+            </thead>
+            <tbody>${printableRows}</tbody>
+          </table>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.focus()
+    printWindow.print()
   }
 
   if (!event?.id) {
@@ -277,10 +465,26 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     <section style={sectionBoxStyle}>
       <h3 style={headingStyle}>Teilnehmer verwalten</h3>
 
-      <p style={summaryStyle}>
-        Angemeldet: <strong>{registeredCount}</strong> · Warteliste: <strong>{waitlistCount}</strong> · Abgesagt: <strong>{cancelledCount}</strong>
-        {event.max_participants ? <> · Limit: <strong>{event.max_participants}</strong></> : null}
-      </p>
+      <div style={statsGridStyle}>
+        <StatCard label="Angemeldet" value={stats.registered} />
+        <StatCard label="Warteliste" value={stats.waitlist} />
+        <StatCard label="Abgesagt" value={stats.cancelled} />
+        <StatCard label="Eingecheckt" value={stats.checkedIn} />
+        <StatCard label="Nicht erschienen" value={stats.noShow} />
+        <StatCard label="Registered gesamt" value={stats.registeredParticipants} />
+      </div>
+
+      <div style={toolbarStyle}>
+        <button type="button" onClick={sendAllReminders} disabled={sendingBulk || registrations.length === 0} style={buttonStyle}>
+          {sendingBulk ? 'Erinnerungen laufen...' : 'Erinnerungen an alle senden'}
+        </button>
+        <button type="button" onClick={exportCsv} disabled={registrations.length === 0} style={secondaryButtonStyle}>
+          Teilnehmer exportieren CSV
+        </button>
+        <button type="button" onClick={printCheckinList} disabled={registrations.length === 0} style={secondaryButtonStyle}>
+          Check-in-Liste drucken
+        </button>
+      </div>
 
       <form onSubmit={handleCreate} style={formGridStyle}>
         <input
@@ -333,6 +537,14 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
           onChange={(e) => updateFormValue('note', e.target.value)}
           style={{ ...inputStyle, minHeight: 84, resize: 'vertical', gridColumn: '1 / -1' }}
         />
+        <label style={checkboxStyle}>
+          <input
+            type="checkbox"
+            checked={sendConfirmationOnCreate}
+            onChange={(e) => setSendConfirmationOnCreate(e.target.checked)}
+          />
+          Bestätigung sofort senden
+        </label>
         <button type="submit" disabled={saving} style={buttonStyle}>
           Teilnehmer hinzufügen
         </button>
@@ -345,7 +557,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
         <div style={previewStyle}>
           <strong>E-Mail-Vorschau</strong>
           <br />
-          Typ: {emailPreview.type === 'reminder' ? 'Erinnerung' : 'Bestätigung'}
+          Typ: {getEmailPreviewLabel(emailPreview.type)}
           <br />
           Betreff: {emailPreview.email.subject}
           <pre style={previewTextStyle}>{emailPreview.email.text}</pre>
@@ -355,6 +567,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       <div style={listStyle}>
         {registrations.map((registration) => {
           const editValues = editingById[registration.id]
+          const isBusy = sendingId === registration.id || updatingCheckinId === registration.id
 
           return (
             <div key={registration.id} style={cardStyle}>
@@ -417,6 +630,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
                 <>
                   <strong>{registration.full_name}</strong>
                   <span style={statusBadgeStyle}>{statusLabels[registration.status] || registration.status}</span>
+                  <span style={checkinBadgeStyle}>{checkinStatusLabels[registration.checkin_status] || checkinStatusLabels.not_checked_in}</span>
                   <br />
                   E-Mail: {registration.email}
                   <br />
@@ -426,34 +640,53 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
                   <br />
                   Teilnehmeranzahl: {registration.participant_count}
                   <br />
+                  Check-in-Zeit: {formatDateTime(registration.checked_in_at)}
+                  <br />
                   Notiz: {registration.note || '-'}
                   <br />
                   Benachrichtigung: {getNotificationLabel(registration)}
                   {registration.notification_error ? <> · Fehler: {registration.notification_error}</> : null}
                   <br />
                   Erstellt: {formatDateTime(registration.created_at)}
-                  <br />
-                  <button type="button" onClick={() => beginEdit(registration)} style={buttonStyle}>
-                    Bearbeiten
-                  </button>
-                  <button type="button" onClick={() => sendConfirmation(registration)} disabled={sendingId === registration.id} style={secondaryButtonStyle}>
-                    Bestätigung senden
-                  </button>
-                  <button type="button" onClick={() => sendReminder(registration)} disabled={sendingId === registration.id} style={secondaryButtonStyle}>
-                    Erinnerung senden
-                  </button>
-                  {registration.status !== 'cancelled' ? (
-                    <button type="button" onClick={() => handleCancel(registration)} style={secondaryButtonStyle}>
-                      Absagen
+                  <div style={actionRowStyle}>
+                    <button type="button" onClick={() => beginEdit(registration)} style={buttonStyle}>
+                      Bearbeiten
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(registration)}
-                    style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
-                  >
-                    Löschen
-                  </button>
+                    <button type="button" onClick={() => sendConfirmation(registration)} disabled={isBusy} style={secondaryButtonStyle}>
+                      {registration.confirmation_sent_at ? 'Bestätigung erneut senden' : 'Bestätigung senden'}
+                    </button>
+                    {registration.status === 'cancelled' ? (
+                      <button type="button" onClick={() => sendCancellation(registration)} disabled={isBusy} style={secondaryButtonStyle}>
+                        Stornierungs-Mail senden
+                      </button>
+                    ) : null}
+                    {registration.status === 'registered' ? (
+                      <button type="button" onClick={() => sendReminder(registration)} disabled={isBusy} style={secondaryButtonStyle}>
+                        {registration.reminder_sent_at ? 'Erinnerung erneut senden' : 'Erinnerung senden'}
+                      </button>
+                    ) : null}
+                    {registration.status !== 'cancelled' ? (
+                      <button type="button" onClick={() => handleCancel(registration)} style={secondaryButtonStyle}>
+                        Absagen
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={() => updateCheckin(registration, 'checked_in')} disabled={isBusy} style={secondaryButtonStyle}>
+                      Einchecken
+                    </button>
+                    <button type="button" onClick={() => updateCheckin(registration, 'no_show')} disabled={isBusy} style={secondaryButtonStyle}>
+                      Nicht erschienen
+                    </button>
+                    <button type="button" onClick={() => updateCheckin(registration, 'not_checked_in')} disabled={isBusy} style={secondaryButtonStyle}>
+                      Check-in zurücksetzen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(registration)}
+                      style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}
+                    >
+                      Löschen
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -462,6 +695,26 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       </div>
     </section>
   )
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div style={statCardStyle}>
+      <span style={statLabelStyle}>{label}</span>
+      <strong style={statValueStyle}>{value}</strong>
+    </div>
+  )
+}
+
+function buildStats(registrations) {
+  return {
+    registered: registrations.filter((registration) => registration.status === 'registered').length,
+    waitlist: registrations.filter((registration) => registration.status === 'waitlist').length,
+    cancelled: registrations.filter((registration) => registration.status === 'cancelled').length,
+    checkedIn: registrations.filter((registration) => registration.checkin_status === 'checked_in').length,
+    noShow: registrations.filter((registration) => registration.checkin_status === 'no_show').length,
+    registeredParticipants: getParticipantCount(registrations, 'registered'),
+  }
 }
 
 function getParticipantCount(registrations, status) {
@@ -518,10 +771,61 @@ function formatDateTime(value) {
   }).format(date)
 }
 
+function formatEventDate(event) {
+  return formatDateTime(event?.starts_at || event?.event_date)
+}
+
 function getNotificationLabel(registration) {
+  const parts = []
+
+  if (registration.confirmation_sent_at) parts.push(`Bestätigung ${formatDateTime(registration.confirmation_sent_at)}`)
+  if (registration.reminder_sent_at) parts.push(`Erinnerung ${formatDateTime(registration.reminder_sent_at)}`)
+  if (parts.length > 0) return parts.join(' | ')
+  if (registration.notification_status === 'pending') return 'ausstehend'
   if (registration.notification_status === 'error') return 'Fehler'
-  if (registration.notification_status === 'sent' || registration.confirmation_sent_at || registration.reminder_sent_at) return 'gesendet'
+  if (registration.notification_status === 'sent') return 'gesendet'
   return 'nicht gesendet'
+}
+
+function getEmailPreviewLabel(type) {
+  if (type === 'event_reminder') return 'Erinnerung'
+  if (type === 'cancellation_notification') return 'Stornierung'
+  if (type === 'waitlist_confirmation') return 'Warteliste'
+  return 'Bestätigung'
+}
+
+function getEventTitle(event) {
+  return event?.public_title || event?.title || event?.name || 'Event'
+}
+
+function formatCsvValue(value) {
+  const normalized = value == null ? '' : String(value)
+  return `"${normalized.replaceAll('"', '""')}"`
+}
+
+function buildCsvFilename(event) {
+  const yearSource = event?.starts_at || event?.event_date || new Date().toISOString()
+  const year = new Date(yearSource).getFullYear() || new Date().getFullYear()
+  const slug = slugify(getEventTitle(event))
+  return `event-teilnehmer-${slug}-${year}.csv`
+}
+
+function slugify(value) {
+  return String(value || 'event')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'event'
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
 }
 
 const sectionBoxStyle = {
@@ -532,11 +836,6 @@ const sectionBoxStyle = {
   background: '#ffffff',
 }
 
-const summaryStyle = {
-  ...mutedTextStyle,
-  margin: '0 0 14px',
-}
-
 const formGridStyle = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -545,9 +844,58 @@ const formGridStyle = {
   marginBottom: 16,
 }
 
+const statsGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+  gap: 10,
+  marginBottom: 14,
+}
+
+const statCardStyle = {
+  padding: 12,
+  border: '1px solid #d1d5db',
+  borderRadius: 8,
+  background: '#f9fafb',
+}
+
+const statLabelStyle = {
+  display: 'block',
+  color: '#6b7280',
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const statValueStyle = {
+  display: 'block',
+  marginTop: 4,
+  fontSize: 22,
+}
+
+const toolbarStyle = {
+  display: 'flex',
+  gap: 10,
+  flexWrap: 'wrap',
+  marginBottom: 16,
+}
+
+const checkboxStyle = {
+  display: 'flex',
+  gap: 8,
+  alignItems: 'center',
+  color: '#374151',
+  fontWeight: 700,
+}
+
 const listStyle = {
   display: 'grid',
   gap: 12,
+}
+
+const actionRowStyle = {
+  display: 'flex',
+  gap: 8,
+  flexWrap: 'wrap',
+  marginTop: 12,
 }
 
 const statusBadgeStyle = {
@@ -557,6 +905,17 @@ const statusBadgeStyle = {
   borderRadius: 999,
   background: '#fef3c7',
   color: '#92400e',
+  fontSize: 12,
+  fontWeight: 800,
+}
+
+const checkinBadgeStyle = {
+  display: 'inline-block',
+  marginLeft: 8,
+  padding: '2px 8px',
+  borderRadius: 999,
+  background: '#dbeafe',
+  color: '#1d4ed8',
   fontSize: 12,
   fontWeight: 800,
 }

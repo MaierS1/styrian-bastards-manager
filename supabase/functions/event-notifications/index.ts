@@ -29,20 +29,6 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Supabase Function Secrets fehlen.' }, 500)
     }
 
-    const authHeader = req.headers.get('Authorization') || ''
-
-    if (!authHeader.startsWith('Bearer ')) {
-      return jsonResponse({ error: 'Nicht angemeldet.' }, 401)
-    }
-
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-    })
-
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
@@ -50,32 +36,11 @@ Deno.serve(async (req) => {
       },
     })
 
-    const {
-      data: { user },
-      error: userError,
-    } = await userClient.auth.getUser()
-
-    if (userError || !user) {
-      return jsonResponse({ error: 'Benutzer konnte nicht geprüft werden.' }, 401)
-    }
-
-    const { data: callerMember, error: callerError } = await adminClient
-      .from('members')
-      .select('id, app_role, email')
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
-
-    if (callerError) {
-      return jsonResponse({ error: callerError.message }, 500)
-    }
-
-    if (!callerMember || !['admin', 'checkin'].includes(callerMember.app_role)) {
-      return jsonResponse({ error: 'Keine Berechtigung für Event-Benachrichtigungen.' }, 403)
-    }
-
     const body = await req.json()
     const type = String(body.type || '').trim()
     const registrationId = String(body.registration_id || '').trim()
+    const source = String(body.source || '').trim()
+    const isPublicRegistrationNotification = source === 'public_registration'
 
     if (!allowedTypes.includes(type)) {
       return jsonResponse({ error: 'Ungültiger Benachrichtigungstyp.' }, 400)
@@ -83,6 +48,49 @@ Deno.serve(async (req) => {
 
     if (!registrationId) {
       return jsonResponse({ error: 'registration_id ist Pflicht.' }, 400)
+    }
+
+    if (isPublicRegistrationNotification) {
+      if (!['registration_confirmation', 'waitlist_confirmation'].includes(type)) {
+        return jsonResponse({ error: 'Ungültiger öffentlicher Benachrichtigungstyp.' }, 400)
+      }
+    } else {
+      const authHeader = req.headers.get('Authorization') || ''
+
+      if (!authHeader.startsWith('Bearer ')) {
+        return jsonResponse({ error: 'Nicht angemeldet.' }, 401)
+      }
+
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: {
+          headers: {
+            Authorization: authHeader,
+          },
+        },
+      })
+
+      const {
+        data: { user },
+        error: userError,
+      } = await userClient.auth.getUser()
+
+      if (userError || !user) {
+        return jsonResponse({ error: 'Benutzer konnte nicht geprüft werden.' }, 401)
+      }
+
+      const { data: callerMember, error: callerError } = await adminClient
+        .from('members')
+        .select('id, app_role, email')
+        .eq('auth_user_id', user.id)
+        .maybeSingle()
+
+      if (callerError) {
+        return jsonResponse({ error: callerError.message }, 500)
+      }
+
+      if (!callerMember || !['admin', 'checkin'].includes(callerMember.app_role)) {
+        return jsonResponse({ error: 'Keine Berechtigung für Event-Benachrichtigungen.' }, 403)
+      }
     }
 
     const { data: registration, error: registrationError } = await adminClient
@@ -97,6 +105,18 @@ Deno.serve(async (req) => {
 
     if (!registration) {
       return jsonResponse({ error: 'Anmeldung nicht gefunden.' }, 404)
+    }
+
+    if (isPublicRegistrationNotification) {
+      const expectedStatus = type === 'waitlist_confirmation' ? 'waitlist' : 'registered'
+
+      if (
+        registration.status !== expectedStatus ||
+        registration.notification_status !== 'pending' ||
+        registration.confirmation_sent_at
+      ) {
+        return jsonResponse({ error: 'Öffentliche Benachrichtigung ist für diese Anmeldung nicht zulässig.' }, 409)
+      }
     }
 
     const { data: event, error: eventError } = await adminClient
