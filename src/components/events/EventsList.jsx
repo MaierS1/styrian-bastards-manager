@@ -41,7 +41,7 @@ export function EventsList({
             </>
           )}
           <br />
-          Registrierung: {event.registration_enabled ? 'Aktiv' : 'Inaktiv'} · Angemeldet: {event.registered_count || 0} · Warteliste: {event.waitlist_count || 0} · Abgesagt: {event.cancelled_count || 0}
+          Anmeldung: {event.registration_enabled ? 'aktiv' : 'inaktiv'} · Status: {getRegistrationStatusLabel(event.registration_status)} · Angemeldet: {event.registered_count || 0} · Warteliste: {event.waitlist_count || 0}
           <br />
           Notizen: {event.notes || '-'}
           <br />
@@ -82,6 +82,14 @@ function getPublicStatusLabel(status) {
   if (status === 'published') return 'Veröffentlicht'
   if (status === 'hidden') return 'Ausgeblendet'
   return 'Entwurf'
+}
+
+function getRegistrationStatusLabel(status) {
+  if (status === 'open') return 'offen'
+  if (status === 'waitlist') return 'Warteliste'
+  if (status === 'full') return 'voll'
+  if (status === 'closed') return 'geschlossen'
+  return 'deaktiviert'
 }
 
 const categoryBadgeStyle = {

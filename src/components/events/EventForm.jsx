@@ -136,19 +136,25 @@ export function EventForm({
           />
         </label>
 
-        <input
-          placeholder="Ort"
-          value={newEventLocation}
-          onChange={(e) => setNewEventLocation(e.target.value)}
-          style={inputStyle}
-        />
+        <label style={fieldLabelStyle}>
+          Ort
+          <input
+            placeholder="Ort"
+            value={newEventLocation}
+            onChange={(e) => setNewEventLocation(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        </label>
 
-        <input
-          placeholder="Treffpunkt"
-          value={newEventMeetingPoint}
-          onChange={(e) => setNewEventMeetingPoint(e.target.value)}
-          style={inputStyle}
-        />
+        <label style={fieldLabelStyle}>
+          Treffpunkt
+          <input
+            placeholder="Treffpunkt, z.B. Eingang Nord"
+            value={newEventMeetingPoint}
+            onChange={(e) => setNewEventMeetingPoint(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        </label>
       </fieldset>
 
       <fieldset style={eventFieldsetStyle}>
@@ -250,34 +256,46 @@ export function EventForm({
           Warteliste erlauben
         </label>
 
-        <input
-          placeholder="Interne Kontaktperson"
-          value={newEventContactPerson}
-          onChange={(e) => setNewEventContactPerson(e.target.value)}
-          style={inputStyle}
-        />
+        <label style={fieldLabelStyle}>
+          Interne Kontaktperson
+          <input
+            placeholder="Optional, nur intern"
+            value={newEventContactPerson}
+            onChange={(e) => setNewEventContactPerson(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        </label>
 
-        <input
-          placeholder="Öffentlicher Kontaktname"
-          value={newEventContactName}
-          onChange={(e) => setNewEventContactName(e.target.value)}
-          style={inputStyle}
-        />
+        <label style={fieldLabelStyle}>
+          Kontaktperson Name
+          <input
+            placeholder="Name fuer Rueckfragen"
+            value={newEventContactName}
+            onChange={(e) => setNewEventContactName(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        </label>
 
-        <input
-          type="email"
-          placeholder="Öffentliche Kontakt-E-Mail"
-          value={newEventContactEmail}
-          onChange={(e) => setNewEventContactEmail(e.target.value)}
-          style={inputStyle}
-        />
+        <label style={fieldLabelStyle}>
+          Kontakt E-Mail
+          <input
+            type="email"
+            placeholder="kontakt@example.at"
+            value={newEventContactEmail}
+            onChange={(e) => setNewEventContactEmail(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        </label>
 
-        <input
-          placeholder="Öffentliches Kontakt-Telefon"
-          value={newEventContactPhone}
-          onChange={(e) => setNewEventContactPhone(e.target.value)}
-          style={inputStyle}
-        />
+        <label style={fieldLabelStyle}>
+          Kontakt Telefon
+          <input
+            placeholder="+43 ..."
+            value={newEventContactPhone}
+            onChange={(e) => setNewEventContactPhone(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        </label>
 
         <label style={fieldLabelStyle}>
           Anmeldeschluss
@@ -289,22 +307,28 @@ export function EventForm({
           />
         </label>
 
-        <input
-          type="number"
-          min="1"
-          placeholder="Maximale Teilnehmer"
-          value={newEventMaxParticipants}
-          onChange={(e) => setNewEventMaxParticipants(e.target.value)}
-          style={inputStyle}
-        />
+        <label style={fieldLabelStyle}>
+          Maximale Teilnehmerzahl
+          <input
+            type="number"
+            min="1"
+            placeholder="z.B. 40"
+            value={newEventMaxParticipants}
+            onChange={(e) => setNewEventMaxParticipants(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        </label>
 
-        <textarea
-          placeholder="Interne Registrierungsnotizen"
-          value={newEventInternalNotes}
-          onChange={(e) => setNewEventInternalNotes(e.target.value)}
-          style={textareaStyle}
-          rows={3}
-        />
+        <label style={fieldLabelStyle}>
+          Interne Notizen zur Anmeldung
+          <textarea
+            placeholder="Nur intern sichtbar"
+            value={newEventInternalNotes}
+            onChange={(e) => setNewEventInternalNotes(e.target.value)}
+            style={{ ...textareaStyle, marginTop: 6 }}
+            rows={3}
+          />
+        </label>
 
         <input
           placeholder="Anmelde-URL"
@@ -317,12 +341,15 @@ export function EventForm({
       <fieldset style={eventFieldsetStyle}>
         <legend style={eventLegendStyle}>Bild/Medien</legend>
 
-        <input
-          placeholder="Event-Bild-URL"
-          value={newEventImageUrl}
-          onChange={(e) => setNewEventImageUrl(e.target.value)}
-          style={inputStyle}
-        />
+        <label style={fieldLabelStyle}>
+          Eventbild-URL
+          <input
+            placeholder="https://..."
+            value={newEventImageUrl}
+            onChange={(e) => setNewEventImageUrl(e.target.value)}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        </label>
 
         <input
           placeholder="Legacy öffentliche Bild-URL"

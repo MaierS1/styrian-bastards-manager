@@ -102,14 +102,29 @@ export async function loadEvents({ setEvents, selectedEventId, setSelectedEventI
     return counts
   }, {})
 
+  const getRegistrationStatus = (event, registeredCount) => {
+    if (!event.registration_enabled) return 'disabled'
+
+    const deadline = event.registration_deadline ? new Date(event.registration_deadline) : null
+    if (deadline && !Number.isNaN(deadline.getTime()) && deadline < new Date()) return 'closed'
+
+    if (event.max_participants && registeredCount >= event.max_participants) {
+      return event.allow_waitlist ? 'waitlist' : 'full'
+    }
+
+    return 'open'
+  }
+
   const loadedEvents = (data || []).map((event) => {
     const registrationCounts = registrationCountsByEventId[event.id] || {}
+    const registeredCount = registrationCounts.registered || 0
 
     return {
       ...event,
-      registered_count: registrationCounts.registered || 0,
+      registered_count: registeredCount,
       waitlist_count: registrationCounts.waitlist || 0,
       cancelled_count: registrationCounts.cancelled || 0,
+      registration_status: getRegistrationStatus(event, registeredCount),
     }
   })
 
