@@ -73,8 +73,16 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const type = String(body.type || '')
     const feeItemId = String(body.fee_item_id || '')
+    const allowedTypes = [
+      'fee_reminder',
+      'fee_paid_confirmation',
+      'fee_reminder_test',
+      'fee_paid_confirmation_test',
+    ]
+    const isTest = type.endsWith('_test')
+    const baseType = isTest ? type.replace('_test', '') : type
 
-    if (!['fee_reminder', 'fee_paid_confirmation'].includes(type)) {
+    if (!allowedTypes.includes(type)) {
       return jsonResponse({ error: 'Ungültiger Mailtyp.' }, 400)
     }
 
@@ -96,7 +104,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Beitragsposition nicht gefunden.' }, 404)
     }
 
-    if (type === 'fee_reminder' && !['open', 'reminded'].includes(feeItem.status)) {
+    if (!isTest && type === 'fee_reminder' && !['open', 'reminded'].includes(feeItem.status)) {
       await adminClient
         .from('membership_fee_items')
         .update({
@@ -108,7 +116,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Erinnerungen sind nur für offene Beiträge zulässig.' }, 400)
     }
 
-    if (type === 'fee_paid_confirmation' && feeItem.status !== 'paid') {
+    if (!isTest && type === 'fee_paid_confirmation' && feeItem.status !== 'paid') {
       await adminClient
         .from('membership_fee_items')
         .update({
@@ -130,7 +138,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: memberError.message }, 500)
     }
 
-    if (!member?.email) {
+    if (!isTest && !member?.email) {
       await adminClient
         .from('membership_fee_items')
         .update({
@@ -157,13 +165,24 @@ Deno.serve(async (req) => {
       ? `${period.year} · ${period.title}`
       : String(period?.year || 'Mitgliedsbeitrag')
     const amount = Number(feeItem.amount || 0).toFixed(2)
+    const recipientEmail = getRecipientEmail({
+      body,
+      callerEmail: user.email || callerMember.email || '',
+      memberEmail: member?.email || '',
+      isTest,
+    })
+
+    if (!recipientEmail) {
+      return jsonResponse({ error: 'Keine zulaessige Empfaengeradresse vorhanden.' }, 400)
+    }
 
     const message = buildMessage({
-      type,
+      type: baseType,
       memberName,
       periodLabel,
       amount,
       dueDate: feeItem.due_date || period?.due_date || null,
+      isTest,
     })
 
     const response = await fetch('https://api.resend.com/emails', {
@@ -174,7 +193,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         from: fromEmail,
-        to: [member.email],
+        to: [recipientEmail],
         subject: message.subject,
         html: message.html,
       }),
@@ -185,15 +204,25 @@ Deno.serve(async (req) => {
     if (!response.ok) {
       const errorMessage = result?.message || 'E-Mail konnte nicht gesendet werden.'
 
-      await adminClient
-        .from('membership_fee_items')
-        .update({
-          notification_status: 'error',
-          notification_error: errorMessage,
-        })
-        .eq('id', feeItemId)
+      if (!isTest) {
+        await adminClient
+          .from('membership_fee_items')
+          .update({
+            notification_status: 'error',
+            notification_error: errorMessage,
+          })
+          .eq('id', feeItemId)
+      }
 
       return jsonResponse({ error: errorMessage, detail: result }, 400)
+    }
+
+    if (isTest) {
+      return jsonResponse({
+        success: true,
+        test: true,
+        result,
+      })
     }
 
     const updatePayload: Record<string, unknown> = {
@@ -218,7 +247,9 @@ Deno.serve(async (req) => {
       result,
     })
   } catch (error) {
-    return jsonResponse({ error: error.message || 'Unbekannter Fehler.' }, 500)
+    const message = error instanceof Error ? error.message : 'Unbekannter Fehler.'
+    const status = message === 'Testadresse ist nicht erlaubt.' ? 403 : 500
+    return jsonResponse({ error: message }, status)
   }
 })
 
@@ -228,16 +259,18 @@ function buildMessage({
   periodLabel,
   amount,
   dueDate,
+  isTest,
 }: {
   type: string
   memberName: string
   periodLabel: string
   amount: string
   dueDate: string | null
+  isTest: boolean
 }) {
   if (type === 'fee_paid_confirmation') {
     return {
-      subject: `Zahlungsbestätigung: ${periodLabel}`,
+      subject: formatSubject(`Zahlungsbestätigung: ${periodLabel}`, isTest),
       html: `
         <p>Hallo ${escapeHtml(memberName)},</p>
         <p>dein Mitgliedsbeitrag für <strong>${escapeHtml(periodLabel)}</strong> über <strong>${escapeHtml(amount)} EUR</strong> wurde als bezahlt markiert.</p>
@@ -247,7 +280,7 @@ function buildMessage({
   }
 
   return {
-    subject: `Erinnerung: ${periodLabel}`,
+    subject: formatSubject(`Erinnerung: ${periodLabel}`, isTest),
     html: `
       <p>Hallo ${escapeHtml(memberName)},</p>
       <p>für <strong>${escapeHtml(periodLabel)}</strong> ist ein Mitgliedsbeitrag über <strong>${escapeHtml(amount)} EUR</strong> offen.</p>
@@ -255,6 +288,40 @@ function buildMessage({
       <p>Bitte um zeitnahe Erledigung.</p>
     `,
   }
+}
+
+function getRecipientEmail({
+  body,
+  callerEmail,
+  memberEmail,
+  isTest,
+}: {
+  body: Record<string, unknown>
+  callerEmail: string
+  memberEmail: string
+  isTest: boolean
+}) {
+  if (!isTest) return memberEmail
+
+  const requestedEmail = String(body.test_email || '').trim().toLowerCase()
+  const adminEmail = String(callerEmail || '').trim().toLowerCase()
+
+  if (!requestedEmail) return adminEmail
+
+  const allowedEmails = String(Deno.env.get('ALLOWED_TEST_EMAILS') || '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+
+  if (allowedEmails.includes(requestedEmail)) {
+    return requestedEmail
+  }
+
+  throw new Error('Testadresse ist nicht erlaubt.')
+}
+
+function formatSubject(subject: string, isTest: boolean) {
+  return isTest ? `[TEST] Styrian Bastards - ${subject}` : subject
 }
 
 function escapeHtml(value: string) {

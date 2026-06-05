@@ -223,6 +223,30 @@ export function MembershipFeesPage({
     }
   }
 
+  async function handleSendTestReminder(item) {
+    setNotificationLoadingId(item.id)
+    try {
+      await sendMembershipFeeNotification({
+        type: 'fee_reminder_test',
+        feeItemId: item.id,
+      })
+    } finally {
+      setNotificationLoadingId(null)
+    }
+  }
+
+  async function handleSendTestPaidConfirmation(item) {
+    setNotificationLoadingId(item.id)
+    try {
+      await sendMembershipFeeNotification({
+        type: 'fee_paid_confirmation_test',
+        feeItemId: item.id,
+      })
+    } finally {
+      setNotificationLoadingId(null)
+    }
+  }
+
   async function handleMarkPaid(item) {
     setNotificationLoadingId(item.id)
     try {
@@ -509,6 +533,22 @@ export function MembershipFeesPage({
                   Zahlungsbestätigung senden
                 </button>
               )}
+
+              <button
+                onClick={() => handleSendTestReminder(item)}
+                style={secondaryButtonStyle}
+                disabled={isLoading}
+              >
+                Test-Erinnerung senden
+              </button>
+
+              <button
+                onClick={() => handleSendTestPaidConfirmation(item)}
+                style={secondaryButtonStyle}
+                disabled={isLoading}
+              >
+                Test-Zahlungsbestätigung senden
+              </button>
             </div>
           </div>
         )
