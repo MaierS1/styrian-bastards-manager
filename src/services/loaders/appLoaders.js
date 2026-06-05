@@ -1,5 +1,9 @@
 import { fetchMembers } from '../repositories/membersRepository'
 import { fetchMembershipFees } from '../repositories/membershipFeesRepository'
+import {
+  fetchMembershipFeeItems,
+  fetchMembershipFeePeriods,
+} from '../repositories/membershipFeesRepository'
 import { fetchCurrentMemberByAuthUserId } from '../repositories/currentMemberRepository'
 import { fetchCashEntries, fetchCashMonthClosings } from '../repositories/cashRepository'
 import { fetchAuditLogs } from '../repositories/auditLogsRepository'
@@ -43,6 +47,23 @@ export async function loadFees({ year = 2026, setFees, alertFn = alert }) {
 
   if (error) return alertFn(error.message)
   setFees(data || [])
+}
+
+export async function loadMembershipFeeData({
+  setMembershipFeePeriods,
+  setMembershipFeeItems,
+  alertFn = alert,
+}) {
+  const [periodsResult, itemsResult] = await Promise.all([
+    fetchMembershipFeePeriods(),
+    fetchMembershipFeeItems(),
+  ])
+
+  if (periodsResult.error) return alertFn(periodsResult.error.message)
+  if (itemsResult.error) return alertFn(itemsResult.error.message)
+
+  setMembershipFeePeriods(periodsResult.data || [])
+  setMembershipFeeItems(itemsResult.data || [])
 }
 
 export async function loadCashEntries({ setCashEntries, alertFn = alert }) {
@@ -297,6 +318,7 @@ export async function loadAll({
   loadCashEntriesFn,
   loadCashMonthClosingsFn,
   loadAuditLogsFn,
+  loadMembershipFeeDataFn,
   loadEventCheckinsFn,
   loadEventsFn,
   loadDocumentsFn,
@@ -320,6 +342,7 @@ export async function loadAll({
     loadCashEntriesFn(),
     loadCashMonthClosingsFn(),
     loadAuditLogsFn(),
+    loadMembershipFeeDataFn?.(),
     loadEventCheckinsFn(),
     loadEventsFn(),
     loadDocumentsFn(),

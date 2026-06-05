@@ -94,6 +94,7 @@ import {
   loadShopOrders as loadShopOrdersService,
   loadSponsorContracts as loadSponsorContractsService,
   loadSponsors as loadSponsorsService,
+  loadMembershipFeeData as loadMembershipFeeDataService,
 } from './services/loaders/appLoaders'
 import {
   addCashEntryRecord,
@@ -190,7 +191,14 @@ import {
   markMemberAsTestRecord,
   saveMemberRecord,
 } from './services/repositories/membersRepository'
+import {
+  createMembershipFeePeriodAndItems,
+  markMembershipFeeItemPaid as markMembershipFeeItemPaidRecord,
+  reopenMembershipFeeItem as reopenMembershipFeeItemRecord,
+  sendMembershipFeeNotification as sendMembershipFeeNotificationRecord,
+} from './services/repositories/membershipFeesRepository'
 import { MembersPage } from './components/members/MembersPage'
+import { MembershipFeesPage } from './components/fees/MembershipFeesPage'
 import { CashPage } from './components/cash/CashPage'
 import { DocumentsPage } from './components/documents/DocumentsPage'
 import { EventsPage } from './components/events/EventsPage'
@@ -243,6 +251,8 @@ export default function App() {
 
   const [members, setMembers] = useState([])
   const [fees, setFees] = useState([])
+  const [membershipFeePeriods, setMembershipFeePeriods] = useState([])
+  const [membershipFeeItems, setMembershipFeeItems] = useState([])
   const [cashEntries, setCashEntries] = useState([])
   const [cashMonthClosings, setCashMonthClosings] = useState([])
   const [auditLogs, setAuditLogs] = useState([])
@@ -267,6 +277,18 @@ export default function App() {
   const [selectedCashYear, setSelectedCashYear] = useState(String(new Date().getFullYear()))
   const [carryoverFromYear, setCarryoverFromYear] = useState(String(new Date().getFullYear() - 1))
   const [carryoverToYear, setCarryoverToYear] = useState(String(new Date().getFullYear()))
+  const [membershipFeeYearFilter, setMembershipFeeYearFilter] = useState('alle')
+  const [membershipFeeStatusFilter, setMembershipFeeStatusFilter] = useState('alle')
+  const [membershipFeeMemberTypeFilter, setMembershipFeeMemberTypeFilter] = useState('alle')
+  const [membershipFeePaymentFilter, setMembershipFeePaymentFilter] = useState('alle')
+  const [membershipFeeCreateYear, setMembershipFeeCreateYear] = useState(String(new Date().getFullYear()))
+  const [membershipFeeCreateTitle, setMembershipFeeCreateTitle] = useState(`Mitgliedsbeiträge ${new Date().getFullYear()}`)
+  const [membershipFeeCreateDueDate, setMembershipFeeCreateDueDate] = useState('')
+  const [membershipFeeCreateCashEntry, setMembershipFeeCreateCashEntry] = useState(true)
+  const [membershipFeePaymentMethod, setMembershipFeePaymentMethod] = useState('bar')
+  const [membershipFeeGenerationLoading, setMembershipFeeGenerationLoading] = useState(false)
+  const [membershipFeeGenerationResult, setMembershipFeeGenerationResult] = useState(null)
+  const [membershipFeeActionLoadingId, setMembershipFeeActionLoadingId] = useState(null)
 
   const [eventName, setEventName] = useState('Heimspiel')
   const [selectedEventId, setSelectedEventId] = useState('')
@@ -561,8 +583,10 @@ export default function App() {
 
   const [activePage, setActivePage] = useState('dashboard')
   const [invitingMemberId, setInvitingMemberId] = useState(null)
+  const currentMemberRef = useRef(null)
   const selectedEventIdRef = useRef(selectedEventId)
 
+  currentMemberRef.current = currentMember
   selectedEventIdRef.current = selectedEventId
 
   const syncPortalFormFromMember = useCallback((member) => {
@@ -582,6 +606,7 @@ export default function App() {
       setCurrentMember,
     })
 
+    currentMemberRef.current = loadedMember
     syncPortalFormFromMember(loadedMember)
     return loadedMember
   }, [syncPortalFormFromMember])
@@ -590,6 +615,13 @@ export default function App() {
     return loadAllService({
       loadMembersFn: () => loadMembersService({ setMembers }),
       loadFeesFn: () => loadFeesService({ year: 2026, setFees }),
+      loadMembershipFeeDataFn: currentMemberRef.current?.app_role === 'admin'
+        ? () =>
+            loadMembershipFeeDataService({
+              setMembershipFeePeriods,
+              setMembershipFeeItems,
+            })
+        : undefined,
       loadCashEntriesFn: () => loadCashEntriesService({ setCashEntries }),
       loadCashMonthClosingsFn: () => loadCashMonthClosingsService({ setCashMonthClosings }),
       loadAuditLogsFn: () => loadAuditLogsService({ setAuditLogs }),
@@ -1066,6 +1098,109 @@ export default function App() {
 
   function getFee(memberId) {
     return fees.find((fee) => fee.member_id === memberId)
+  }
+
+  async function createMembershipFeesForYear({ year, title, dueDate }) {
+    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+
+    setMembershipFeeGenerationLoading(true)
+    setMembershipFeeGenerationResult(null)
+
+    try {
+      const { data, error } = await createMembershipFeePeriodAndItems({
+        year,
+        title,
+        dueDate,
+      })
+
+      if (error) {
+        alert(error.message)
+        return { error }
+      }
+
+      const result = Array.isArray(data) ? data[0] : data
+      setMembershipFeeGenerationResult(result || null)
+      await loadAll()
+      return { ok: true, data: result }
+    } finally {
+      setMembershipFeeGenerationLoading(false)
+    }
+  }
+
+  async function markMembershipFeeItemPaidAction({
+    feeItemId,
+    paymentMethod = 'bar',
+    createCashEntry = true,
+  }) {
+    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+
+    setMembershipFeeActionLoadingId(feeItemId)
+    try {
+      const { error } = await markMembershipFeeItemPaidRecord({
+        feeItemId,
+        paymentMethod,
+        createCashEntry,
+      })
+
+      if (error) {
+        alert(error.message)
+        return { error }
+      }
+
+      await loadAll()
+      return { ok: true }
+    } finally {
+      setMembershipFeeActionLoadingId(null)
+    }
+  }
+
+  async function reopenMembershipFeeItemAction({ feeItemId, cancelCashEntry = true }) {
+    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+
+    setMembershipFeeActionLoadingId(feeItemId)
+    try {
+      const { error } = await reopenMembershipFeeItemRecord({
+        feeItemId,
+        cancelCashEntry,
+      })
+
+      if (error) {
+        alert(error.message)
+        return { error }
+      }
+
+      await loadAll()
+      return { ok: true }
+    } finally {
+      setMembershipFeeActionLoadingId(null)
+    }
+  }
+
+  async function sendMembershipFeeNotificationAction({ feeItemId, type }) {
+    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+
+    setMembershipFeeActionLoadingId(feeItemId)
+    try {
+      const { data, error } = await sendMembershipFeeNotificationRecord({
+        feeItemId,
+        type,
+      })
+
+      if (error) {
+        alert(error.message)
+        return { error }
+      }
+
+      if (data?.error) {
+        alert(data.error)
+        return { error: new Error(data.error) }
+      }
+
+      await loadAll()
+      return { ok: true }
+    } finally {
+      setMembershipFeeActionLoadingId(null)
+    }
   }
 
   function getAvailableCashYears() {
@@ -1893,6 +2028,8 @@ export default function App() {
       selectedCashYear,
       members,
       fees,
+      membershipFeePeriods,
+      membershipFeeItems,
       cashEntries,
       events,
       eventCheckins,
@@ -1923,6 +2060,8 @@ export default function App() {
       restoreData,
       members,
       fees,
+      membershipFeePeriods,
+      membershipFeeItems,
       events,
       cashEntries,
       eventCheckins,
@@ -5104,6 +5243,41 @@ export default function App() {
           <h2 style={headingStyle}>Mitglieder</h2>
           <p>Für die Mitgliederverwaltung hast du keine Bearbeitungsrechte. Die Mitgliederliste bleibt weiter unten sichtbar, wenn sie freigegeben ist.</p>
         </section>
+      )}
+
+      {activePage === 'fees' && (
+        <MembershipFeesPage
+          canAccess={isAdmin()}
+          members={members}
+          membershipFeePeriods={membershipFeePeriods}
+          membershipFeeItems={membershipFeeItems}
+          yearFilter={membershipFeeYearFilter}
+          setYearFilter={setMembershipFeeYearFilter}
+          statusFilter={membershipFeeStatusFilter}
+          setStatusFilter={setMembershipFeeStatusFilter}
+          memberTypeFilter={membershipFeeMemberTypeFilter}
+          setMemberTypeFilter={setMembershipFeeMemberTypeFilter}
+          paymentFilter={membershipFeePaymentFilter}
+          setPaymentFilter={setMembershipFeePaymentFilter}
+          createYear={membershipFeeCreateYear}
+          setCreateYear={setMembershipFeeCreateYear}
+          createTitle={membershipFeeCreateTitle}
+          setCreateTitle={setMembershipFeeCreateTitle}
+          createDueDate={membershipFeeCreateDueDate}
+          setCreateDueDate={setMembershipFeeCreateDueDate}
+          createCashEntryOnPayment={membershipFeeCreateCashEntry}
+          setCreateCashEntryOnPayment={setMembershipFeeCreateCashEntry}
+          paymentMethod={membershipFeePaymentMethod}
+          setPaymentMethod={setMembershipFeePaymentMethod}
+          generationResult={membershipFeeGenerationResult}
+          generationLoading={membershipFeeGenerationLoading}
+          createMembershipFeesForYear={createMembershipFeesForYear}
+          sendMembershipFeeNotification={sendMembershipFeeNotificationAction}
+          markMembershipFeeItemPaid={markMembershipFeeItemPaidAction}
+          reopenMembershipFeeItem={reopenMembershipFeeItemAction}
+          notificationLoadingId={membershipFeeActionLoadingId}
+          setNotificationLoadingId={setMembershipFeeActionLoadingId}
+        />
       )}
 
 

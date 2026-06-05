@@ -139,6 +139,10 @@ export function AdminBackupRestore({
               <br />
               Beiträge: {getRestoreCount('membership_fees')}
               <br />
+              Beitragsperioden: {getRestoreCount('membership_fee_periods')}
+              <br />
+              Beitragspositionen: {getRestoreCount('membership_fee_items')}
+              <br />
               Kassa-Einträge: {getRestoreCount('cash_entries')}
               <br />
               Events: {getRestoreCount('events')}

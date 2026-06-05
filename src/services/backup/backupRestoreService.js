@@ -5,6 +5,8 @@ export function exportFullBackupJson({
   selectedCashYear,
   members,
   fees,
+  membershipFeePeriods,
+  membershipFeeItems,
   cashEntries,
   events,
   eventCheckins,
@@ -19,6 +21,8 @@ export function exportFullBackupJson({
     selectedCashYear,
     members,
     fees,
+    membershipFeePeriods,
+    membershipFeeItems,
     cashEntries,
     events,
     eventCheckins,
@@ -92,6 +96,8 @@ export async function restoreFullBackup({
   restoreData,
   members,
   fees,
+  membershipFeePeriods,
+  membershipFeeItems,
   events,
   cashEntries,
   eventCheckins,
@@ -111,9 +117,11 @@ export async function restoreFullBackup({
   }
 
   const confirmed = confirmFn(
-    `Backup wiederherstellen?\n\n` +
+      `Backup wiederherstellen?\n\n` +
       `Mitglieder: ${getRestoreCount(restoreData, 'members')}\n` +
       `Beiträge: ${getRestoreCount(restoreData, 'membership_fees')}\n` +
+      `Beitragsperioden: ${getRestoreCount(restoreData, 'membership_fee_periods')}\n` +
+      `Beitragspositionen: ${getRestoreCount(restoreData, 'membership_fee_items')}\n` +
       `Kassa: ${getRestoreCount(restoreData, 'cash_entries')}\n` +
       `Events: ${getRestoreCount(restoreData, 'events')}\n` +
       `Check-ins: ${getRestoreCount(restoreData, 'event_checkins')}\n` +
@@ -131,6 +139,16 @@ export async function restoreFullBackup({
         table: 'members',
         backupKey: 'members',
         existing: members,
+      },
+      {
+        table: 'membership_fee_periods',
+        backupKey: 'membership_fee_periods',
+        existing: membershipFeePeriods,
+      },
+      {
+        table: 'membership_fee_items',
+        backupKey: 'membership_fee_items',
+        existing: membershipFeeItems,
       },
       {
         table: 'membership_fees',

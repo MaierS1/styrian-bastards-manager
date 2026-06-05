@@ -3,6 +3,7 @@ export const navigationItems = [
   ['portal', 'Mein Portal'],
   ['scanner', 'Scanner'],
   ['members', 'Mitglieder'],
+  ['fees', 'Beiträge'],
   ['cash', 'Kassa'],
   ['invoices', 'Rechnungen'],
   ['events', 'Events'],
