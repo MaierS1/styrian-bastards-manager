@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import {
@@ -193,6 +193,7 @@ import {
 } from './services/repositories/membersRepository'
 import {
   createMembershipFeePeriodAndItems,
+  deleteMembershipFeeItem as deleteMembershipFeeItemRecord,
   markMembershipFeeItemPaid as markMembershipFeeItemPaidRecord,
   reopenMembershipFeeItem as reopenMembershipFeeItemRecord,
   sendMembershipFeeNotification as sendMembershipFeeNotificationRecord,
@@ -1187,8 +1188,17 @@ export default function App() {
       })
 
       if (error) {
-        alert(error.message)
-        return { error }
+        let message = error.message
+
+        try {
+          const errorBody = await error.context?.json?.()
+          message = errorBody?.error || message
+        } catch {
+          // Keep the Supabase error message if the response body cannot be read.
+        }
+
+        alert(message)
+        return { error: new Error(message) }
       }
 
       if (data?.error) {
@@ -1203,6 +1213,24 @@ export default function App() {
     }
   }
 
+  async function deleteMembershipFeeItemAction({ feeItemId }) {
+    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+
+    setMembershipFeeActionLoadingId(feeItemId)
+    try {
+      const { error } = await deleteMembershipFeeItemRecord(feeItemId)
+
+      if (error) {
+        alert(error.message)
+        return { error }
+      }
+
+      await loadAll()
+      return { ok: true }
+    } finally {
+      setMembershipFeeActionLoadingId(null)
+    }
+  }
   function getAvailableCashYears() {
     const years = new Set()
 
@@ -5275,6 +5303,7 @@ export default function App() {
           sendMembershipFeeNotification={sendMembershipFeeNotificationAction}
           markMembershipFeeItemPaid={markMembershipFeeItemPaidAction}
           reopenMembershipFeeItem={reopenMembershipFeeItemAction}
+          deleteMembershipFeeItem={deleteMembershipFeeItemAction}
           notificationLoadingId={membershipFeeActionLoadingId}
           setNotificationLoadingId={setMembershipFeeActionLoadingId}
         />

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   buttonStyle,
   cardStyle,
@@ -81,9 +81,11 @@ export function MembershipFeesPage({
   sendMembershipFeeNotification,
   markMembershipFeeItemPaid,
   reopenMembershipFeeItem,
+  deleteMembershipFeeItem,
   notificationLoadingId,
   setNotificationLoadingId,
 }) {
+  const [actionFeedback, setActionFeedback] = useState(null)
   const memberMap = useMemo(() => new Map(members.map((member) => [member.id, member])), [members])
   const periodMap = useMemo(() => new Map(membershipFeePeriods.map((period) => [period.id, period])), [membershipFeePeriods])
 
@@ -224,24 +226,38 @@ export function MembershipFeesPage({
   }
 
   async function handleSendTestReminder(item) {
+    setActionFeedback(null)
     setNotificationLoadingId(item.id)
     try {
-      await sendMembershipFeeNotification({
+      const result = await sendMembershipFeeNotification({
         type: 'fee_reminder_test',
         feeItemId: item.id,
       })
+
+      if (result?.ok) {
+        setActionFeedback({ itemId: item.id, type: 'success', message: 'Test-Erinnerung wurde gesendet.' })
+      } else {
+        setActionFeedback({ itemId: item.id, type: 'error', message: result?.error?.message || 'Test-Erinnerung konnte nicht gesendet werden.' })
+      }
     } finally {
       setNotificationLoadingId(null)
     }
   }
 
   async function handleSendTestPaidConfirmation(item) {
+    setActionFeedback(null)
     setNotificationLoadingId(item.id)
     try {
-      await sendMembershipFeeNotification({
+      const result = await sendMembershipFeeNotification({
         type: 'fee_paid_confirmation_test',
         feeItemId: item.id,
       })
+
+      if (result?.ok) {
+        setActionFeedback({ itemId: item.id, type: 'success', message: 'Test-Zahlungsbestätigung wurde gesendet.' })
+      } else {
+        setActionFeedback({ itemId: item.id, type: 'error', message: result?.error?.message || 'Test-Zahlungsbestätigung konnte nicht gesendet werden.' })
+      }
     } finally {
       setNotificationLoadingId(null)
     }
@@ -279,6 +295,29 @@ export function MembershipFeesPage({
     }
   }
 
+  async function handleDeleteItem(item) {
+    if (item.status === 'paid' || item.cash_entry_id) {
+      window.alert('Bezahlte Beiträge oder Beiträge mit Kassa-Eintrag können nicht direkt gelöscht werden. Bitte zuerst Zahlung rückgängig machen bzw. stornieren.')
+      return
+    }
+
+    const confirmed = window.confirm('Diesen Beitrag wirklich löschen?')
+    if (!confirmed) return
+
+    setActionFeedback(null)
+    setNotificationLoadingId(item.id)
+    try {
+      const result = await deleteMembershipFeeItem({ feeItemId: item.id })
+
+      if (result?.ok) {
+        setActionFeedback({ itemId: null, type: 'success', message: 'Beitrag wurde gelöscht.' })
+      } else {
+        setActionFeedback({ itemId: item.id, type: 'error', message: result?.error?.message || 'Beitrag konnte nicht gelöscht werden.' })
+      }
+    } finally {
+      setNotificationLoadingId(null)
+    }
+  }
   async function handleSendAllReminders() {
     if (openReminderItems.length === 0) {
       window.alert('Für den gewählten Filter gibt es keine offenen Beiträge.')
@@ -472,6 +511,8 @@ export function MembershipFeesPage({
         const showPaidButton = item.status !== 'paid'
         const showReopenButton = item.status === 'paid'
         const showPaymentConfirmationButton = item.status === 'paid'
+        const feedback = actionFeedback?.itemId === item.id ? actionFeedback : null
+        const canDeleteItem = item.status !== 'paid' && !item.cash_entry_id
 
         return (
           <div key={item.id} style={{ ...cardStyle, borderTop: `6px solid ${item.status === 'paid' ? colors.blue : colors.red}` }}>
@@ -500,6 +541,11 @@ export function MembershipFeesPage({
             )}
             <br />
             Erstellt am: {formatDateTime(item.created_at)}
+            {feedback && (
+              <p style={{ marginTop: 10, color: feedback.type === 'success' ? colors.successText : colors.dangerText, fontWeight: 800 }}>
+                {feedback.message}
+              </p>
+            )}
 
             <div style={{ marginTop: 10 }}>
               {showPaidButton && (
@@ -539,7 +585,7 @@ export function MembershipFeesPage({
                 style={secondaryButtonStyle}
                 disabled={isLoading}
               >
-                Test-Erinnerung senden
+                {isLoading ? 'Testmail wird gesendet...' : 'Test-Erinnerung senden'}
               </button>
 
               <button
@@ -547,12 +593,26 @@ export function MembershipFeesPage({
                 style={secondaryButtonStyle}
                 disabled={isLoading}
               >
-                Test-Zahlungsbestätigung senden
+                {isLoading ? 'Testmail wird gesendet...' : 'Test-Zahlungsbestätigung senden'}
+              </button>
+
+              <button
+                onClick={() => handleDeleteItem(item)}
+                style={dangerButtonStyle}
+                disabled={isLoading || !canDeleteItem}
+              >
+                Beitrag löschen
               </button>
             </div>
           </div>
         )
       })}
+
+      {actionFeedback?.itemId === null && (
+        <p style={{ color: actionFeedback.type === 'success' ? colors.successText : colors.dangerText, fontWeight: 800 }}>
+          {actionFeedback.message}
+        </p>
+      )}
 
       {selectedItems.length === 0 && (
         <p style={mutedTextStyle}>Keine Beitragspositionen für die aktuellen Filter gefunden.</p>

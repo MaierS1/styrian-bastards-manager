@@ -69,3 +69,38 @@ export async function sendMembershipFeeNotification({
     },
   })
 }
+export async function deleteMembershipFeeItem(itemId) {
+  const { data: item, error: itemError } = await supabase
+    .from('membership_fee_items')
+    .select('id, status, cash_entry_id')
+    .eq('id', itemId)
+    .maybeSingle()
+
+  if (itemError) return { error: itemError }
+
+  if (!item) {
+    return { error: new Error('Beitrag nicht gefunden.') }
+  }
+
+  if (item.status === 'paid' || item.cash_entry_id) {
+    return { error: new Error('Bezahlte Beiträge oder Beiträge mit Kassa-Eintrag können nicht direkt gelöscht werden. Bitte zuerst Zahlung rückgängig machen bzw. stornieren.') }
+  }
+
+  const { data: activeCashEntries, error: cashEntryError } = await supabase
+    .from('cash_entries')
+    .select('id')
+    .eq('membership_fee_item_id', itemId)
+    .eq('is_cancelled', false)
+    .limit(1)
+
+  if (cashEntryError) return { error: cashEntryError }
+
+  if (activeCashEntries?.length) {
+    return { error: new Error('Zu diesem Beitrag existiert ein aktiver Kassa-Eintrag. Bitte zuerst Zahlung rückgängig machen bzw. stornieren.') }
+  }
+
+  return supabase
+    .from('membership_fee_items')
+    .delete()
+    .eq('id', itemId)
+}
