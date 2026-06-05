@@ -24,6 +24,10 @@ export function EventsPage({
   setNewEventNotes,
   newEventIsPublic,
   setNewEventIsPublic,
+  newEventMembersOnly,
+  setNewEventMembersOnly,
+  newEventInternalOnly,
+  setNewEventInternalOnly,
   newEventPublicStatus,
   setNewEventPublicStatus,
   newEventPublicTitle,
@@ -120,6 +124,10 @@ export function EventsPage({
           setNewEventNotes={setNewEventNotes}
           newEventIsPublic={newEventIsPublic}
           setNewEventIsPublic={setNewEventIsPublic}
+          newEventMembersOnly={newEventMembersOnly}
+          setNewEventMembersOnly={setNewEventMembersOnly}
+          newEventInternalOnly={newEventInternalOnly}
+          setNewEventInternalOnly={setNewEventInternalOnly}
           newEventPublicStatus={newEventPublicStatus}
           setNewEventPublicStatus={setNewEventPublicStatus}
           newEventPublicTitle={newEventPublicTitle}

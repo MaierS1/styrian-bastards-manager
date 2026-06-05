@@ -202,6 +202,7 @@ import { MembersPage } from './components/members/MembersPage'
 import { MembershipFeesPage } from './components/fees/MembershipFeesPage'
 import { CashPage } from './components/cash/CashPage'
 import { DocumentsPage } from './components/documents/DocumentsPage'
+import { MemberAreaPage } from './components/member-area/MemberAreaPage'
 import { EventsPage } from './components/events/EventsPage'
 import { AdminPage } from './components/admin/AdminPage'
 import { InventoryPage } from './components/inventory/InventoryPage'
@@ -303,6 +304,8 @@ export default function App() {
   const [newEventMeetingPoint, setNewEventMeetingPoint] = useState('')
   const [newEventNotes, setNewEventNotes] = useState('')
   const [newEventIsPublic, setNewEventIsPublic] = useState(false)
+  const [newEventMembersOnly, setNewEventMembersOnly] = useState(false)
+  const [newEventInternalOnly, setNewEventInternalOnly] = useState(false)
   const [newEventPublicStatus, setNewEventPublicStatus] = useState('draft')
   const [newEventPublicTitle, setNewEventPublicTitle] = useState('')
   const [newEventShortDescription, setNewEventShortDescription] = useState('')
@@ -457,6 +460,8 @@ export default function App() {
   const [mediaPublishedAt, setMediaPublishedAt] = useState('')
   const [mediaStatus, setMediaStatus] = useState('draft')
   const [mediaIsPublic, setMediaIsPublic] = useState(false)
+  const [mediaMembersOnly, setMediaMembersOnly] = useState(false)
+  const [mediaInternalOnly, setMediaInternalOnly] = useState(false)
   const [mediaIsFeatured, setMediaIsFeatured] = useState(false)
   const [mediaPublicSortOrder, setMediaPublicSortOrder] = useState('0')
   const [mediaInternalNotes, setMediaInternalNotes] = useState('')
@@ -3400,6 +3405,8 @@ export default function App() {
     setMediaPublishedAt('')
     setMediaStatus('draft')
     setMediaIsPublic(false)
+    setMediaMembersOnly(false)
+    setMediaInternalOnly(false)
     setMediaIsFeatured(false)
     setMediaPublicSortOrder('0')
     setMediaInternalNotes('')
@@ -3424,6 +3431,8 @@ export default function App() {
     setMediaPublishedAt(mediaItem.published_at ? String(mediaItem.published_at).slice(0, 16) : '')
     setMediaStatus(mediaItem.status || 'draft')
     setMediaIsPublic(Boolean(mediaItem.is_public))
+    setMediaMembersOnly(Boolean(mediaItem.members_only))
+    setMediaInternalOnly(Boolean(mediaItem.internal_only))
     setMediaIsFeatured(Boolean(mediaItem.is_featured))
     setMediaPublicSortOrder(String(mediaItem.public_sort_order ?? 0))
     setMediaInternalNotes(mediaItem.internal_notes || '')
@@ -3475,6 +3484,8 @@ export default function App() {
       published_at: mediaPublishedAt || null,
       status: mediaStatus || 'draft',
       is_public: mediaIsPublic,
+      members_only: mediaMembersOnly,
+      internal_only: mediaInternalOnly,
       is_featured: mediaIsFeatured,
       public_sort_order: sortOrderNumber,
       internal_notes: mediaInternalNotes.trim() || null,
@@ -3743,7 +3754,7 @@ export default function App() {
     if (!isAdmin()) return alert('Nur Admins dürfen Inventar löschen.')
 
     const confirmed = window.confirm(
-      `Inventar-Eintrag wirklich endgültig löschen?\n\n${item.inventory_number || ''} · ${item.name || ''}\n\nEmpfohlen ist normalerweise „Ausmustern“. Löschen entfernt den Eintrag dauerhaft.`
+      `Inventar-Eintrag wirklich endgültig löschen?\n\n${item.inventory_number || ''} · ${item.name || ''}\n\nEmpfohlen ist normalerweise â€žAusmusternâ€œ. Löschen entfernt den Eintrag dauerhaft.`
     )
 
     if (!confirmed) return
@@ -4482,6 +4493,8 @@ export default function App() {
     setNewEventMeetingPoint('')
     setNewEventNotes('')
     setNewEventIsPublic(false)
+    setNewEventMembersOnly(false)
+    setNewEventInternalOnly(false)
     setNewEventPublicStatus('draft')
     setNewEventPublicTitle('')
     setNewEventShortDescription('')
@@ -4518,6 +4531,8 @@ export default function App() {
     setNewEventMeetingPoint(event.meeting_point || '')
     setNewEventNotes(event.notes || '')
     setNewEventIsPublic(Boolean(event.is_public))
+    setNewEventMembersOnly(Boolean(event.members_only))
+    setNewEventInternalOnly(Boolean(event.internal_only))
     setNewEventPublicStatus(event.public_status || 'draft')
     setNewEventPublicTitle(event.public_title || '')
     setNewEventShortDescription(event.short_description || '')
@@ -4554,6 +4569,8 @@ export default function App() {
 
     return {
       is_public: newEventIsPublic,
+      members_only: newEventMembersOnly,
+      internal_only: newEventInternalOnly,
       public_status: newEventPublicStatus,
       title: newEventName.trim(),
       public_title: publicTitle || null,
@@ -5424,6 +5441,10 @@ export default function App() {
           setNewEventNotes={setNewEventNotes}
           newEventIsPublic={newEventIsPublic}
           setNewEventIsPublic={setNewEventIsPublic}
+          newEventMembersOnly={newEventMembersOnly}
+          setNewEventMembersOnly={setNewEventMembersOnly}
+          newEventInternalOnly={newEventInternalOnly}
+          setNewEventInternalOnly={setNewEventInternalOnly}
           newEventPublicStatus={newEventPublicStatus}
           setNewEventPublicStatus={setNewEventPublicStatus}
           newEventPublicTitle={newEventPublicTitle}
@@ -5629,6 +5650,10 @@ export default function App() {
         />
       )}
 
+      {activePage === 'memberArea' && (
+        <MemberAreaPage canManageMemberArea={isAdmin} />
+      )}
+
       {activePage === 'media' && (
         <MediaPage
           mediaItems={mediaItems}
@@ -5664,6 +5689,10 @@ export default function App() {
           setMediaStatus={setMediaStatus}
           mediaIsPublic={mediaIsPublic}
           setMediaIsPublic={setMediaIsPublic}
+          mediaMembersOnly={mediaMembersOnly}
+          setMediaMembersOnly={setMediaMembersOnly}
+          mediaInternalOnly={mediaInternalOnly}
+          setMediaInternalOnly={setMediaInternalOnly}
           mediaIsFeatured={mediaIsFeatured}
           setMediaIsFeatured={setMediaIsFeatured}
           mediaPublicSortOrder={mediaPublicSortOrder}
@@ -6194,12 +6223,3 @@ export default function App() {
     </main>
   )
 }
-
-
-
-
-
-
-
-
-

@@ -22,6 +22,10 @@ export function EventForm({
   setNewEventNotes,
   newEventIsPublic,
   setNewEventIsPublic,
+  newEventMembersOnly,
+  setNewEventMembersOnly,
+  newEventInternalOnly,
+  setNewEventInternalOnly,
   newEventPublicStatus,
   setNewEventPublicStatus,
   newEventPublicTitle,
@@ -230,6 +234,30 @@ export function EventForm({
             onChange={(e) => setNewEventPublicPublishedAt(e.target.value)}
             style={{ ...inputStyle, marginTop: 6 }}
           />
+        </label>
+      </fieldset>
+
+      <fieldset style={eventFieldsetStyle}>
+        <legend style={eventLegendStyle}>Mitgliederbereich</legend>
+
+        <label style={checkboxLabelStyle}>
+          <input
+            type="checkbox"
+            checked={newEventMembersOnly}
+            onChange={(e) => setNewEventMembersOnly(e.target.checked)}
+            style={checkboxInputStyle}
+          />
+          Im Mitgliederbereich anzeigen
+        </label>
+
+        <label style={checkboxLabelStyle}>
+          <input
+            type="checkbox"
+            checked={newEventInternalOnly}
+            onChange={(e) => setNewEventInternalOnly(e.target.checked)}
+            style={checkboxInputStyle}
+          />
+          Internes Event
         </label>
       </fieldset>
 

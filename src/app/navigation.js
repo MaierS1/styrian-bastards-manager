@@ -8,6 +8,7 @@ export const navigationItems = [
   ['invoices', 'Rechnungen'],
   ['events', 'Events'],
   ['documents', 'Dokumente'],
+  ['memberArea', 'Mitgliederbereich'],
   ['media', 'Medien / Presse'],
   ['sponsors', 'Sponsoren'],
   ['merch', 'Shop & Fanartikel'],

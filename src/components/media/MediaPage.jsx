@@ -75,6 +75,10 @@ export function MediaPage({
   setMediaStatus,
   mediaIsPublic,
   setMediaIsPublic,
+  mediaMembersOnly,
+  setMediaMembersOnly,
+  mediaInternalOnly,
+  setMediaInternalOnly,
   mediaIsFeatured,
   setMediaIsFeatured,
   mediaPublicSortOrder,
@@ -211,6 +215,24 @@ export function MediaPage({
           <label style={checkboxLabelStyle}>
             <input
               type="checkbox"
+              checked={mediaMembersOnly}
+              onChange={(event) => setMediaMembersOnly(event.target.checked)}
+            />
+            Nur fuer Mitglieder
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={mediaInternalOnly}
+              onChange={(event) => setMediaInternalOnly(event.target.checked)}
+            />
+            Interne News
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
               checked={mediaIsFeatured}
               onChange={(event) => setMediaIsFeatured(event.target.checked)}
             />
@@ -293,7 +315,7 @@ function MediaItemCard({
       <br />
       Veröffentlicht am: {item.publication_date || '-'} - Zeitpunkt: {formatDateTime(item.published_at)}
       <br />
-      Öffentlich: {item.is_public ? 'Ja' : 'Nein'} - Featured: {item.is_featured ? 'Ja' : 'Nein'} - Sortierung: {item.public_sort_order ?? 0}
+      Öffentlich: {item.is_public ? 'Ja' : 'Nein'} - Mitglieder-only: {item.members_only ? 'Ja' : 'Nein'} - Intern: {item.internal_only ? 'Ja' : 'Nein'} - Featured: {item.is_featured ? 'Ja' : 'Nein'} - Sortierung: {item.public_sort_order ?? 0}
       <br />
       Externer Link: {item.external_url || '-'}
       <br />

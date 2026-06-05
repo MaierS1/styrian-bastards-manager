@@ -34,7 +34,7 @@ export function EventsList({
           <br />
           Status: {event.status || '-'}
           <br />
-          Homepage: {event.is_public ? 'Ja' : 'Nein'} · {getPublicStatusLabel(event.public_status)}
+          Homepage: {event.is_public ? 'Ja' : 'Nein'} ? {getPublicStatusLabel(event.public_status)} ? Mitgliederbereich: {event.members_only ? 'Ja' : 'Nein'} ? Intern: {event.internal_only ? 'Ja' : 'Nein'}
           {event.is_public && (
             <>
               {' '}· Titel: {event.public_title || event.title || event.name || '-'}
