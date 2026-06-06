@@ -123,6 +123,8 @@ export function PurchasePage({ canManagePurchase }) {
     supplier_name: 'METRO',
     price_net: '',
     price_gross: '',
+    unit_price: '',
+    unit: '',
     source_url: '',
     note: '',
   })
@@ -287,7 +289,7 @@ export function PurchasePage({ canManagePurchase }) {
       product_name: productName,
       price_net: manualOfferForm.price_net,
       price_gross: manualOfferForm.price_gross,
-      unit_price: null,
+      unit_price: manualOfferForm.unit_price,
       offer_valid_from: null,
       offer_valid_until: null,
       source_url: String(manualOfferForm.source_url || '').trim() || 'https://www.metro.at',
@@ -295,6 +297,7 @@ export function PurchasePage({ canManagePurchase }) {
       raw_data: {
         manual: true,
         note: manualOfferForm.note,
+        unit: manualOfferForm.unit,
       },
     })
     setManualOfferSaving(false)
@@ -306,6 +309,8 @@ export function PurchasePage({ canManagePurchase }) {
       supplier_name: 'METRO',
       price_net: '',
       price_gross: '',
+      unit_price: '',
+      unit: '',
       source_url: '',
       note: '',
     })
@@ -324,7 +329,8 @@ export function PurchasePage({ canManagePurchase }) {
   const safeEvents = ensureArray(events)
   const safeRecentSearchResults = ensureArray(recentSearchResults)
   const allowedSearchSupplierNames = new Set(['METRO', 'TRANSGOURMET'])
-  const supplierSearchLinks = buildSupplierSearchLinksV2(offerSearchQuery)
+  const supplierAssistantLinks = buildSupplierAssistantLinks(offerSearchQuery)
+  const supplierAssistantFallbackLinks = buildSupplierAssistantFallbackLinks(offerSearchQuery)
   const offerSearchRawResultsPreview = ensureArray(offerSearchDebug?.rawResultsPreview)
 
   const filteredProducts = useMemo(() => {
@@ -795,148 +801,225 @@ export function PurchasePage({ canManagePurchase }) {
       </div>
 
       <div style={cardStyle}>
-        <h3 style={headingStyle}>Produkt oder Angebot suchen</h3>
-        <form onSubmit={handleOfferSearch}>
+        <h3 style={headingStyle}>Lieferanten-Suche</h3>
+        <p style={mutedTextStyle}>
+          METRO und Transgourmet zeigen Produkte und Preise teilweise erst nach Login oder über dynamische Shops. Deshalb öffnet der Assistent die passenden Lieferantenseiten direkt. Gefundene Preise können anschließend übernommen werden.
+        </p>
+
+        <input
+          placeholder="Produkt suchen, z. B. Cola, Red Bull, Servietten"
+          value={offerSearchQuery}
+          onChange={(event) => setOfferSearchQuery(event.target.value)}
+          style={inputStyle}
+        />
+
+        <div style={linkGridStyle}>
+          {supplierAssistantLinks.map((link) => (
+            <a key={link.label} href={link.url} target="_blank" rel="noreferrer" style={linkButtonStyle}>
+              {link.label}
+            </a>
+          ))}
+        </div>
+
+        <div style={linkGridStyle}>
+          {supplierAssistantFallbackLinks.map((link) => (
+            <a key={link.label} href={link.url} target="_blank" rel="noreferrer" style={secondaryLinkButtonStyle}>
+              {link.label}
+            </a>
+          ))}
+        </div>
+
+        <div style={cardStyle}>
+          <h4 style={headingStyle}>Preis übernehmen</h4>
+          <p style={mutedTextStyle}>
+            Manuell gefundene Preise direkt in den Preisvergleich übernehmen.
+          </p>
+          <select
+            value={manualOfferForm.supplier_name}
+            onChange={(event) => setFormValue(setManualOfferForm, 'supplier_name', event.target.value)}
+            style={inputStyle}
+          >
+            <option value="METRO">METRO</option>
+            <option value="Transgourmet">Transgourmet</option>
+          </select>
           <input
-            placeholder="Produkt oder Angebot suchen"
-            value={offerSearchQuery}
-            onChange={(event) => setOfferSearchQuery(event.target.value)}
+            placeholder="Produktname"
+            value={manualOfferForm.product_name}
+            onChange={(event) => setFormValue(setManualOfferForm, 'product_name', event.target.value)}
             style={inputStyle}
           />
-          <button type="submit" disabled={offerSearchLoading} style={buttonStyle}>
-            {offerSearchLoading ? 'Suche laeuft...' : 'Angebote suchen'}
+          <div style={formGridStyle}>
+            <input
+              placeholder="Preis netto"
+              value={manualOfferForm.price_net}
+              onChange={(event) => setFormValue(setManualOfferForm, 'price_net', event.target.value)}
+              style={inputStyle}
+            />
+            <input
+              placeholder="Preis brutto"
+              value={manualOfferForm.price_gross}
+              onChange={(event) => setFormValue(setManualOfferForm, 'price_gross', event.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <div style={formGridStyle}>
+            <input
+              placeholder="Einheitspreis optional"
+              value={manualOfferForm.unit_price || ''}
+              onChange={(event) => setFormValue(setManualOfferForm, 'unit_price', event.target.value)}
+              style={inputStyle}
+            />
+            <input
+              placeholder="Einheit optional"
+              value={manualOfferForm.unit || ''}
+              onChange={(event) => setFormValue(setManualOfferForm, 'unit', event.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <input
+            placeholder="Quelle / URL"
+            value={manualOfferForm.source_url}
+            onChange={(event) => setFormValue(setManualOfferForm, 'source_url', event.target.value)}
+            style={inputStyle}
+          />
+          <textarea
+            placeholder="Notiz"
+            value={manualOfferForm.note}
+            onChange={(event) => setFormValue(setManualOfferForm, 'note', event.target.value)}
+            style={textareaStyle}
+          />
+          <button onClick={saveManualOffer} disabled={manualOfferSaving} style={buttonStyle}>
+            {manualOfferSaving ? 'Speichern...' : 'In Preisvergleich speichern'}
           </button>
-        </form>
+        </div>
 
-        <p style={mutedTextStyle}>
-          Nur oeffentlich verfuegbare Angebotsseiten werden verwendet. Keine Zugangsdaten, kein Login, kein aggressives Scraping.
-        </p>
-        <p style={mutedTextStyle}>
-          Der Suchagent beruecksichtigt derzeit nur METRO und Transgourmet.
-        </p>
+        <details style={debugDetailsStyle}>
+          <summary style={debugSummaryStyle}>Experimentelle öffentliche Suche</summary>
+          <div style={debugBodyStyle}>
+            <p style={mutedTextStyle}>
+              Diese Websuche ist nur für Diagnose gedacht. Fremddomains werden verworfen.
+            </p>
+            <button type="button" onClick={handleOfferSearch} disabled={offerSearchLoading} style={buttonStyle}>
+              {offerSearchLoading ? 'Suche laeuft...' : 'Experimentelle öffentliche Suche starten'}
+            </button>
 
-        {offerSearchError && (
-          <div style={errorBoxStyle}>
-            <strong>Suchfehler</strong>
-            <br />
-            {offerSearchError}
-          </div>
-        )}
-
-        {!offerSearchError && offerSearchMessage && (
-          <div style={infoBoxStyle}>
-            {offerSearchMessage}
-          </div>
-        )}
-
-        {offerSearchDebug && (
-          <details style={debugDetailsStyle}>
-            <summary style={debugSummaryStyle}>Suchdiagnose</summary>
-            <div style={debugBodyStyle}>
-              <div><strong>Suchvarianten:</strong> {ensureArray(offerSearchDebug.normalizedQueries).join(', ') || '-'}</div>
-              <div><strong>Abgefragte Quellen:</strong> {ensureArray(offerSearchDebug.searchedSources).join(', ') || '-'}</div>
-              <div><strong>Roh-Treffer:</strong> {offerSearchDebug.rawResultCount ?? 0}</div>
-              <div><strong>METRO-Treffer:</strong> {offerSearchDebug.metroResultCount ?? 0}</div>
-              <div><strong>Transgourmet-Treffer:</strong> {offerSearchDebug.transgourmetResultCount ?? 0}</div>
-              <div><strong>Gefilterte Treffer:</strong> {offerSearchDebug.filteredResultCount ?? 0}</div>
-              <div>
-                <strong>Fehler je Quelle:</strong>
-                <pre style={debugPreStyle}>{JSON.stringify(ensureArray(offerSearchDebug.errors), null, 2)}</pre>
+            {offerSearchError && (
+              <div style={errorBoxStyle}>
+                <strong>Suchfehler</strong>
+                <br />
+                {offerSearchError}
               </div>
-              <div>
-                <strong>Roh-Treffer Vorschau:</strong>
-                {offerSearchRawResultsPreview.length === 0 ? (
-                  <div style={mutedTextStyle}>-</div>
-                ) : (
-                  <div style={debugTableWrapStyle}>
-                    <table style={debugTableStyle}>
-                      <thead>
-                        <tr>
-                          <th style={debugThStyle}>Titel</th>
-                          <th style={debugThStyle}>URL</th>
-                          <th style={debugThStyle}>Snippet</th>
-                          <th style={debugThStyle}>Erkannter Lieferant</th>
-                          <th style={debugThStyle}>Ablehnungsgrund</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {offerSearchRawResultsPreview.slice(0, 10).map((row, index) => (
-                          <tr key={`${row.url || 'raw'}-${index}`}>
-                            <td style={debugTdStyle}>{row.title || '-'}</td>
-                            <td style={debugTdStyle}>
-                              {row.url ? (
-                                <a href={row.url} target="_blank" rel="noreferrer" style={searchLinkStyle}>
-                                  {row.url}
-                                </a>
-                              ) : '-'}
-                            </td>
-                            <td style={debugTdStyle}>{row.snippet || '-'}</td>
-                            <td style={debugTdStyle}>{row.detectedSupplier || '-'}</td>
-                            <td style={debugTdStyle}>{row.rejectReason || '-'}</td>
+            )}
+
+            {!offerSearchError && offerSearchMessage && (
+              <div style={infoBoxStyle}>
+                {offerSearchMessage}
+              </div>
+            )}
+
+            {offerSearchDebug && (
+              <>
+                <div><strong>Suchvarianten:</strong> {ensureArray(offerSearchDebug.normalizedQueries).join(', ') || '-'}</div>
+                <div><strong>Abgefragte Quellen:</strong> {ensureArray(offerSearchDebug.searchedSources).join(', ') || '-'}</div>
+                <div><strong>Roh-Treffer:</strong> {offerSearchDebug.rawResultCount ?? 0}</div>
+                <div><strong>METRO-Treffer:</strong> {offerSearchDebug.metroResultCount ?? 0}</div>
+                <div><strong>Transgourmet-Treffer:</strong> {offerSearchDebug.transgourmetResultCount ?? 0}</div>
+                <div><strong>Gefilterte Treffer:</strong> {offerSearchDebug.filteredResultCount ?? 0}</div>
+                <div>
+                  <strong>Fehler je Quelle:</strong>
+                  <pre style={debugPreStyle}>{JSON.stringify(ensureArray(offerSearchDebug.errors), null, 2)}</pre>
+                </div>
+                <div>
+                  <strong>Roh-Treffer Vorschau:</strong>
+                  {offerSearchRawResultsPreview.length === 0 ? (
+                    <div style={mutedTextStyle}>-</div>
+                  ) : (
+                    <div style={debugTableWrapStyle}>
+                      <table style={debugTableStyle}>
+                        <thead>
+                          <tr>
+                            <th style={debugThStyle}>Titel</th>
+                            <th style={debugThStyle}>URL</th>
+                            <th style={debugThStyle}>Snippet</th>
+                            <th style={debugThStyle}>Erkannter Lieferant</th>
+                            <th style={debugThStyle}>Ablehnungsgrund</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {offerSearchRawResultsPreview.slice(0, 10).map((row, index) => (
+                            <tr key={`${row.url || 'raw'}-${index}`}>
+                              <td style={debugTdStyle}>{row.title || '-'}</td>
+                              <td style={debugTdStyle}>
+                                {row.url ? (
+                                  <a href={row.url} target="_blank" rel="noreferrer" style={searchLinkStyle}>
+                                    {row.url}
+                                  </a>
+                                ) : '-'}
+                              </td>
+                              <td style={debugTdStyle}>{row.snippet || '-'}</td>
+                              <td style={debugTdStyle}>{row.detectedSupplier || '-'}</td>
+                              <td style={debugTdStyle}>{row.rejectReason || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {searchResultsSorted.length > 0 && (
+                  <div style={searchResultsGridStyle}>
+                    {searchResultsSorted.map((result, index) => {
+                      const isBest = bestSearchResultId && result.id === bestSearchResultId
+                      const hasPublicPrice = [result?.price_net, result?.price_gross, result?.unit_price].some((value) => value !== null && value !== undefined && value !== '')
+
+                      return (
+                        <div key={result.id || `${result.source_url}-${index}`} style={searchResultCardStyle(isBest)}>
+                          <strong>{result.product_name}</strong>
+                          {isBest && <span style={bestBadgeStyle}>Bestpreis</span>}
+                          <br />
+                          Lieferant: {getSearchResultSupplierLabel(result) || result.supplier_name || '-'}
+                          <br />
+                          Netto: {hasPublicPrice ? formatMoney(result.price_net, 'EUR') : 'Preis nicht öffentlich verfügbar'}
+                          <br />
+                          Brutto: {hasPublicPrice ? formatMoney(result.price_gross, 'EUR') : (result.price_note || 'Preis nicht öffentlich verfügbar')}
+                          <br />
+                          Einheitspreis: {hasPublicPrice ? formatMoney(result.unit_price, 'EUR') : '-'}
+                          <br />
+                          Einheit: {result.unit || '-'} {result.package_size ? `- Packung: ${result.package_size}` : ''}
+                          <br />
+                          Angebotszeitraum: {formatSearchOfferRange(result.offer_valid_from, result.offer_valid_until)}
+                          <br />
+                          Quelle:{' '}
+                          <a href={result.source_url} target="_blank" rel="noreferrer" style={searchLinkStyle}>
+                            {result.source_url}
+                          </a>
+                          <br />
+                          <button
+                            type="button"
+                            onClick={() => importSearchResult(result)}
+                            disabled={!hasPurchaseAccess}
+                            style={buttonStyle}
+                          >
+                            In Preisvergleich uebernehmen
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
-              </div>
-            </div>
-          </details>
-        )}
 
-        {searchResultsSorted.length > 0 && (
-          <div style={searchResultsGridStyle}>
-            {searchResultsSorted.map((result, index) => {
-              const isBest = bestSearchResultId && result.id === bestSearchResultId
-              const hasPublicPrice = [result?.price_net, result?.price_gross, result?.unit_price].some((value) => value !== null && value !== undefined && value !== '')
-
-              return (
-                <div key={result.id || `${result.source_url}-${index}`} style={searchResultCardStyle(isBest)}>
-                  <strong>{result.product_name}</strong>
-                  {isBest && <span style={bestBadgeStyle}>Bestpreis</span>}
-                  <br />
-                  Lieferant: {getSearchResultSupplierLabel(result) || result.supplier_name || '-'}
-                  <br />
-                  Netto: {hasPublicPrice ? formatMoney(result.price_net, 'EUR') : 'Preis nicht öffentlich verfügbar'}
-                  <br />
-                  Brutto: {hasPublicPrice ? formatMoney(result.price_gross, 'EUR') : (result.price_note || 'Preis nicht öffentlich verfügbar')}
-                  <br />
-                  Einheitspreis: {hasPublicPrice ? formatMoney(result.unit_price, 'EUR') : '-'}
-                  <br />
-                  Einheit: {result.unit || '-'} {result.package_size ? `- Packung: ${result.package_size}` : ''}
-                  <br />
-                  Angebotszeitraum: {formatSearchOfferRange(result.offer_valid_from, result.offer_valid_until)}
-                  <br />
-                  Quelle:{' '}
-                  <a href={result.source_url} target="_blank" rel="noreferrer" style={searchLinkStyle}>
-                    {result.source_url}
-                  </a>
-                  <br />
-                  <button
-                    type="button"
-                    onClick={() => importSearchResult(result)}
-                    disabled={!hasPurchaseAccess}
-                    style={buttonStyle}
-                  >
-                    In Preisvergleich uebernehmen
-                  </button>
-                </div>
-              )
-            })}
+                {!offerSearchLoading && !offerSearchError && offerSearchMessage && searchResultsSorted.length === 0 && (
+                  <p style={mutedTextStyle}>
+                    Es wurden keine öffentlich auslesbaren Treffer von METRO oder Transgourmet gefunden.
+                    <br />
+                    Die Anbieter verstecken Preise/Produkte möglicherweise hinter Login, JavaScript oder dynamischen Shop-Suchen.
+                  </p>
+                )}
+              </>
+            )}
           </div>
-        )}
-
-        {!offerSearchLoading && !offerSearchError && offerSearchMessage && searchResultsSorted.length === 0 && (
-          <p style={mutedTextStyle}>
-            Es wurden keine öffentlich auslesbaren Treffer von METRO oder Transgourmet gefunden.
-            <br />
-            Die Anbieter verstecken Preise/Produkte möglicherweise hinter Login, JavaScript oder dynamischen Shop-Suchen.
-          </p>
-        )}
-
-        <div style={{ marginTop: 16 }}>
-          <button onClick={() => setActiveTab('supplierLinks')} style={secondaryButtonStyle}>Lieferanten-Suchlinks</button>
-        </div>
+        </details>
 
         {safeRecentSearchResults.length > 0 && (
           <div style={recentSearchPanelStyle}>
@@ -1053,67 +1136,16 @@ export function PurchasePage({ canManagePurchase }) {
 
           {activeTab === 'supplierLinks' && (
             <div style={cardStyle}>
-              <h3 style={headingStyle}>Lieferanten-Suchlinks</h3>
+              <h3 style={headingStyle}>Lieferanten-Suche</h3>
               <p style={mutedTextStyle}>
-                Für den Suchbegriff <strong>{offerSearchQuery || '-'}</strong> können diese Links direkt geöffnet werden.
+                Die direkte Lieferantensuche ist oben im Modul verfügbar. Die experimentelle Websuche ist bewusst ausgeblendet.
               </p>
-              <p style={mutedTextStyle}>
-                <strong>Hinweis:</strong> Der Suchagent berücksichtigt derzeit nur METRO und Transgourmet.
-              </p>
-
               <div style={linkGridStyle}>
-                {supplierSearchLinks.map((link) => (
+                {supplierAssistantLinks.map((link) => (
                   <a key={link.label} href={link.url} target="_blank" rel="noreferrer" style={linkButtonStyle}>
                     {link.label}
                   </a>
                 ))}
-              </div>
-
-              <div style={cardStyle}>
-                <h4 style={headingStyle}>Treffer manuell übernehmen</h4>
-                <input
-                  placeholder="Produktname"
-                  value={manualOfferForm.product_name}
-                  onChange={(event) => setFormValue(setManualOfferForm, 'product_name', event.target.value)}
-                  style={inputStyle}
-                />
-                <select
-                  value={manualOfferForm.supplier_name}
-                  onChange={(event) => setFormValue(setManualOfferForm, 'supplier_name', event.target.value)}
-                  style={inputStyle}
-                >
-                  <option value="METRO">METRO</option>
-                  <option value="Transgourmet">Transgourmet</option>
-                </select>
-                <div style={formGridStyle}>
-                  <input
-                    placeholder="Preis netto"
-                    value={manualOfferForm.price_net}
-                    onChange={(event) => setFormValue(setManualOfferForm, 'price_net', event.target.value)}
-                    style={inputStyle}
-                  />
-                  <input
-                    placeholder="Preis brutto"
-                    value={manualOfferForm.price_gross}
-                    onChange={(event) => setFormValue(setManualOfferForm, 'price_gross', event.target.value)}
-                    style={inputStyle}
-                  />
-                </div>
-                <input
-                  placeholder="Quelle"
-                  value={manualOfferForm.source_url}
-                  onChange={(event) => setFormValue(setManualOfferForm, 'source_url', event.target.value)}
-                  style={inputStyle}
-                />
-                <textarea
-                  placeholder="Notiz"
-                  value={manualOfferForm.note}
-                  onChange={(event) => setFormValue(setManualOfferForm, 'note', event.target.value)}
-                  style={textareaStyle}
-                />
-                <button onClick={saveManualOffer} disabled={manualOfferSaving} style={buttonStyle}>
-                  {manualOfferSaving ? 'Speichern...' : 'Treffer manuell übernehmen'}
-                </button>
               </div>
             </div>
           )}
@@ -1983,24 +2015,32 @@ function buildSupplierSearchLinks(query) {
   ]
 }
 
-function buildSupplierSearchLinksV2(query) {
+function buildSupplierAssistantLinks(query) {
   const cleaned = String(query || '').trim() || 'Cola'
   return [
     {
-      label: 'METRO oeffnen',
-      url: `https://www.metro.at/suche?query=${encodeURIComponent(cleaned)}`,
+      label: 'Bei METRO suchen',
+      url: `https://www.metro.at/search?search=${encodeURIComponent(cleaned)}`,
     },
     {
-      label: 'Transgourmet oeffnen',
-      url: `https://shop.transgourmet.at/suche?q=${encodeURIComponent(cleaned)}`,
+      label: 'Bei Transgourmet suchen',
+      url: `https://shop.transgourmet.at/search?q=${encodeURIComponent(cleaned)}`,
+    },
+  ]
+}
+
+function buildSupplierAssistantFallbackLinks(query) {
+  const cleaned = String(query || '').trim() || 'Cola'
+  return [
+    {
+      label: 'METRO öffnen',
+      url: `https://www.metro.at`,
+      queryUrl: `https://www.metro.at/search?search=${encodeURIComponent(cleaned)}`,
     },
     {
-      label: `Google Suche METRO ${cleaned}`,
-      url: `https://www.google.com/search?q=${encodeURIComponent(`site:metro.at ${cleaned}`)}`,
-    },
-    {
-      label: `Google Suche Transgourmet ${cleaned}`,
-      url: `https://www.google.com/search?q=${encodeURIComponent(`site:shop.transgourmet.at ${cleaned}`)}`,
+      label: 'Transgourmet öffnen',
+      url: `https://shop.transgourmet.at`,
+      queryUrl: `https://shop.transgourmet.at/search?q=${encodeURIComponent(cleaned)}`,
     },
   ]
 }
@@ -2161,6 +2201,13 @@ const linkGridStyle = {
 
 const linkButtonStyle = {
   ...buttonStyle,
+  textDecoration: 'none',
+  textAlign: 'center',
+  display: 'inline-block',
+}
+
+const secondaryLinkButtonStyle = {
+  ...secondaryButtonStyle,
   textDecoration: 'none',
   textAlign: 'center',
   display: 'inline-block',
