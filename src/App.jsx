@@ -1314,7 +1314,7 @@ export default function App() {
   }
 
   function getDashboardAlerts() {
-    return buildDashboardAlerts({
+    const alerts = buildDashboardAlerts({
       members,
       documents,
       fees,
@@ -1331,6 +1331,47 @@ export default function App() {
       getMemberById,
       commercialData: getCommercialDashboardData(),
     })
+
+    const currentBalance = getCashBalance()
+    const upcomingEvents = getUpcomingEvents(14)
+    const upcomingEventsWithoutCheckins = upcomingEvents.filter(
+      (event) => !eventCheckins.some((checkin) => checkin.event_name === event.name)
+    )
+    const openShopOrders = shopOrders.filter((order) => !['completed', 'cancelled'].includes(String(order.status || '').toLowerCase()))
+
+    if (currentBalance < 0) {
+      alerts.push({
+        type: 'danger',
+        title: 'Negativer Kassastand',
+        message: `Der aktuelle Kassastand ist negativ (${currentBalance.toFixed(2)} €).`,
+      })
+    }
+
+    if (openShopOrders.length > 0) {
+      alerts.push({
+        type: 'warning',
+        title: 'Offene Shop-Bestellungen',
+        message: `${openShopOrders.length} Shop-Bestellung(en) sind noch offen.`,
+      })
+    }
+
+    if (upcomingEventsWithoutCheckins.length > 0) {
+      alerts.push({
+        type: 'info',
+        title: 'Events ohne Teilnehmer',
+        message: `${upcomingEventsWithoutCheckins.length} kommende Event(s) haben noch keine Check-ins oder Anmeldungen.`,
+      })
+    }
+
+    if (canAccessParkedModules()) {
+      alerts.push({
+        type: 'info',
+        title: 'Geparkte Projekte vorhanden',
+        message: 'Einkauf & Preisvergleich ist vorläufig deaktiviert und im Bereich Geparkte Module dokumentiert.',
+      })
+    }
+
+    return alerts
   }
 
   function getDashboardCockpitTasks() {
@@ -1735,6 +1776,25 @@ export default function App() {
         return !member?.is_test && !fee.paid
       })
       .reduce((sum, fee) => sum + Number(fee.amount || 0), 0)
+  }
+
+  function getActiveMembersCount() {
+    return members.filter((member) => {
+      if (member.is_test) return false
+      const status = String(member.status || '').toLowerCase()
+      return status === 'aktiv' || status === 'active' || status === ''
+    }).length
+  }
+
+  function getNewMembersCount(days = 30) {
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+
+    return members.filter((member) => {
+      if (member.is_test) return false
+      if (!member.created_at) return false
+      const createdAt = new Date(member.created_at).getTime()
+      return Number.isFinite(createdAt) && createdAt >= cutoff
+    }).length
   }
 
   function getIncomeTotal() {
@@ -5572,10 +5632,11 @@ export default function App() {
       {activePage === 'dashboard' && (
         <DashboardPage
           alerts={getDashboardAlerts()}
-          cockpitTasks={getDashboardCockpitTasks()}
           onNavigate={setActivePage}
           parkedProjectsVisible={canAccessParkedModules()}
           getAlertStyle={getAlertStyle}
+          activeMembersCount={getActiveMembersCount()}
+          newMembersCount={getNewMembersCount()}
           cashBalance={getCashBalance()}
           incomeTotal={getIncomeTotal()}
           expenseTotal={getExpenseTotal()}
