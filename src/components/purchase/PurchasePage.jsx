@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import {
   buttonStyle,
   cardStyle,
@@ -95,6 +93,7 @@ export function PurchasePage({ canManagePurchase }) {
   const [supplierRatings, setSupplierRatings] = useState([])
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedProductId, setSelectedProductId] = useState('')
@@ -112,35 +111,48 @@ export function PurchasePage({ canManagePurchase }) {
 
   const loadData = async () => {
     setLoading(true)
-    const result = await fetchPurchaseData()
-    const firstError = [
-      result.suppliersResult.error,
-      result.productsResult.error,
-      result.pricesResult.error,
-      result.listsResult.error,
-      result.listItemsResult.error,
-      result.favoritesResult.error,
-      result.priceHistoryResult.error,
-      result.supplierRatingsResult.error,
-      result.eventsResult.error,
-    ].find(Boolean)
+    setLoadError('')
 
-    if (firstError) {
-      alert(firstError.message)
+    try {
+      const result = await fetchPurchaseData()
+      const blockingError = [
+        result.suppliersResult?.error,
+        result.productsResult?.error,
+        result.pricesResult?.error,
+        result.listsResult?.error,
+        result.listItemsResult?.error,
+        result.favoritesResult?.error,
+        result.priceHistoryResult?.error,
+        result.supplierRatingsResult?.error,
+      ].find(Boolean)
+
+      const optionalError = result.eventsResult?.error
+
+      if (blockingError) {
+        setLoadError(blockingError.message || 'Einkaufsdaten konnten nicht geladen werden.')
+        setLoading(false)
+        return
+      }
+
+      if (optionalError) {
+        console.warn(optionalError.message)
+      }
+
+      setSuppliers(ensureArray(result.suppliersResult?.data))
+      setProducts(ensureArray(result.productsResult?.data))
+      setPrices(ensureArray(result.pricesResult?.data))
+      setLists(ensureArray(result.listsResult?.data))
+      setListItems(ensureArray(result.listItemsResult?.data))
+      setFavorites(ensureArray(result.favoritesResult?.data))
+      setPriceHistory(ensureArray(result.priceHistoryResult?.data))
+      setSupplierRatings(ensureArray(result.supplierRatingsResult?.data))
+      setEvents(optionalError ? [] : ensureArray(result.eventsResult?.data))
       setLoading(false)
-      return
+    } catch (error) {
+      console.error(error)
+      setLoadError(error?.message || 'Einkaufsdaten konnten nicht geladen werden.')
+      setLoading(false)
     }
-
-    setSuppliers(result.suppliersResult.data || [])
-    setProducts(result.productsResult.data || [])
-    setPrices(result.pricesResult.data || [])
-    setLists(result.listsResult.data || [])
-    setListItems(result.listItemsResult.data || [])
-    setFavorites(result.favoritesResult.data || [])
-    setPriceHistory(result.priceHistoryResult.data || [])
-    setSupplierRatings(result.supplierRatingsResult.data || [])
-    setEvents(result.eventsResult.data || [])
-    setLoading(false)
   }
 
   useEffect(() => {
@@ -148,40 +160,51 @@ export function PurchasePage({ canManagePurchase }) {
   }, [])
 
   useEffect(() => {
-    if (!selectedProductId && products.length > 0) {
-      setSelectedProductId(products[0].id)
+    const loadedProducts = ensureArray(products)
+    if (!selectedProductId && loadedProducts.length > 0) {
+      setSelectedProductId(loadedProducts[0].id)
     }
   }, [products, selectedProductId])
 
+  const safeSuppliers = ensureArray(suppliers)
+  const safeProducts = ensureArray(products)
+  const safePrices = ensureArray(prices)
+  const safeLists = ensureArray(lists)
+  const safeListItems = ensureArray(listItems)
+  const safeFavorites = ensureArray(favorites)
+  const safePriceHistory = ensureArray(priceHistory)
+  const safeSupplierRatings = ensureArray(supplierRatings)
+  const safeEvents = ensureArray(events)
+
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase()
-    if (!term) return products
+    if (!term) return safeProducts
 
-    return products.filter((product) => [
-      product.name,
-      product.category,
-      product.brand,
-      product.unit,
-      product.note,
+    return safeProducts.filter((product) => [
+      product?.name,
+      product?.category,
+      product?.brand,
+      product?.unit,
+      product?.note,
     ].some((value) => String(value || '').toLowerCase().includes(term)))
-  }, [products, search])
+  }, [safeProducts, search])
 
-  const selectedProduct = products.find((product) => product.id === selectedProductId)
-  const selectedProductPrices = getSortedProductPrices(prices, selectedProductId)
+  const selectedProduct = safeProducts.find((product) => product?.id === selectedProductId)
+  const selectedProductPrices = getSortedProductPrices(safePrices, selectedProductId)
   const bestPrice = selectedProductPrices[0]
-  const activeSuppliers = suppliers.filter((supplier) => supplier.is_active)
-  const activeProducts = products.filter((product) => product.is_active)
-  const openLists = lists.filter((list) => ['draft', 'open'].includes(list.status))
-  const favoriteProductIds = new Set(favorites.map((favorite) => favorite.product_id))
-  const favoriteProducts = products.filter((product) => favoriteProductIds.has(product.id))
-  const selectedProductHistory = priceHistory.filter((entry) => entry.product_id === selectedProductId)
-  const lastPriceChangesByProduct = getLastPriceChangesByProduct(priceHistory)
+  const activeSuppliers = safeSuppliers.filter((supplier) => supplier?.is_active)
+  const activeProducts = safeProducts.filter((product) => product?.is_active)
+  const openLists = safeLists.filter((list) => ['draft', 'open'].includes(list?.status))
+  const favoriteProductIds = new Set(safeFavorites.map((favorite) => favorite?.product_id))
+  const favoriteProducts = safeProducts.filter((product) => favoriteProductIds.has(product?.id))
+  const selectedProductHistory = safePriceHistory.filter((entry) => entry?.product_id === selectedProductId)
+  const lastPriceChangesByProduct = getLastPriceChangesByProduct(safePriceHistory)
 
   const dashboardStats = [
-    ['Produkte', products.length],
+    ['Produkte', safeProducts.length],
     ['Aktive Lieferanten', activeSuppliers.length],
-    ['Preise', prices.length],
-    ['Favoriten', favorites.length],
+    ['Preise', safePrices.length],
+    ['Favoriten', safeFavorites.length],
     ['Offene Listen', openLists.length],
   ]
 
@@ -260,7 +283,7 @@ export function PurchasePage({ canManagePurchase }) {
 
   const toggleFavorite = async (product) => {
     if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
-    const existingFavorite = favorites.find((favorite) => favorite.product_id === product.id)
+    const existingFavorite = safeFavorites.find((favorite) => favorite?.product_id === product?.id)
 
     const { error } = existingFavorite
       ? await deletePurchaseProductFavorite(existingFavorite.id)
@@ -338,9 +361,9 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const updateListEstimate = async (listId, extraItem = null) => {
-    const currentItems = listItems.filter((item) => item.list_id === listId)
+    const currentItems = safeListItems.filter((item) => item?.list_id === listId)
     const nextItems = extraItem ? [...currentItems, extraItem] : currentItems
-    const totals = getListTotals(nextItems, prices)
+    const totals = getListTotals(nextItems, safePrices)
 
     await updatePurchaseList({
       id: listId,
@@ -468,8 +491,8 @@ export function PurchasePage({ canManagePurchase }) {
 
     const { error } = await deletePurchaseListItem(item.id)
     if (error) return alert(error.message)
-    const remainingItems = listItems.filter((listItem) => listItem.list_id === item.list_id && listItem.id !== item.id)
-    const totals = getListTotals(remainingItems, prices)
+    const remainingItems = safeListItems.filter((listItem) => listItem?.list_id === item?.list_id && listItem?.id !== item?.id)
+    const totals = getListTotals(remainingItems, safePrices)
     await updatePurchaseList({
       id: item.list_id,
       payload: {
@@ -506,10 +529,14 @@ export function PurchasePage({ canManagePurchase }) {
     downloadCsv(`preisvergleich-${selectedProduct.name}.csv`, rows)
   }
 
-  const exportSelectedComparisonPdf = () => {
+  const exportSelectedComparisonPdf = async () => {
     if (!selectedProduct) return alert('Bitte Produkt auswaehlen.')
     const rows = buildComparisonRows(selectedProduct, selectedProductPrices, bestPrice)
     const totals = getComparisonTotals(selectedProductPrices)
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ])
     const doc = new jsPDF('landscape')
 
     doc.text('Styrian Bastards', 14, 15)
@@ -536,15 +563,19 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const exportListCsv = (list) => {
-    const items = listItems.filter((item) => item.list_id === list.id)
-    const rows = buildListRows(list, items, prices)
+    const items = safeListItems.filter((item) => item?.list_id === list?.id)
+    const rows = buildListRows(list, items, safePrices)
     downloadCsv(`einkaufsliste-${list.title}.csv`, rows)
   }
 
-  const exportListPdf = (list) => {
-    const items = listItems.filter((item) => item.list_id === list.id)
-    const rows = buildListRows(list, items, prices)
-    const totals = getListTotals(items, prices)
+  const exportListPdf = async (list) => {
+    const items = safeListItems.filter((item) => item?.list_id === list?.id)
+    const rows = buildListRows(list, items, safePrices)
+    const totals = getListTotals(items, safePrices)
+    const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ])
     const doc = new jsPDF('landscape')
 
     doc.text('Styrian Bastards', 14, 15)
@@ -610,8 +641,26 @@ export function PurchasePage({ canManagePurchase }) {
 
       {loading && <p style={mutedTextStyle}>Einkaufsdaten werden geladen...</p>}
 
+      {!loading && loadError && (
+        <div style={errorBoxStyle}>
+          <strong>Einkaufsdaten konnten nicht geladen werden.</strong>
+          <br />
+          {loadError}
+          <br />
+          Bitte pruefen, ob die Supabase-Migrationen angewendet wurden und die Rolle Zugriff hat.
+        </div>
+      )}
+
       {!loading && (
         <>
+          {!loadError && safeProducts.length === 0 && safeSuppliers.length === 0 && safePrices.length === 0 && (
+            <div style={cardStyle}>
+              <strong>Noch keine Einkaufsdaten vorhanden.</strong>
+              <br />
+              Lege zuerst einen Lieferanten oder ein Produkt an.
+            </div>
+          )}
+
           <input
             placeholder="Produkte suchen..."
             value={search}
@@ -649,7 +698,7 @@ export function PurchasePage({ canManagePurchase }) {
           {activeTab === 'favorites' && (
             <FavoritesList
               products={favoriteProducts}
-              prices={prices}
+              prices={safePrices}
               lastPriceChangesByProduct={lastPriceChangesByProduct}
               toggleFavorite={toggleFavorite}
               setSelectedProductId={setSelectedProductId}
@@ -672,8 +721,8 @@ export function PurchasePage({ canManagePurchase }) {
               right={(
                 <ProductsList
                   products={filteredProducts}
-                  prices={prices}
-                  favorites={favorites}
+                  prices={safePrices}
+                  favorites={safeFavorites}
                   lastPriceChangesByProduct={lastPriceChangesByProduct}
                   toggleFavorite={toggleFavorite}
                   editProduct={editProduct}
@@ -700,9 +749,9 @@ export function PurchasePage({ canManagePurchase }) {
                 )}
                 right={(
                   <SuppliersList
-                    suppliers={suppliers}
-                    prices={prices}
-                    ratings={supplierRatings}
+                  suppliers={safeSuppliers}
+                  prices={safePrices}
+                  ratings={safeSupplierRatings}
                     editSupplier={editSupplier}
                     removeSupplier={removeSupplier}
                     editSupplierRating={editSupplierRating}
@@ -712,7 +761,7 @@ export function PurchasePage({ canManagePurchase }) {
               <SupplierRatingForm
                 form={ratingForm}
                 setForm={setRatingForm}
-                suppliers={suppliers}
+                suppliers={safeSuppliers}
                 editingId={ratingEditingId}
                 saving={saving}
                 save={saveSupplierRating}
@@ -769,8 +818,8 @@ export function PurchasePage({ canManagePurchase }) {
               listItems={listItems}
               products={activeProducts}
               suppliers={activeSuppliers}
-              prices={prices}
-              events={events}
+              prices={safePrices}
+              events={safeEvents}
               saving={saving}
               saveList={saveList}
               saveListItem={saveListItem}
@@ -785,7 +834,7 @@ export function PurchasePage({ canManagePurchase }) {
 
           {activeTab === 'exports' && (
             <ExportsPanel
-              lists={lists}
+              lists={safeLists}
               selectedProduct={selectedProduct}
               selectedProductPrices={selectedProductPrices}
               exportSelectedComparisonCsv={exportSelectedComparisonCsv}
@@ -832,17 +881,20 @@ function ProductForm({ form, setForm, editingId, saving, save, reset }) {
 }
 
 function PriceForm({ form, setForm, products, suppliers, editingId, saving, save, reset }) {
+  const safeProducts = ensureArray(products)
+  const safeSuppliers = ensureArray(suppliers)
+
   return (
     <div style={cardStyle}>
       <h3 style={headingStyle}>{editingId ? 'Preis bearbeiten' : 'Preis pro Produkt erfassen'}</h3>
       <div style={formGridStyle}>
         <select value={form.product_id} onChange={(event) => setFormValue(setForm, 'product_id', event.target.value)} style={inputStyle}>
           <option value="">Produkt auswaehlen</option>
-          {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+          {safeProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
         </select>
         <select value={form.supplier_id} onChange={(event) => setFormValue(setForm, 'supplier_id', event.target.value)} style={inputStyle}>
           <option value="">Lieferant auswaehlen</option>
-          {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+          {safeSuppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
         </select>
         <input type="number" min="0" step="0.01" placeholder="Netto" value={form.price_net} onChange={(event) => setFormValue(setForm, 'price_net', event.target.value)} style={inputStyle} />
         <input type="number" min="0" step="0.01" placeholder="Brutto" value={form.price_gross} onChange={(event) => setFormValue(setForm, 'price_gross', event.target.value)} style={inputStyle} />
@@ -861,14 +913,17 @@ function PriceForm({ form, setForm, products, suppliers, editingId, saving, save
 }
 
 function FavoritesList({ products, prices, lastPriceChangesByProduct, toggleFavorite, setSelectedProductId, setActiveTab }) {
-  if (products.length === 0) return <p style={mutedTextStyle}>Noch keine Favoriten markiert.</p>
+  const safeProducts = ensureArray(products)
+  const safePrices = ensureArray(prices)
+
+  if (safeProducts.length === 0) return <p style={mutedTextStyle}>Noch keine Favoriten markiert.</p>
 
   return (
     <div>
       <h3 style={headingStyle}>Favoritenliste</h3>
-      {products.map((product) => {
-        const bestPrice = getSortedProductPrices(prices, product.id)[0]
-        const lastChange = lastPriceChangesByProduct[product.id]
+      {safeProducts.map((product) => {
+        const bestPrice = getSortedProductPrices(safePrices, product?.id)[0]
+        const lastChange = lastPriceChangesByProduct?.[product?.id]
 
         return (
           <div key={product.id} style={cardStyle}>
@@ -898,16 +953,20 @@ function ProductsList({
   setSelectedProductId,
   setActiveTab,
 }) {
-  if (products.length === 0) return <p style={mutedTextStyle}>Keine Produkte gefunden.</p>
+  const safeProducts = ensureArray(products)
+  const safePrices = ensureArray(prices)
+  const safeFavorites = ensureArray(favorites)
+
+  if (safeProducts.length === 0) return <p style={mutedTextStyle}>Keine Produkte gefunden.</p>
 
   return (
     <div>
       <h3 style={headingStyle}>Produktverwaltung</h3>
-      {products.map((product) => {
-        const productPrices = prices.filter((price) => price.product_id === product.id)
-        const bestPrice = getSortedProductPrices(prices, product.id)[0]
-        const isFavorite = favorites.some((favorite) => favorite.product_id === product.id)
-        const lastChange = lastPriceChangesByProduct[product.id]
+      {safeProducts.map((product) => {
+        const productPrices = safePrices.filter((price) => price?.product_id === product?.id)
+        const bestPrice = getSortedProductPrices(safePrices, product?.id)[0]
+        const isFavorite = safeFavorites.some((favorite) => favorite?.product_id === product?.id)
+        const lastChange = lastPriceChangesByProduct?.[product?.id]
 
         return (
           <div key={product.id} style={{ ...cardStyle, opacity: product.is_active ? 1 : 0.68 }}>
@@ -935,17 +994,20 @@ function ProductsList({
 }
 
 function SuppliersList({ suppliers, prices, ratings, editSupplier, removeSupplier, editSupplierRating }) {
-  if (suppliers.length === 0) return <p style={mutedTextStyle}>Noch keine Lieferanten angelegt.</p>
+  const safeSuppliers = ensureArray(suppliers)
+  const safeRatings = ensureArray(ratings)
+
+  if (safeSuppliers.length === 0) return <p style={mutedTextStyle}>Noch keine Lieferanten angelegt.</p>
 
   return (
     <div>
       <h3 style={headingStyle}>Lieferantenverwaltung</h3>
-      {suppliers.map((supplier) => (
+      {safeSuppliers.map((supplier) => (
         <SupplierCard
           key={supplier.id}
           supplier={supplier}
           prices={prices}
-          rating={ratings.find((item) => item.supplier_id === supplier.id)}
+          rating={safeRatings.find((item) => item?.supplier_id === supplier?.id)}
           editSupplier={editSupplier}
           removeSupplier={removeSupplier}
           editSupplierRating={editSupplierRating}
@@ -956,13 +1018,15 @@ function SuppliersList({ suppliers, prices, ratings, editSupplier, removeSupplie
 }
 
 function SupplierCard({ supplier, prices, rating, editSupplier, removeSupplier, editSupplierRating }) {
+  const safePrices = ensureArray(prices)
+
   return (
     <div style={{ ...cardStyle, opacity: supplier.is_active ? 1 : 0.68 }}>
       <strong>{supplier.name}</strong>
       <br />
       Website: {supplier.website || '-'}
       <br />
-      Status: {supplier.is_active ? 'Aktiv' : 'Inaktiv'} - Preise: {prices.filter((price) => price.supplier_id === supplier.id).length}
+      Status: {supplier?.is_active ? 'Aktiv' : 'Inaktiv'} - Preise: {safePrices.filter((price) => price?.supplier_id === supplier?.id).length}
       <br />
       Bewertung: Preis {rating?.price_rating || '-'} / Qualitaet {rating?.quality_rating || '-'} / Zuverlaessigkeit {rating?.reliability_rating || '-'}
       <br />
@@ -983,13 +1047,15 @@ function SupplierCard({ supplier, prices, rating, editSupplier, removeSupplier, 
 }
 
 function SupplierRatingForm({ form, setForm, suppliers, editingId, saving, save, reset }) {
+  const safeSuppliers = ensureArray(suppliers)
+
   return (
     <div style={cardStyle}>
       <h3 style={headingStyle}>{editingId ? 'Lieferantenbewertung bearbeiten' : 'Lieferantenbewertung'}</h3>
       <div style={formGridStyle}>
         <select value={form.supplier_id} onChange={(event) => setFormValue(setForm, 'supplier_id', event.target.value)} style={inputStyle}>
           <option value="">Lieferant auswaehlen</option>
-          {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+          {safeSuppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
         </select>
         <RatingSelect label="Preis" value={form.price_rating} onChange={(value) => setFormValue(setForm, 'price_rating', value)} />
         <RatingSelect label="Qualitaet" value={form.quality_rating} onChange={(value) => setFormValue(setForm, 'quality_rating', value)} />
@@ -1027,12 +1093,15 @@ function ProductComparison({
   exportCsv,
   exportPdf,
 }) {
+  const safeProducts = ensureArray(products)
+  const safePrices = ensureArray(prices)
+
   return (
     <div style={cardStyle}>
       <h3 style={headingStyle}>Preisvergleich pro Produkt</h3>
       <select value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)} style={inputStyle}>
         <option value="">Produkt auswaehlen</option>
-        {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+        {safeProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
       </select>
 
       {selectedProduct && (
@@ -1043,9 +1112,9 @@ function ProductComparison({
       )}
 
       {!selectedProduct && <p style={mutedTextStyle}>Bitte Produkt auswaehlen.</p>}
-      {selectedProduct && prices.length === 0 && <p style={mutedTextStyle}>Noch keine Preise fuer dieses Produkt erfasst.</p>}
+      {selectedProduct && safePrices.length === 0 && <p style={mutedTextStyle}>Noch keine Preise fuer dieses Produkt erfasst.</p>}
 
-      {selectedProduct && prices.length > 0 && (
+      {selectedProduct && safePrices.length > 0 && (
         <div style={tableWrapStyle}>
           <table style={tableStyle}>
             <thead>
@@ -1060,7 +1129,7 @@ function ProductComparison({
               </tr>
             </thead>
             <tbody>
-              {prices.map((price) => {
+              {safePrices.map((price) => {
                 const isBest = bestPrice?.id === price.id
 
                 return (
@@ -1090,18 +1159,21 @@ function ProductComparison({
 }
 
 function PriceHistory({ products, selectedProductId, setSelectedProductId, selectedProduct, history }) {
+  const safeProducts = ensureArray(products)
+  const safeHistory = ensureArray(history)
+
   return (
     <div style={cardStyle}>
       <h3 style={headingStyle}>Preis-Historie und Preisentwicklung</h3>
       <select value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)} style={inputStyle}>
         <option value="">Produkt auswaehlen</option>
-        {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+        {safeProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
       </select>
 
       {!selectedProduct && <p style={mutedTextStyle}>Bitte Produkt auswaehlen.</p>}
-      {selectedProduct && history.length === 0 && <p style={mutedTextStyle}>Noch keine Preis-Historie fuer dieses Produkt.</p>}
+      {selectedProduct && safeHistory.length === 0 && <p style={mutedTextStyle}>Noch keine Preis-Historie fuer dieses Produkt.</p>}
 
-      {history.length > 0 && (
+      {safeHistory.length > 0 && (
         <div style={tableWrapStyle}>
           <table style={tableStyle}>
             <thead>
@@ -1115,7 +1187,7 @@ function PriceHistory({ products, selectedProductId, setSelectedProductId, selec
               </tr>
             </thead>
             <tbody>
-              {history.map((entry) => (
+              {safeHistory.map((entry) => (
                 <tr key={entry.id}>
                   <td style={tdStyle}>{formatDateTime(entry.changed_at)}</td>
                   <td style={tdStyle}>{entry.supplier?.name || '-'}</td>
@@ -1154,6 +1226,13 @@ function PurchaseLists({
   exportListCsv,
   exportListPdf,
 }) {
+  const safeLists = ensureArray(lists)
+  const safeListItems = ensureArray(listItems)
+  const safeProducts = ensureArray(products)
+  const safeSuppliers = ensureArray(suppliers)
+  const safePrices = ensureArray(prices)
+  const safeEvents = ensureArray(events)
+
   return (
     <>
       <TwoColumnLayout
@@ -1163,7 +1242,7 @@ function PurchaseLists({
             <input placeholder="Titel" value={listForm.title} onChange={(event) => setFormValue(setListForm, 'title', event.target.value)} style={inputStyle} />
             <select value={listForm.event_id} onChange={(event) => setFormValue(setListForm, 'event_id', event.target.value)} style={inputStyle}>
               <option value="">Kein Event</option>
-              {events.map((event) => (
+              {safeEvents.map((event) => (
                 <option key={event.id} value={event.id}>
                   {event.name} {event.event_date ? `(${event.event_date})` : ''}
                 </option>
@@ -1184,16 +1263,16 @@ function PurchaseLists({
             <h3 style={headingStyle}>Position hinzufuegen</h3>
             <select value={listItemForm.list_id} onChange={(event) => setFormValue(setListItemForm, 'list_id', event.target.value)} style={inputStyle}>
               <option value="">Liste auswaehlen</option>
-              {lists.map((list) => <option key={list.id} value={list.id}>{list.title}</option>)}
+              {safeLists.map((list) => <option key={list.id} value={list.id}>{list.title}</option>)}
             </select>
             <select value={listItemForm.product_id} onChange={(event) => setFormValue(setListItemForm, 'product_id', event.target.value)} style={inputStyle}>
               <option value="">Produkt auswaehlen</option>
-              {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+              {safeProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
             </select>
             <input type="number" min="0.001" step="0.001" placeholder="Menge" value={listItemForm.quantity} onChange={(event) => setFormValue(setListItemForm, 'quantity', event.target.value)} style={inputStyle} />
             <select value={listItemForm.preferred_supplier_id} onChange={(event) => setFormValue(setListItemForm, 'preferred_supplier_id', event.target.value)} style={inputStyle}>
               <option value="">Bestpreis verwenden</option>
-              {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+              {safeSuppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
             </select>
             <textarea placeholder="Notiz" value={listItemForm.note} onChange={(event) => setFormValue(setListItemForm, 'note', event.target.value)} style={textareaStyle} />
             <button onClick={saveListItem} disabled={saving} style={buttonStyle}>Position speichern</button>
@@ -1201,11 +1280,11 @@ function PurchaseLists({
         )}
       />
 
-      {lists.length === 0 && <p style={mutedTextStyle}>Noch keine Einkaufsliste angelegt.</p>}
+      {safeLists.length === 0 && <p style={mutedTextStyle}>Noch keine Einkaufsliste angelegt.</p>}
 
-      {lists.map((list) => {
-        const items = listItems.filter((item) => item.list_id === list.id)
-        const totals = getListTotals(items, prices)
+      {safeLists.map((list) => {
+        const items = safeListItems.filter((item) => item?.list_id === list?.id)
+        const totals = getListTotals(items, safePrices)
 
         return (
           <div key={list.id} style={cardStyle}>
@@ -1227,7 +1306,7 @@ function PurchaseLists({
             </select>
             <select value={list.event_id || ''} onChange={(event) => changeListEvent(list, event.target.value)} style={{ ...inputStyle, maxWidth: 360 }}>
               <option value="">Kein Event</option>
-              {events.map((event) => (
+              {safeEvents.map((event) => (
                 <option key={event.id} value={event.id}>
                   {event.name} {event.event_date ? `(${event.event_date})` : ''}
                 </option>
@@ -1238,8 +1317,8 @@ function PurchaseLists({
 
             {items.length === 0 && <p style={mutedTextStyle}>Keine Positionen.</p>}
             {items.map((item) => {
-              const price = getPreferredOrBestPrice(prices, item.product_id, item.preferred_supplier_id)
-              const bestPrice = getSortedProductPrices(prices, item.product_id)[0]
+              const price = getPreferredOrBestPrice(safePrices, item?.product_id, item?.preferred_supplier_id)
+              const bestPrice = getSortedProductPrices(safePrices, item?.product_id)[0]
               const supplierName = item.preferred_supplier?.name || price?.supplier?.name || 'Bestpreis offen'
 
               return (
@@ -1274,6 +1353,8 @@ function ExportsPanel({
   exportListCsv,
   exportListPdf,
 }) {
+  const safeLists = ensureArray(lists)
+
   return (
     <div style={cardStyle}>
       <h3 style={headingStyle}>Exporte</h3>
@@ -1289,8 +1370,8 @@ function ExportsPanel({
       <button onClick={exportSelectedComparisonPdf} style={buttonStyle}>Preisvergleich PDF</button>
 
       <h4>Einkaufslisten</h4>
-      {lists.length === 0 && <p style={mutedTextStyle}>Keine Einkaufslisten vorhanden.</p>}
-      {lists.map((list) => (
+      {safeLists.length === 0 && <p style={mutedTextStyle}>Keine Einkaufslisten vorhanden.</p>}
+      {safeLists.map((list) => (
         <div key={list.id} style={listItemStyle}>
           <strong>{list.title}</strong>
           <br />
@@ -1326,6 +1407,10 @@ function setFormValue(setForm, key, value) {
   setForm((current) => ({ ...current, [key]: value }))
 }
 
+function ensureArray(value) {
+  return Array.isArray(value) ? value : []
+}
+
 function normalizeText(value) {
   const trimmed = String(value || '').trim()
   return trimmed || null
@@ -1354,8 +1439,8 @@ function getComparablePriceFromHistory(entry) {
 
 function getSortedProductPrices(prices, productId) {
   if (!productId) return []
-  return prices
-    .filter((price) => price.product_id === productId)
+  return ensureArray(prices)
+    .filter((price) => price?.product_id === productId)
     .sort((a, b) => {
       const aPrice = Number(getComparablePrice(a) ?? Number.MAX_SAFE_INTEGER)
       const bPrice = Number(getComparablePrice(b) ?? Number.MAX_SAFE_INTEGER)
@@ -1373,9 +1458,9 @@ function getPreferredOrBestPrice(prices, productId, preferredSupplierId) {
 }
 
 function getListTotals(items, prices) {
-  return items.reduce((totals, item) => {
-    const price = getPreferredOrBestPrice(prices, item.product_id, item.preferred_supplier_id)
-    const quantity = Number(item.quantity || 0)
+  return ensureArray(items).reduce((totals, item) => {
+    const price = getPreferredOrBestPrice(prices, item?.product_id, item?.preferred_supplier_id)
+    const quantity = Number(item?.quantity || 0)
 
     return {
       net: totals.net + quantity * Number(price?.price_net || 0),
@@ -1385,15 +1470,15 @@ function getListTotals(items, prices) {
 }
 
 function getComparisonTotals(prices) {
-  return prices.reduce((totals, price) => ({
+  return ensureArray(prices).reduce((totals, price) => ({
     net: totals.net + Number(price?.price_net || 0),
     gross: totals.gross + Number(price?.price_gross ?? price?.unit_price ?? price?.price_net ?? 0),
   }), { net: 0, gross: 0 })
 }
 
 function getLastPriceChangesByProduct(history) {
-  return history.reduce((changes, entry) => {
-    if (!changes[entry.product_id]) {
+  return ensureArray(history).reduce((changes, entry) => {
+    if (entry?.product_id && !changes[entry.product_id]) {
       changes[entry.product_id] = entry
     }
 
@@ -1417,7 +1502,8 @@ function formatDateRange(from, until) {
 }
 
 function buildComparisonRows(product, prices, bestPrice) {
-  const rows = prices.map((price) => ({
+  const safePrices = ensureArray(prices)
+  const rows = safePrices.map((price) => ({
     Produkt: product?.name || '-',
     Menge: '1',
     Lieferant: price.supplier?.name || '-',
@@ -1426,7 +1512,7 @@ function buildComparisonRows(product, prices, bestPrice) {
     Einheitspreis: formatMoney(price.unit_price, price.currency),
     Bestpreis: bestPrice?.id === price.id ? 'Ja' : 'Nein',
   }))
-  const totals = getComparisonTotals(prices)
+  const totals = getComparisonTotals(safePrices)
 
   return [
     ...rows,
@@ -1443,9 +1529,11 @@ function buildComparisonRows(product, prices, bestPrice) {
 }
 
 function buildListRows(list, items, prices) {
-  const rows = items.map((item) => {
-    const price = getPreferredOrBestPrice(prices, item.product_id, item.preferred_supplier_id)
-    const bestPrice = getSortedProductPrices(prices, item.product_id)[0]
+  const safeItems = ensureArray(items)
+  const safePrices = ensureArray(prices)
+  const rows = safeItems.map((item) => {
+    const price = getPreferredOrBestPrice(safePrices, item?.product_id, item?.preferred_supplier_id)
+    const bestPrice = getSortedProductPrices(safePrices, item?.product_id)[0]
 
     return {
       Einkaufsliste: list.title || '-',
@@ -1459,7 +1547,7 @@ function buildListRows(list, items, prices) {
       Bestpreis: bestPrice?.id === price?.id ? 'Ja' : 'Nein',
     }
   })
-  const totals = getListTotals(items, prices)
+  const totals = getListTotals(safeItems, safePrices)
 
   return [
     ...rows,
@@ -1598,6 +1686,13 @@ const bestBadgeStyle = {
   color: colors.white,
   fontSize: 12,
   fontWeight: 900,
+}
+
+const errorBoxStyle = {
+  ...cardStyle,
+  borderLeft: `6px solid ${colors.red}`,
+  background: colors.dangerBg,
+  color: colors.dangerText,
 }
 
 const smallButtonStyle = {
