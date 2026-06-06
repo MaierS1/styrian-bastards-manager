@@ -9,7 +9,10 @@ export function DashboardCashOverview({
   getDashboardBarHeight,
   monthlyData,
 }) {
-  const latestCashEntries = cashEntries.slice(0, 5)
+  const safeCashEntries = Array.isArray(cashEntries) ? cashEntries : []
+  const safeMonthlyData = Array.isArray(monthlyData) ? monthlyData : []
+  const safeGetDashboardBarHeight = typeof getDashboardBarHeight === 'function' ? getDashboardBarHeight : () => 0
+  const latestCashEntries = safeCashEntries.slice(0, 5)
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -43,21 +46,25 @@ export function DashboardCashOverview({
       <div style={cardStyle}>
         <strong style={dashboardLabelStyle}>Jahresübersicht</strong>
         <div style={{ width: '100%', display: 'grid', gap: 10, marginTop: 14 }}>
-          {monthlyData.slice(0, 6).map((month) => (
-            <div key={month.label} style={{ display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 10, alignItems: 'center' }}>
-              <span style={mutedTextStyle}>{month.label}</span>
+          {safeMonthlyData.slice(0, 6).map((month, index) => {
+            const monthItem = month || {}
+
+            return (
+            <div key={monthItem.label || index} style={{ display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 10, alignItems: 'center' }}>
+              <span style={mutedTextStyle}>{monthItem.label || '-'}</span>
               <div style={{ height: 12, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
                 <div
                   style={{
                     height: '100%',
-                    width: `${getDashboardBarHeight(month)}%`,
-                    background: month.balance >= 0 ? colors.blue : colors.red,
+                    width: `${safeGetDashboardBarHeight(monthItem)}%`,
+                    background: (monthItem.balance || 0) >= 0 ? colors.blue : colors.red,
                   }}
                 />
               </div>
-              <strong>{month.balance.toFixed(2)} EUR</strong>
+              <strong>{(monthItem.balance || 0).toFixed(2)} EUR</strong>
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

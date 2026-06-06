@@ -9,7 +9,11 @@ function formatDate(value) {
 }
 
 export function DashboardCommercialOverview({ commercialData, onNavigate }) {
-  const topMerchItem = commercialData.topMerchItems[0]
+  const safeData = commercialData || {}
+  const topMerchItems = Array.isArray(safeData.topMerchItems) ? safeData.topMerchItems : []
+  const expiringContracts = Array.isArray(safeData.expiringContracts) ? safeData.expiringContracts : []
+  const lowStockVariants = Array.isArray(safeData.lowStockVariants) ? safeData.lowStockVariants : []
+  const topMerchItem = topMerchItems[0] || null
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -20,28 +24,36 @@ export function DashboardCommercialOverview({ commercialData, onNavigate }) {
           <div style={cardStyle}>
             <strong>Aktive Sponsoren</strong>
             <br />
-            <strong>{commercialData.activeSponsorsCount}</strong>
+            <strong>{safeData.activeSponsorsCount || 0}</strong>
             <br />
-            Aktive Verträge: <strong>{commercialData.activeContractsCount}</strong>
+            Aktive Verträge: <strong>{safeData.activeContractsCount || 0}</strong>
             <br />
-            Vertragsvolumen: <strong>{formatAmount(commercialData.sponsorshipContractVolumeCents)}</strong>
+            Vertragsvolumen: <strong>{formatAmount(safeData.sponsorshipContractVolumeCents)}</strong>
           </div>
 
           <div style={cardStyle}>
             <strong>Laufende Verträge</strong>
             <br />
-            Auslaufend in 30 Tagen: <strong>{commercialData.expiringContracts.length}</strong>
+            Auslaufend in 30 Tagen: <strong>{expiringContracts.length}</strong>
             <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-              {commercialData.expiringContracts.slice(0, 3).map((contract) => (
-                <div key={contract.id} style={{ paddingBottom: 8, borderBottom: `1px solid ${colors.border}` }}>
-                  <strong>{contract.title || 'Ohne Titel'}</strong>
-                  <div style={mutedTextStyle}>bis {formatDate(contract.ends_on)}</div>
-                </div>
-              ))}
+              {expiringContracts.slice(0, 3).map((contract, index) => {
+                const contractItem = contract || {}
+
+                return (
+                  <div key={contractItem.id || index} style={{ paddingBottom: 8, borderBottom: `1px solid ${colors.border}` }}>
+                    <strong>{contractItem.title || 'Ohne Titel'}</strong>
+                    <div style={mutedTextStyle}>bis {formatDate(contractItem.ends_on)}</div>
+                  </div>
+                )
+              })}
             </div>
 
-            {commercialData.expiringContracts.length > 3 && (
-              <button type="button" onClick={() => onNavigate?.('sponsors')} style={{ ...secondaryButtonStyle, width: 'auto', marginTop: 10 }}>
+            {expiringContracts.length > 3 && (
+              <button
+                type="button"
+                onClick={() => onNavigate?.('sponsors')}
+                style={{ ...secondaryButtonStyle, width: 'auto', marginTop: 10 }}
+              >
                 Alle anzeigen
               </button>
             )}
@@ -56,11 +68,11 @@ export function DashboardCommercialOverview({ commercialData, onNavigate }) {
           <div style={cardStyle}>
             <strong>Fanartikel</strong>
             <br />
-            Umsatz: <strong>{formatAmount(commercialData.merchRevenueCents)}</strong>
+            Umsatz: <strong>{formatAmount(safeData.merchRevenueCents)}</strong>
             <br />
-            Verkaufte Stück: <strong>{commercialData.merchQuantitySold}</strong>
+            Verkaufte Stück: <strong>{safeData.merchQuantitySold || 0}</strong>
             <br />
-            Niedriger Bestand: <strong>{commercialData.lowStockVariants.length}</strong>
+            Niedriger Bestand: <strong>{lowStockVariants.length}</strong>
             <br />
             Top-Artikel:{' '}
             <strong>
@@ -71,16 +83,24 @@ export function DashboardCommercialOverview({ commercialData, onNavigate }) {
           <div style={cardStyle}>
             <strong>Niedriger Bestand</strong>
             <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
-              {commercialData.lowStockVariants.slice(0, 3).map((variant) => (
-                <div key={variant.id} style={{ paddingBottom: 8, borderBottom: `1px solid ${colors.border}` }}>
-                  <strong>{variant.name || 'Fanartikel'}</strong>
-                  <div style={mutedTextStyle}>Bestand: {Number(variant.stock_quantity || 0)}</div>
-                </div>
-              ))}
+              {lowStockVariants.slice(0, 3).map((variant, index) => {
+                const variantItem = variant || {}
+
+                return (
+                  <div key={variantItem.id || index} style={{ paddingBottom: 8, borderBottom: `1px solid ${colors.border}` }}>
+                    <strong>{variantItem.name || 'Fanartikel'}</strong>
+                    <div style={mutedTextStyle}>Bestand: {Number(variantItem.stock_quantity || 0)}</div>
+                  </div>
+                )
+              })}
             </div>
 
-            {commercialData.lowStockVariants.length > 3 && (
-              <button type="button" onClick={() => onNavigate?.('merch')} style={{ ...secondaryButtonStyle, width: 'auto', marginTop: 10 }}>
+            {lowStockVariants.length > 3 && (
+              <button
+                type="button"
+                onClick={() => onNavigate?.('merch')}
+                style={{ ...secondaryButtonStyle, width: 'auto', marginTop: 10 }}
+              >
                 Alle anzeigen
               </button>
             )}

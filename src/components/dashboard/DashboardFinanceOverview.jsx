@@ -1,7 +1,12 @@
 import { cardStyle, colors, dashboardLabelStyle, headingStyle, mutedTextStyle, secondaryButtonStyle } from '../../styles/appStyles'
 
 export function DashboardFinanceOverview({ financeData, financeHealthStatus, getCategorySummary, onNavigate }) {
-  const categorySummary = getCategorySummary()
+  const safeFinanceData = financeData || {}
+  const safeEventSummaries = Array.isArray(safeFinanceData.eventSummaries) ? safeFinanceData.eventSummaries : []
+  const safeGetCategorySummary = typeof getCategorySummary === 'function' ? getCategorySummary : () => []
+  const categorySummaryResult = safeGetCategorySummary()
+  const categorySummary = Array.isArray(categorySummaryResult) ? categorySummaryResult : []
+  const safeFinanceHealthStatus = financeHealthStatus || { label: 'Unbekannt', color: colors.muted }
 
   return (
     <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
@@ -13,8 +18,8 @@ export function DashboardFinanceOverview({ financeData, financeHealthStatus, get
           </p>
         </div>
 
-        <span style={{ color: financeHealthStatus.color, fontWeight: 900 }}>
-          {financeHealthStatus.label}
+        <span style={{ color: safeFinanceHealthStatus.color, fontWeight: 900 }}>
+          {safeFinanceHealthStatus.label}
         </span>
       </div>
 
@@ -22,38 +27,42 @@ export function DashboardFinanceOverview({ financeData, financeHealthStatus, get
         <div style={cardStyle}>
           <strong>Offene Beiträge</strong>
           <br />
-          {financeData.openFeesCount} offen · {financeData.openFeesTotal.toFixed(2)} EUR
+          {(safeFinanceData.openFeesCount || 0)} offen · {(safeFinanceData.openFeesTotal || 0).toFixed(2)} EUR
         </div>
 
         <div style={cardStyle}>
           <strong>Jahresergebnis</strong>
           <br />
-          Einnahmen {financeData.incomeTotal.toFixed(2)} EUR · Ausgaben {financeData.expenseTotal.toFixed(2)} EUR
+          Einnahmen {(safeFinanceData.incomeTotal || 0).toFixed(2)} EUR · Ausgaben {(safeFinanceData.expenseTotal || 0).toFixed(2)} EUR
           <br />
-          <strong>{financeData.balance.toFixed(2)} EUR</strong>
+          <strong>{(safeFinanceData.balance || 0).toFixed(2)} EUR</strong>
         </div>
       </div>
 
       <h3 style={headingStyle}>Top Event-Ergebnisse</h3>
 
-      {financeData.eventSummaries.length === 0 ? (
+      {safeEventSummaries.length === 0 ? (
         <p style={mutedTextStyle}>Noch keine Event-Finanzdaten vorhanden.</p>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {financeData.eventSummaries.slice(0, 3).map((event) => (
-            <div key={event.id} style={cardStyle}>
-              <strong>{event.name}</strong> · {event.date || '-'}
-              <br />
-              Einnahmen: {event.income.toFixed(2)} EUR · Ausgaben: {event.expense.toFixed(2)} EUR · Ergebnis:{' '}
-              <strong style={{ color: event.balance >= 0 ? colors.successText : colors.red }}>
-                {event.balance.toFixed(2)} EUR
-              </strong>
-            </div>
-          ))}
+          {safeEventSummaries.slice(0, 3).map((event, index) => {
+            const eventItem = event || {}
+
+            return (
+              <div key={eventItem.id || index} style={cardStyle}>
+                <strong>{eventItem.name || 'Event'}</strong> · {eventItem.date || '-'}
+                <br />
+                Einnahmen: {(eventItem.income || 0).toFixed(2)} EUR · Ausgaben: {(eventItem.expense || 0).toFixed(2)} EUR · Ergebnis:{' '}
+                <strong style={{ color: (eventItem.balance || 0) >= 0 ? colors.successText : colors.red }}>
+                  {(eventItem.balance || 0).toFixed(2)} EUR
+                </strong>
+              </div>
+            )
+          })}
         </div>
       )}
 
-      {financeData.eventSummaries.length > 3 && (
+      {safeEventSummaries.length > 3 && (
         <button type="button" onClick={() => onNavigate?.('cash')} style={{ ...secondaryButtonStyle, width: 'auto', marginTop: 10 }}>
           Alle anzeigen
         </button>
@@ -61,19 +70,23 @@ export function DashboardFinanceOverview({ financeData, financeHealthStatus, get
 
       <h3 style={headingStyle}>Kategorien kompakt</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-        {categorySummary.slice(0, 5).map((item) => (
-          <div key={item.category} style={cardStyle}>
-            <strong>{item.category}</strong>
-            <div style={mutedTextStyle}>Einnahmen: {item.income.toFixed(2)} EUR</div>
-            <div style={mutedTextStyle}>Ausgaben: {item.expense.toFixed(2)} EUR</div>
-            <div>
-              Ergebnis:{' '}
-              <strong style={{ color: item.balance >= 0 ? colors.successText : colors.red }}>
-                {item.balance.toFixed(2)} EUR
-              </strong>
+        {categorySummary.slice(0, 5).map((item, index) => {
+          const categoryItem = item || {}
+
+          return (
+            <div key={categoryItem.category || index} style={cardStyle}>
+              <strong>{categoryItem.category || 'Kategorie'}</strong>
+              <div style={mutedTextStyle}>Einnahmen: {(categoryItem.income || 0).toFixed(2)} EUR</div>
+              <div style={mutedTextStyle}>Ausgaben: {(categoryItem.expense || 0).toFixed(2)} EUR</div>
+              <div>
+                Ergebnis:{' '}
+                <strong style={{ color: (categoryItem.balance || 0) >= 0 ? colors.successText : colors.red }}>
+                  {(categoryItem.balance || 0).toFixed(2)} EUR
+                </strong>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {categorySummary.length > 5 && (

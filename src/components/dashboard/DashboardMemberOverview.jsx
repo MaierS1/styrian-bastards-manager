@@ -11,6 +11,10 @@ export function DashboardMemberOverview({
   feeStats,
   getStatsMax,
 }) {
+  const safeMemberTypeStats = Array.isArray(memberTypeStats) ? memberTypeStats : []
+  const safeFeeStats = Array.isArray(feeStats) ? feeStats : []
+  const safeGetStatsMax = typeof getStatsMax === 'function' ? getStatsMax : () => 1
+
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
@@ -39,7 +43,7 @@ export function DashboardMemberOverview({
         </div>
       </div>
 
-      <DashboardStats memberTypeStats={memberTypeStats} feeStats={feeStats} getStatsMax={getStatsMax} />
-    </div>
+        <DashboardStats memberTypeStats={safeMemberTypeStats} feeStats={safeFeeStats} getStatsMax={safeGetStatsMax} />
+      </div>
   )
 }

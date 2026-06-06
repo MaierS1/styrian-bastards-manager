@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import {
@@ -247,6 +247,37 @@ import { MerchPage } from './components/merch/MerchPage'
 import { MediaPage } from './components/media/MediaPage'
 import { PublicPressPage } from './components/media/PublicPressPage'
 import { PublicSponsors } from './components/home/PublicSponsors'
+
+class DashboardPageErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, errorMessage: '' }
+  }
+
+  static getDerivedStateFromError(error) {
+    return {
+      hasError: true,
+      errorMessage: error?.message || 'Unbekannter Fehler',
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <section style={{ ...sectionStyle, background: colors.offWhite, color: colors.text, minHeight: 320 }}>
+          <h2 style={headingStyle}>Dashboard konnte nicht geladen werden.</h2>
+          <div style={{ ...cardStyle, background: colors.white, borderLeft: `6px solid ${colors.red}` }}>
+            <strong>Fehlermeldung</strong>
+            <br />
+            {this.state.errorMessage}
+          </div>
+        </section>
+      )
+    }
+
+    return this.props.children
+  }
+}
 export default function App() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -5630,33 +5661,35 @@ export default function App() {
       )}
 
       {activePage === 'dashboard' && (
-        <DashboardPage
-          alerts={getDashboardAlerts()}
-          onNavigate={setActivePage}
-          parkedProjectsVisible={canAccessParkedModules()}
-          getAlertStyle={getAlertStyle}
-          activeMembersCount={getActiveMembersCount()}
-          newMembersCount={getNewMembersCount()}
-          cashBalance={getCashBalance()}
-          incomeTotal={getIncomeTotal()}
-          expenseTotal={getExpenseTotal()}
-          inventoryTotalValue={getInventoryTotalValue()}
-          testMembersCount={getTestMembers().length}
-          openFeesCount={getOpenFeesCount()}
-          openFeesTotal={getOpenFeesTotal()}
-          nextEvent={events.length > 0 ? events[0] : null}
-          monthlyData={getMonthlyData()}
-          getDashboardBarHeight={getDashboardBarHeight}
-          memberTypeStats={getMemberTypeStats()}
-          feeStats={getFeeStats()}
-          getStatsMax={getStatsMax}
-          financeData={getFinanceDashboardData()}
-          financeHealthStatus={getFinanceHealthStatus()}
-          commercialData={getCommercialDashboardData()}
-          getCategorySummary={getCategorySummary}
-          cashEntries={cashEntries}
-          documents={documents}
-        />
+        <DashboardPageErrorBoundary>
+          <DashboardPage
+            alerts={getDashboardAlerts()}
+            onNavigate={setActivePage}
+            parkedProjectsVisible={canAccessParkedModules()}
+            getAlertStyle={getAlertStyle}
+            activeMembersCount={getActiveMembersCount()}
+            newMembersCount={getNewMembersCount()}
+            cashBalance={getCashBalance()}
+            incomeTotal={getIncomeTotal()}
+            expenseTotal={getExpenseTotal()}
+            inventoryTotalValue={getInventoryTotalValue()}
+            testMembersCount={getTestMembers().length}
+            openFeesCount={getOpenFeesCount()}
+            openFeesTotal={getOpenFeesTotal()}
+            nextEvent={events.length > 0 ? events[0] : null}
+            monthlyData={getMonthlyData()}
+            getDashboardBarHeight={getDashboardBarHeight}
+            memberTypeStats={getMemberTypeStats()}
+            feeStats={getFeeStats()}
+            getStatsMax={getStatsMax}
+            financeData={getFinanceDashboardData()}
+            financeHealthStatus={getFinanceHealthStatus()}
+            commercialData={getCommercialDashboardData()}
+            getCategorySummary={getCategorySummary}
+            cashEntries={cashEntries}
+            documents={documents}
+          />
+        </DashboardPageErrorBoundary>
       )}
 
       {activePage === 'cash' && canManageCash() && (

@@ -8,10 +8,13 @@ const alertPriorityOrder = {
 }
 
 export function DashboardSmartAlerts({ alerts, getAlertStyle }) {
-  const visibleAlerts = [...alerts]
+  const safeAlerts = Array.isArray(alerts) ? alerts : []
+  const safeGetAlertStyle = typeof getAlertStyle === 'function' ? getAlertStyle : () => ({})
+
+  const visibleAlerts = [...safeAlerts]
     .sort((a, b) => (alertPriorityOrder[a.type] ?? alertPriorityOrder.default) - (alertPriorityOrder[b.type] ?? alertPriorityOrder.default))
     .slice(0, 5)
-  const hiddenCount = Math.max(0, alerts.length - visibleAlerts.length)
+  const hiddenCount = Math.max(0, safeAlerts.length - visibleAlerts.length)
 
   return (
     <div style={{ ...cardStyle, borderTop: '6px solid #dc2626' }}>
@@ -21,21 +24,25 @@ export function DashboardSmartAlerts({ alerts, getAlertStyle }) {
       </p>
 
       <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginTop: 14 }}>
-        {visibleAlerts.map((alert, index) => (
+        {visibleAlerts.map((alert, index) => {
+          const alertItem = alert || {}
+
+          return (
           <div
-            key={`${alert.title}-${index}`}
+            key={`${alertItem.title || 'alert'}-${index}`}
             style={{
               border: '2px solid',
               borderRadius: 12,
               padding: 14,
-              ...getAlertStyle(alert.type),
+              ...safeGetAlertStyle(alertItem.type),
             }}
           >
-            <strong style={{ color: 'inherit' }}>{alert.title}</strong>
+            <strong style={{ color: 'inherit' }}>{alertItem.title || 'Hinweis'}</strong>
             <br />
-            <span style={{ color: 'inherit' }}>{alert.message}</span>
+            <span style={{ color: 'inherit' }}>{alertItem.message || ''}</span>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {hiddenCount > 0 && (
