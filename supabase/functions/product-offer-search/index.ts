@@ -168,7 +168,7 @@ async function parseRequestBody(req: Request) {
 }
 
 async function searchPublicOffers(query: string) {
-  const terms = [query, `${query} Angebot`, `${query} Aktion`]
+  const terms = buildSearchTerms(query)
   const collected: SearchResult[] = []
   const seenUrls = new Set<string>()
   let hadFetchError = false
@@ -191,6 +191,53 @@ async function searchPublicOffers(query: string) {
   }
 
   return { results: collected, hadFetchError }
+}
+
+function buildSearchTerms(query: string) {
+  const synonyms = buildQuerySynonyms(query)
+  const terms = new Set<string>()
+
+  for (const synonym of synonyms) {
+    terms.add(synonym)
+    terms.add(`${synonym} Angebot`)
+    terms.add(`${synonym} Aktion`)
+    terms.add(`site:shop.transgourmet.at ${synonym}`)
+    terms.add(`site:www.shop.transgourmet.at ${synonym}`)
+    terms.add(`site:metro.at ${synonym}`)
+    terms.add(`site:www.metro.at ${synonym}`)
+  }
+
+  return [...terms].slice(0, 24)
+}
+
+function buildQuerySynonyms(query: string) {
+  const normalized = normalizeQuery(query)
+  const synonyms = new Set<string>([query])
+
+  if (normalized.includes('cola')) {
+    synonyms.add('Cola')
+    synonyms.add('Coca Cola')
+    synonyms.add('Coca-Cola')
+    synonyms.add('Pepsi Cola')
+    synonyms.add('Fritz Cola')
+    synonyms.add('Cola Sortiment')
+  }
+
+  if (normalized.includes('red bull') || normalized.includes('redbull')) {
+    synonyms.add('Red Bull')
+    synonyms.add('RedBull')
+    synonyms.add('Red Bull Energy Drink')
+  }
+
+  return [...synonyms]
+}
+
+function normalizeQuery(value: string) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
 }
 
 async function searchDuckDuckGo(term: string) {
@@ -232,9 +279,10 @@ function buildSearchResult(query: string, sourceUrl: string, title: string, snip
   const combinedText = [title, snippet].join(' ').trim()
   const priceInfo = extractPriceInfo(combinedText)
   const unitInfo = extractUnitInfo(combinedText)
-  const supplierName = extractSupplierName(title, sourceUrl)
+  const supplierName = extractAllowedSupplierName(title, snippet, sourceUrl)
   const productName = extractProductName(title, query)
   const { validFrom, validUntil } = extractDateRange(combinedText)
+  const priceNote = buildPriceNote(supplierName, priceInfo, sourceUrl)
 
   return {
     supplier_name: supplierName,
@@ -248,12 +296,14 @@ function buildSearchResult(query: string, sourceUrl: string, title: string, snip
     offer_valid_until: validUntil,
     source_url: sourceUrl,
     source_type: 'public_offer',
+    price_note: priceNote,
     raw_data: {
       query,
       title,
       snippet,
       source_url: sourceUrl,
       source_type: 'public_offer',
+      price_note: priceNote,
       extracted: {
         price: priceInfo,
         unit: unitInfo,
@@ -261,6 +311,42 @@ function buildSearchResult(query: string, sourceUrl: string, title: string, snip
       },
     },
   }
+}
+
+function extractAllowedSupplierName(title: string, snippet: string, sourceUrl: string) {
+  const combinedText = `${title} ${snippet} ${sourceUrl}`.toLowerCase()
+  const hostName = new URL(sourceUrl).hostname.toLowerCase()
+
+  if (combinedText.includes('transgourmet') || hostName.includes('transgourmet')) {
+    return 'Transgourmet'
+  }
+
+  if (combinedText.includes('metro') || hostName.includes('metro')) {
+    return 'METRO'
+  }
+
+  return getHostLabel(sourceUrl)
+}
+
+function buildPriceNote(
+  supplierName: string,
+  priceInfo: { priceNet: number | null; priceGross: number | null; unitPrice: number | null },
+  sourceUrl: string,
+) {
+  const hasAnyPrice = [priceInfo.priceNet, priceInfo.priceGross, priceInfo.unitPrice]
+    .some((value) => value !== null && value !== undefined)
+
+  if (hasAnyPrice) return null
+
+  if (supplierName === 'METRO') {
+    return 'Preis nur im METRO Webshop/App oder nach Login verfügbar'
+  }
+
+  if (supplierName === 'Transgourmet') {
+    return 'Preis nicht öffentlich verfügbar'
+  }
+
+  return `Preis nicht öffentlich verfügbar (${getHostLabel(sourceUrl)})`
 }
 
 function extractSupplierName(title: string, sourceUrl: string) {

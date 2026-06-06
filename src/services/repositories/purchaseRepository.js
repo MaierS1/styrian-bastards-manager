@@ -251,19 +251,24 @@ export async function saveSearchResultToPriceComparison(result) {
     }
   }
 
-  const hasPrice = [result?.price_net, result?.price_gross, result?.unit_price].some((value) => value !== null && value !== undefined && value !== '')
-  if (!hasPrice) {
-    return {
-      data: null,
-      error: new Error('Fuer diesen Treffer ist kein Preis vorhanden.'),
-    }
-  }
-
   const supplier = await findOrCreatePurchaseEntity('suppliers', supplierName)
   if (supplier.error) return supplier
 
   const product = await findOrCreatePurchaseEntity('purchase_products', productName)
   if (product.error) return product
+
+  const hasPrice = [result?.price_net, result?.price_gross, result?.unit_price].some((value) => value !== null && value !== undefined && value !== '')
+
+  if (!hasPrice) {
+    return {
+      data: {
+        supplier: supplier.data,
+        product: product.data,
+        price: null,
+      },
+      error: null,
+    }
+  }
 
   const pricePayload = {
     product_id: product.data.id,

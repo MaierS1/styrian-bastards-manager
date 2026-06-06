@@ -304,11 +304,20 @@ export function PurchasePage({ canManagePurchase }) {
     return [...results]
       .filter((result) => allowedSearchSupplierNames.has(String(result?.supplier_name || '').trim().toUpperCase()))
       .sort((a, b) => {
-        const aPrice = Number(getComparablePrice(a) ?? Number.MAX_SAFE_INTEGER)
-        const bPrice = Number(getComparablePrice(b) ?? Number.MAX_SAFE_INTEGER)
+        const aComparable = getComparablePrice(a)
+        const bComparable = getComparablePrice(b)
+        const aPrice = aComparable === null || aComparable === undefined ? Number.MAX_SAFE_INTEGER : Number(aComparable)
+        const bPrice = bComparable === null || bComparable === undefined ? Number.MAX_SAFE_INTEGER : Number(bComparable)
         return aPrice - bPrice
       })
   }, [allowedSearchSupplierNames, offerSearchResults])
+
+  const pricedSearchResults = useMemo(
+    () => searchResultsSorted.filter((result) => getComparablePrice(result) !== null && getComparablePrice(result) !== undefined),
+    [searchResultsSorted],
+  )
+
+  const bestSearchResultId = pricedSearchResults.length >= 2 ? pricedSearchResults[0]?.id : null
 
   const saveSupplier = async () => {
     if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
@@ -763,10 +772,8 @@ export function PurchasePage({ canManagePurchase }) {
         {searchResultsSorted.length > 0 && (
           <div style={searchResultsGridStyle}>
             {searchResultsSorted.map((result, index) => {
-              const bestComparablePrice = getComparablePrice(searchResultsSorted[0])
-              const currentComparablePrice = getComparablePrice(result)
-              const isBest = currentComparablePrice !== null && currentComparablePrice !== undefined && Number(currentComparablePrice) === Number(bestComparablePrice)
-              const canImport = [result?.price_net, result?.price_gross, result?.unit_price].some((value) => value !== null && value !== undefined && value !== '')
+              const isBest = bestSearchResultId && result.id === bestSearchResultId
+              const hasPublicPrice = [result?.price_net, result?.price_gross, result?.unit_price].some((value) => value !== null && value !== undefined && value !== '')
 
               return (
                 <div key={result.id || `${result.source_url}-${index}`} style={searchResultCardStyle(isBest)}>
@@ -775,11 +782,11 @@ export function PurchasePage({ canManagePurchase }) {
                   <br />
                   Lieferant: {result.supplier_name || '-'}
                   <br />
-                  Netto: {formatMoney(result.price_net, 'EUR')}
+                  Netto: {hasPublicPrice ? formatMoney(result.price_net, 'EUR') : 'Preis nicht öffentlich verfügbar'}
                   <br />
-                  Brutto: {formatMoney(result.price_gross, 'EUR')}
+                  Brutto: {hasPublicPrice ? formatMoney(result.price_gross, 'EUR') : (result.price_note || 'Preis nicht öffentlich verfügbar')}
                   <br />
-                  Einheitspreis: {formatMoney(result.unit_price, 'EUR')}
+                  Einheitspreis: {hasPublicPrice ? formatMoney(result.unit_price, 'EUR') : '-'}
                   <br />
                   Einheit: {result.unit || '-'} {result.package_size ? `- Packung: ${result.package_size}` : ''}
                   <br />
@@ -793,7 +800,7 @@ export function PurchasePage({ canManagePurchase }) {
                   <button
                     type="button"
                     onClick={() => importSearchResult(result)}
-                    disabled={!hasPurchaseAccess || !canImport}
+                    disabled={!hasPurchaseAccess}
                     style={buttonStyle}
                   >
                     In Preisvergleich uebernehmen
