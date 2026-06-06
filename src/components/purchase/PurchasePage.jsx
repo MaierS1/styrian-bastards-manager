@@ -1430,6 +1430,19 @@ function ensureArray(value) {
   return Array.isArray(value) ? value : []
 }
 
+function getSafePurchaseAccess(canManagePurchase) {
+  try {
+    if (typeof canManagePurchase === 'function') {
+      return Boolean(canManagePurchase())
+    }
+
+    return Boolean(canManagePurchase)
+  } catch (error) {
+    console.warn('Purchase permission check failed', error)
+    return false
+  }
+}
+
 function normalizeText(value) {
   const trimmed = String(value || '').trim()
   return trimmed || null
