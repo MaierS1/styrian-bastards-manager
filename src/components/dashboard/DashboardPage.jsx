@@ -7,6 +7,7 @@ import { DashboardStats } from './DashboardStats'
 import { DashboardFinanceOverview } from './DashboardFinanceOverview'
 import { DashboardCommercialOverview } from './DashboardCommercialOverview'
 import { DashboardRecentActivities } from './DashboardRecentActivities'
+import { DashboardParkedProjectsCard } from './DashboardParkedProjectsCard'
 
 export function DashboardPage(props) {
   const {
@@ -33,6 +34,7 @@ export function DashboardPage(props) {
     documents,
     cockpitTasks,
     onNavigate,
+    parkedProjectsVisible,
   } = props
 
   return (
@@ -42,6 +44,8 @@ export function DashboardPage(props) {
       <DashboardSmartAlerts alerts={alerts} getAlertStyle={getAlertStyle} />
 
       <DashboardCockpit tasks={cockpitTasks} onNavigate={onNavigate} />
+
+      {parkedProjectsVisible && <DashboardParkedProjectsCard onNavigate={onNavigate} />}
 
       <DashboardSummaryCards
         cashBalance={cashBalance}

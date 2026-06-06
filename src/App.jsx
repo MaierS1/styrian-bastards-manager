@@ -1,4 +1,4 @@
-import { Component, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import {
@@ -207,6 +207,7 @@ import { DocumentsPage } from './components/documents/DocumentsPage'
 import { MemberAreaPage } from './components/member-area/MemberAreaPage'
 import { EventsPage } from './components/events/EventsPage'
 import { AdminPage } from './components/admin/AdminPage'
+import { ParkedModulesPage } from './components/admin/ParkedModulesPage'
 import { InventoryPage } from './components/inventory/InventoryPage'
 import { InvoicesPage } from './components/invoices/InvoicesPage'
 import { DashboardPage } from './components/dashboard/DashboardPage'
@@ -246,42 +247,6 @@ import { MerchPage } from './components/merch/MerchPage'
 import { MediaPage } from './components/media/MediaPage'
 import { PublicPressPage } from './components/media/PublicPressPage'
 import { PublicSponsors } from './components/home/PublicSponsors'
-import { PurchasePage } from './components/purchase/PurchasePage'
-
-class PurchaseRouteErrorBoundary extends Component {
-  constructor(props) {
-    super(props)
-    this.state = { error: null }
-  }
-
-  static getDerivedStateFromError(error) {
-    return { error }
-  }
-
-  componentDidCatch(error) {
-    console.error('Purchase route failed', error)
-  }
-
-  render() {
-    if (this.state.error) {
-      return (
-        <div style={{
-          ...cardStyle,
-          borderLeft: `6px solid ${colors.red}`,
-          background: colors.dangerBg,
-          color: colors.dangerText,
-        }}>
-          <strong>Einkauf & Preisvergleich konnte nicht geladen werden.</strong>
-          <br />
-          {this.state.error?.message || 'Unbekannter Fehler'}
-        </div>
-      )
-    }
-
-    return this.props.children
-  }
-}
-
 export default function App() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -2227,6 +2192,10 @@ export default function App() {
 
   function canManagePurchase() {
     return canManagePurchaseMember(currentMember)
+  }
+
+  function canAccessParkedModules() {
+    return isAdmin() || ['obmann', 'obmann_stv', 'schriftfuehrer', 'schriftfuehrer_stv', 'kassier', 'kassier_stv'].includes(currentMember?.role)
   }
 
   function resetMerchItemForm() {
@@ -5335,7 +5304,8 @@ export default function App() {
 
       <nav style={navStyle}>
         {navigationItems
-          .filter(([pageKey]) => pageKey !== 'purchase' || canManagePurchase())
+          .filter(([pageKey]) => pageKey !== 'purchase')
+          .filter(([pageKey]) => pageKey !== 'parkedModules' || canAccessParkedModules())
           .map(([pageKey, label]) => (
             <button
               key={pageKey}
@@ -5604,6 +5574,7 @@ export default function App() {
           alerts={getDashboardAlerts()}
           cockpitTasks={getDashboardCockpitTasks()}
           onNavigate={setActivePage}
+          parkedProjectsVisible={canAccessParkedModules()}
           getAlertStyle={getAlertStyle}
           cashBalance={getCashBalance()}
           incomeTotal={getIncomeTotal()}
@@ -6135,6 +6106,7 @@ export default function App() {
           overflow: 'visible',
           opacity: 1,
         }}>
+          {/* Vorläufig deaktiviert. Reaktivierung bei verfügbarer API/Schnittstelle geplant. */}
           <h2 style={headingStyle}>Einkauf & Preisvergleich</h2>
           <div style={{
             ...cardStyle,
@@ -6142,14 +6114,23 @@ export default function App() {
             color: colors.text,
             borderLeft: `6px solid ${colors.red}`,
           }}>
-            <strong>Einkauf & Preisvergleich Startseite</strong>
+            <strong>Modul vorläufig deaktiviert</strong>
             <br />
-            Die Route wurde geladen. Darunter erscheinen Dashboard, Produkte, Lieferanten, Preise und Einkaufslisten.
+            METRO und Transgourmet bieten aktuell keine praktikable öffentliche Suchschnittstelle.
+            <br />
+            Ohne API oder offiziellen Datenzugriff ist keine zuverlässige automatische Produktsuche möglich.
+            <br />
+            Das Modul bleibt technisch erhalten und ist über die Geparkten Module dokumentiert.
+            <br />
+            <button type="button" onClick={() => setActivePage('parkedModules')} style={buttonStyle}>
+              Geparkte Module öffnen
+            </button>
           </div>
-          <PurchaseRouteErrorBoundary>
-            <PurchasePage canManagePurchase={canManagePurchase} />
-          </PurchaseRouteErrorBoundary>
         </section>
+      )}
+
+      {activePage === 'parkedModules' && (
+        <ParkedModulesPage canAccess={canAccessParkedModules()} onNavigate={setActivePage} />
       )}
 
       {activePage === 'portal' && (

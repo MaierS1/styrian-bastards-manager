@@ -13,6 +13,6 @@ export const navigationItems = [
   ['sponsors', 'Sponsoren'],
   ['merch', 'Shop & Fanartikel'],
   ['inventory', 'Inventar'],
-  ['purchase', 'Einkauf & Preisvergleich'],
+  ['parkedModules', 'Geparkte Module'],
   ['admin', 'Admin / Export'],
 ]
