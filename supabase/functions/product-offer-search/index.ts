@@ -202,7 +202,13 @@ async function searchPublicOffers(query: string) {
   let hadFetchError = false
   const errors: Array<{ term: string; error: string }> = []
   const normalizedQueries = [...new Set([normalizeQuery(query), ...buildQuerySynonyms(query).map((item) => normalizeQuery(item))])].filter(Boolean)
-  const searchedSources = ['duckduckgo:site:shop.transgourmet.at', 'duckduckgo:site:metro.at']
+  const searchedSources = [
+    'duckduckgo:site:shop.transgourmet.at/produkt',
+    'duckduckgo:site:shop.transgourmet.at/catalog2/products',
+    'duckduckgo:site:metro.at',
+    'duckduckgo:site:metro.at/aktuelle-angebote',
+    'duckduckgo:site:metro.at/mein-markt',
+  ]
 
   for (const term of terms) {
     const pageResults = await searchDuckDuckGo(term)
@@ -258,15 +264,30 @@ async function searchPublicOffers(query: string) {
 function buildSearchTerms(query: string) {
   const synonyms = buildQuerySynonyms(query)
   const terms = new Set<string>()
+  const normalized = normalizeQuery(query)
 
   for (const synonym of synonyms) {
     terms.add(synonym)
     terms.add(`${synonym} Angebot`)
     terms.add(`${synonym} Aktion`)
     terms.add(`site:shop.transgourmet.at ${synonym}`)
+    terms.add(`site:shop.transgourmet.at/produkt ${synonym}`)
+    terms.add(`site:shop.transgourmet.at/catalog2/products ${synonym}`)
     terms.add(`site:www.shop.transgourmet.at ${synonym}`)
     terms.add(`site:metro.at ${synonym}`)
+    terms.add(`site:metro.at aktuelle Angebote ${synonym}`)
+    terms.add(`site:metro.at mein-markt ${synonym}`)
     terms.add(`site:www.metro.at ${synonym}`)
+  }
+
+  if (normalized.includes('red bull') || normalized.includes('redbull')) {
+    for (const term of ['Red Bull', 'RedBull']) {
+      terms.add(`site:shop.transgourmet.at/produkt ${term}`)
+      terms.add(`site:shop.transgourmet.at/catalog2/products ${term}`)
+      terms.add(`site:metro.at ${term} Getränke`)
+      terms.add(`site:metro.at aktuelle Angebote ${term}`)
+      terms.add(`site:metro.at mein-markt ${term}`)
+    }
   }
 
   return [...terms].slice(0, 24)
@@ -401,44 +422,17 @@ function buildRawResultPreview(result: SearchResult): RawResultPreview {
 
 function detectSupplier(sourceUrl: string, title: string, snippet: string, searchTerm = ''): SupplierDetection {
   const host = getNormalizedHost(sourceUrl)
-  const combinedText = normalizeQuery([host, title, snippet, searchTerm].join(' '))
-  const titleSnippetText = normalizeQuery([title, snippet].join(' '))
-  const searchText = String(searchTerm || '').toLowerCase()
-
-  const metroHostMatched = matchesAnyHost(host, ['metro.at', 'shop.metro.at', 'produkte.metro.at'])
-  const transgourmetHostMatched = matchesAnyHost(host, ['transgourmet.at', 'shop.transgourmet.at', 'www.transgourmet.at'])
-  const metroTextMatched = /\bmetro\b/.test(titleSnippetText)
-  const transgourmetTextMatched = /\btransgourmet\b/.test(titleSnippetText)
-  const metroSiteSearch = /site:(?:www\.)?(?:shop\.)?(?:produkte\.)?metro\.at/.test(searchText)
-  const transgourmetSiteSearch = /site:(?:www\.)?shop\.transgourmet\.at|site:(?:www\.)?transgourmet\.at/.test(searchText)
-
-  if ((transgourmetSiteSearch && transgourmetHostMatched) || transgourmetHostMatched || transgourmetTextMatched) {
-    return { detectedSupplier: 'Transgourmet', rejectReason: null }
-  }
-
-  if ((metroSiteSearch && metroHostMatched) || metroHostMatched || metroTextMatched) {
+  if (isDirectMetroHost(host)) {
     return { detectedSupplier: 'METRO', rejectReason: null }
   }
 
-  if (transgourmetSiteSearch && (transgourmetHostMatched || transgourmetTextMatched)) {
+  if (isDirectTransgourmetHost(host)) {
     return { detectedSupplier: 'Transgourmet', rejectReason: null }
-  }
-
-  if (metroSiteSearch && (metroHostMatched || metroTextMatched)) {
-    return { detectedSupplier: 'METRO', rejectReason: null }
-  }
-
-  if (combinedText.includes('transgourmet')) {
-    return { detectedSupplier: 'Transgourmet', rejectReason: null }
-  }
-
-  if (combinedText.includes('metro')) {
-    return { detectedSupplier: 'METRO', rejectReason: null }
   }
 
   return {
     detectedSupplier: null,
-    rejectReason: `Kein eindeutiger Lieferant in URL, Titel oder Snippet erkennbar (${host || 'unknown host'}).`,
+    rejectReason: 'Fremddomain, kein direkter METRO-/Transgourmet-Treffer',
   }
 }
 
@@ -605,8 +599,15 @@ function getNormalizedHost(sourceUrl: string) {
   }
 }
 
-function matchesAnyHost(host: string, domains: string[]) {
-  return domains.some((domain) => host === domain || host.endsWith(`.${domain}`) || host.includes(domain))
+function isDirectMetroHost(host: string) {
+  return host === 'metro.at' || host.endsWith('.metro.at')
+}
+
+function isDirectTransgourmetHost(host: string) {
+  return host === 'transgourmet.at'
+    || host.endsWith('.transgourmet.at')
+    || host === 'shop.transgourmet.at'
+    || host.endsWith('.shop.transgourmet.at')
 }
 
 function cleanHtmlText(value: string) {
