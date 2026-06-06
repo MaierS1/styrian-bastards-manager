@@ -116,7 +116,17 @@ export function PurchasePage({ canManagePurchase }) {
   const [offerSearchLoading, setOfferSearchLoading] = useState(false)
   const [offerSearchError, setOfferSearchError] = useState('')
   const [offerSearchMessage, setOfferSearchMessage] = useState('')
+  const [offerSearchDebug, setOfferSearchDebug] = useState(null)
   const [recentSearchResults, setRecentSearchResults] = useState([])
+  const [manualOfferForm, setManualOfferForm] = useState({
+    product_name: '',
+    supplier_name: 'METRO',
+    price_net: '',
+    price_gross: '',
+    source_url: '',
+    note: '',
+  })
+  const [manualOfferSaving, setManualOfferSaving] = useState(false)
   const hasPurchaseAccess = getSafePurchaseAccess(canManagePurchase)
 
   const loadData = async () => {
@@ -208,6 +218,7 @@ export function PurchasePage({ canManagePurchase }) {
     setOfferSearchLoading(true)
     setOfferSearchError('')
     setOfferSearchMessage('')
+    setOfferSearchDebug(null)
     setOfferSearchResults([])
 
     try {
@@ -222,9 +233,10 @@ export function PurchasePage({ canManagePurchase }) {
 
       const results = ensureArray(data?.results || data?.data || [])
       setOfferSearchResults(results)
+      setOfferSearchDebug(data?.debug || null)
       setOfferSearchMessage(
         data?.message || (results.length === 0
-          ? 'Fuer diesen Suchbegriff wurden keine oeffentlich verfuegbaren Angebote gefunden.'
+          ? 'Es wurden keine öffentlich auslesbaren Treffer von METRO oder Transgourmet gefunden.'
           : `Es wurden ${results.length} Angebote gefunden.`),
       )
       await loadRecentSearchResults()
@@ -232,6 +244,7 @@ export function PurchasePage({ canManagePurchase }) {
       console.error(error)
       setOfferSearchError(error?.message || 'Die Angebotssuche ist fehlgeschlagen.')
       setOfferSearchResults([])
+      setOfferSearchDebug(null)
     } finally {
       setOfferSearchLoading(false)
     }
@@ -255,6 +268,51 @@ export function PurchasePage({ canManagePurchase }) {
     await loadRecentSearchResults()
   }
 
+  const saveManualOffer = async () => {
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
+
+    const supplierName = String(manualOfferForm.supplier_name || '').trim()
+    if (!allowedSearchSupplierNames.has(supplierName.toUpperCase())) {
+      return alert('Nur METRO oder Transgourmet sind erlaubt.')
+    }
+
+    const productName = String(manualOfferForm.product_name || '').trim()
+    if (!productName) {
+      return alert('Produktname ist Pflicht.')
+    }
+
+    setManualOfferSaving(true)
+    const { error } = await saveSearchResultToPriceComparison({
+      supplier_name: supplierName,
+      product_name: productName,
+      price_net: manualOfferForm.price_net,
+      price_gross: manualOfferForm.price_gross,
+      unit_price: null,
+      offer_valid_from: null,
+      offer_valid_until: null,
+      source_url: String(manualOfferForm.source_url || '').trim() || 'https://www.metro.at',
+      source_type: 'manual_entry',
+      raw_data: {
+        manual: true,
+        note: manualOfferForm.note,
+      },
+    })
+    setManualOfferSaving(false)
+
+    if (error) return alert(error.message)
+
+    setManualOfferForm({
+      product_name: '',
+      supplier_name: 'METRO',
+      price_net: '',
+      price_gross: '',
+      source_url: '',
+      note: '',
+    })
+    await loadRecentSearchResults()
+    await loadData()
+  }
+
   const safeSuppliers = ensureArray(suppliers)
   const safeProducts = ensureArray(products)
   const safePrices = ensureArray(prices)
@@ -266,6 +324,7 @@ export function PurchasePage({ canManagePurchase }) {
   const safeEvents = ensureArray(events)
   const safeRecentSearchResults = ensureArray(recentSearchResults)
   const allowedSearchSupplierNames = new Set(['METRO', 'TRANSGOURMET'])
+  const supplierSearchLinks = buildSupplierSearchLinksV2(offerSearchQuery)
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -769,6 +828,24 @@ export function PurchasePage({ canManagePurchase }) {
           </div>
         )}
 
+        {offerSearchDebug && (
+          <details style={debugDetailsStyle}>
+            <summary style={debugSummaryStyle}>Suchdiagnose</summary>
+            <div style={debugBodyStyle}>
+              <div><strong>Suchvarianten:</strong> {ensureArray(offerSearchDebug.normalizedQueries).join(', ') || '-'}</div>
+              <div><strong>Abgefragte Quellen:</strong> {ensureArray(offerSearchDebug.searchedSources).join(', ') || '-'}</div>
+              <div><strong>Roh-Treffer:</strong> {offerSearchDebug.rawResultCount ?? 0}</div>
+              <div><strong>METRO-Treffer:</strong> {offerSearchDebug.metroResultCount ?? 0}</div>
+              <div><strong>Transgourmet-Treffer:</strong> {offerSearchDebug.transgourmetResultCount ?? 0}</div>
+              <div><strong>Gefilterte Treffer:</strong> {offerSearchDebug.filteredResultCount ?? 0}</div>
+              <div>
+                <strong>Fehler je Quelle:</strong>
+                <pre style={debugPreStyle}>{JSON.stringify(ensureArray(offerSearchDebug.errors), null, 2)}</pre>
+              </div>
+            </div>
+          </details>
+        )}
+
         {searchResultsSorted.length > 0 && (
           <div style={searchResultsGridStyle}>
             {searchResultsSorted.map((result, index) => {
@@ -812,8 +889,16 @@ export function PurchasePage({ canManagePurchase }) {
         )}
 
         {!offerSearchLoading && !offerSearchError && offerSearchMessage && searchResultsSorted.length === 0 && (
-          <p style={mutedTextStyle}>Keine Angebote von METRO oder Transgourmet gefunden.</p>
+          <p style={mutedTextStyle}>
+            Es wurden keine öffentlich auslesbaren Treffer von METRO oder Transgourmet gefunden.
+            <br />
+            Die Anbieter verstecken Preise/Produkte möglicherweise hinter Login, JavaScript oder dynamischen Shop-Suchen.
+          </p>
         )}
+
+        <div style={{ marginTop: 16 }}>
+          <button onClick={() => setActiveTab('supplierLinks')} style={secondaryButtonStyle}>Lieferanten-Suchlinks</button>
+        </div>
 
         {safeRecentSearchResults.length > 0 && (
           <div style={recentSearchPanelStyle}>
@@ -845,6 +930,7 @@ export function PurchasePage({ canManagePurchase }) {
           ['prices', 'Preise'],
           ['history', 'Preis-Historie'],
           ['lists', 'Einkaufslisten'],
+          ['supplierLinks', 'Lieferanten-Suchlinks'],
           ['exports', 'Exporte'],
         ].map(([key, label]) => (
           <button
@@ -925,6 +1011,73 @@ export function PurchasePage({ canManagePurchase }) {
               setSelectedProductId={setSelectedProductId}
               setActiveTab={setActiveTab}
             />
+          )}
+
+          {activeTab === 'supplierLinks' && (
+            <div style={cardStyle}>
+              <h3 style={headingStyle}>Lieferanten-Suchlinks</h3>
+              <p style={mutedTextStyle}>
+                Für den Suchbegriff <strong>{offerSearchQuery || '-'}</strong> können diese Links direkt geöffnet werden.
+              </p>
+              <p style={mutedTextStyle}>
+                <strong>Hinweis:</strong> Der Suchagent berücksichtigt derzeit nur METRO und Transgourmet.
+              </p>
+
+              <div style={linkGridStyle}>
+                {supplierSearchLinks.map((link) => (
+                  <a key={link.label} href={link.url} target="_blank" rel="noreferrer" style={linkButtonStyle}>
+                    {link.label}
+                  </a>
+                ))}
+              </div>
+
+              <div style={cardStyle}>
+                <h4 style={headingStyle}>Treffer manuell übernehmen</h4>
+                <input
+                  placeholder="Produktname"
+                  value={manualOfferForm.product_name}
+                  onChange={(event) => setFormValue(setManualOfferForm, 'product_name', event.target.value)}
+                  style={inputStyle}
+                />
+                <select
+                  value={manualOfferForm.supplier_name}
+                  onChange={(event) => setFormValue(setManualOfferForm, 'supplier_name', event.target.value)}
+                  style={inputStyle}
+                >
+                  <option value="METRO">METRO</option>
+                  <option value="Transgourmet">Transgourmet</option>
+                </select>
+                <div style={formGridStyle}>
+                  <input
+                    placeholder="Preis netto"
+                    value={manualOfferForm.price_net}
+                    onChange={(event) => setFormValue(setManualOfferForm, 'price_net', event.target.value)}
+                    style={inputStyle}
+                  />
+                  <input
+                    placeholder="Preis brutto"
+                    value={manualOfferForm.price_gross}
+                    onChange={(event) => setFormValue(setManualOfferForm, 'price_gross', event.target.value)}
+                    style={inputStyle}
+                  />
+                </div>
+                <input
+                  placeholder="Quelle"
+                  value={manualOfferForm.source_url}
+                  onChange={(event) => setFormValue(setManualOfferForm, 'source_url', event.target.value)}
+                  style={inputStyle}
+                />
+                <textarea
+                  placeholder="Notiz"
+                  value={manualOfferForm.note}
+                  onChange={(event) => setFormValue(setManualOfferForm, 'note', event.target.value)}
+                  style={textareaStyle}
+                />
+                <button onClick={saveManualOffer} disabled={manualOfferSaving} style={buttonStyle}>
+                  {manualOfferSaving ? 'Speichern...' : 'Treffer manuell übernehmen'}
+                </button>
+              </div>
+            </div>
           )}
 
           {activeTab === 'products' && (
@@ -1751,6 +1904,58 @@ function formatSearchOfferRange(from, until) {
   return from || until || '-'
 }
 
+function normalizeSearchQuery(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+}
+
+function buildSupplierSearchLinks(query) {
+  const cleaned = String(query || '').trim() || 'Cola'
+  return [
+    {
+      label: 'METRO öffnen',
+      url: `https://www.metro.at/suche?query=${encodeURIComponent(cleaned)}`,
+    },
+    {
+      label: 'Transgourmet öffnen',
+      url: `https://shop.transgourmet.at/suche?q=${encodeURIComponent(cleaned)}`,
+    },
+    {
+      label: `Google Suche METRO ${cleaned}`,
+      url: `https://www.google.com/search?q=${encodeURIComponent(`site:metro.at ${cleaned}`)}`,
+    },
+    {
+      label: `Google Suche Transgourmet ${cleaned}`,
+      url: `https://www.google.com/search?q=${encodeURIComponent(`site:shop.transgourmet.at ${cleaned}`)}`,
+    },
+  ]
+}
+
+function buildSupplierSearchLinksV2(query) {
+  const cleaned = String(query || '').trim() || 'Cola'
+  return [
+    {
+      label: 'METRO oeffnen',
+      url: `https://www.metro.at/suche?query=${encodeURIComponent(cleaned)}`,
+    },
+    {
+      label: 'Transgourmet oeffnen',
+      url: `https://shop.transgourmet.at/suche?q=${encodeURIComponent(cleaned)}`,
+    },
+    {
+      label: `Google Suche METRO ${cleaned}`,
+      url: `https://www.google.com/search?q=${encodeURIComponent(`site:metro.at ${cleaned}`)}`,
+    },
+    {
+      label: `Google Suche Transgourmet ${cleaned}`,
+      url: `https://www.google.com/search?q=${encodeURIComponent(`site:shop.transgourmet.at ${cleaned}`)}`,
+    },
+  ]
+}
+
 function buildComparisonRows(product, prices, bestPrice) {
   const safePrices = ensureArray(prices)
   const rows = safePrices.map((price) => ({
@@ -1896,6 +2101,46 @@ function searchResultCardStyle(isBest) {
 const searchLinkStyle = {
   color: colors.blue,
   wordBreak: 'break-all',
+}
+
+const linkGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))',
+  gap: 10,
+  marginBottom: 16,
+}
+
+const linkButtonStyle = {
+  ...buttonStyle,
+  textDecoration: 'none',
+  textAlign: 'center',
+  display: 'inline-block',
+}
+
+const debugDetailsStyle = {
+  ...cardStyle,
+  marginTop: 12,
+}
+
+const debugSummaryStyle = {
+  cursor: 'pointer',
+  fontWeight: 900,
+}
+
+const debugBodyStyle = {
+  marginTop: 10,
+  display: 'grid',
+  gap: 8,
+}
+
+const debugPreStyle = {
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  background: colors.offWhite,
+  border: `1px solid ${colors.border}`,
+  padding: 12,
+  borderRadius: 10,
+  marginTop: 8,
 }
 
 const statsGridStyle = {

@@ -103,11 +103,22 @@ Deno.serve(async (req) => {
 
     const searchOutcome = await searchPublicOffers(query)
     const filteredResults = searchOutcome.results.filter((result) => isAllowedSupplier(result.supplier_name))
+    const debug = {
+      query,
+      normalizedQueries: searchOutcome.normalizedQueries,
+      searchedSources: searchOutcome.searchedSources,
+      rawResultCount: searchOutcome.rawResultCount,
+      metroResultCount: searchOutcome.metroResultCount,
+      transgourmetResultCount: searchOutcome.transgourmetResultCount,
+      filteredResultCount: filteredResults.length,
+      errors: searchOutcome.errors,
+    }
 
     if (filteredResults.length === 0) {
       return jsonResponse({
         results: [],
         message: 'Keine Angebote von METRO oder Transgourmet gefunden.',
+        debug,
       })
     }
 
@@ -145,6 +156,7 @@ Deno.serve(async (req) => {
     return jsonResponse({
       results: insertedRows || [],
       message: `Es wurden ${insertedRows?.length || 0} oeffentlich verfuegbare Angebote gefunden.`,
+      debug,
       fallback_used: false,
     })
   } catch (error) {
@@ -172,11 +184,18 @@ async function searchPublicOffers(query: string) {
   const collected: SearchResult[] = []
   const seenUrls = new Set<string>()
   let hadFetchError = false
+  const errors: Array<{ term: string; error: string }> = []
+  const normalizedQueries = [...new Set([normalizeQuery(query), ...buildQuerySynonyms(query).map((item) => normalizeQuery(item))])].filter(Boolean)
+  const searchedSources = ['duckduckgo:site:shop.transgourmet.at', 'duckduckgo:site:metro.at']
 
   for (const term of terms) {
     const pageResults = await searchDuckDuckGo(term)
     if (!pageResults.ok) {
       hadFetchError = true
+      errors.push({
+        term,
+        error: pageResults.error || 'Suchen konnte nicht ausgeführt werden.',
+      })
     }
 
     for (const result of pageResults.results) {
@@ -185,12 +204,30 @@ async function searchPublicOffers(query: string) {
       collected.push(result)
 
       if (collected.length >= 12) {
-        return { results: collected, hadFetchError }
+        return {
+          results: collected,
+          hadFetchError,
+          normalizedQueries,
+          searchedSources,
+          errors,
+          rawResultCount: collected.length,
+          metroResultCount: countSupplierResults(collected, 'METRO'),
+          transgourmetResultCount: countSupplierResults(collected, 'Transgourmet'),
+        }
       }
     }
   }
 
-  return { results: collected, hadFetchError }
+  return {
+    results: collected,
+    hadFetchError,
+    normalizedQueries,
+    searchedSources,
+    errors,
+    rawResultCount: collected.length,
+    metroResultCount: countSupplierResults(collected, 'METRO'),
+    transgourmetResultCount: countSupplierResults(collected, 'Transgourmet'),
+  }
 }
 
 function buildSearchTerms(query: string) {
@@ -251,27 +288,29 @@ async function searchDuckDuckGo(term: string) {
     })
 
     if (!response.ok) {
-      return { ok: false, results: [] as SearchResult[] }
+      return { ok: false, results: [] as SearchResult[], error: `HTTP ${response.status}` }
     }
 
     const html = await response.text()
     const titleMatches = [...html.matchAll(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)]
     const snippetMatches = [...html.matchAll(/<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g)]
 
+    const results = titleMatches
+      .slice(0, 10)
+      .map((match, index) => {
+        const url = normalizeResultUrl(match[1])
+        const title = cleanHtmlText(match[2])
+        const snippet = cleanHtmlText(snippetMatches[index]?.[1] || '')
+        return buildSearchResult(term, url, title, snippet)
+      })
+      .filter((result): result is SearchResult => Boolean(result.source_url))
+
     return {
       ok: true,
-      results: titleMatches
-        .slice(0, 10)
-        .map((match, index) => {
-          const url = normalizeResultUrl(match[1])
-          const title = cleanHtmlText(match[2])
-          const snippet = cleanHtmlText(snippetMatches[index]?.[1] || '')
-          return buildSearchResult(term, url, title, snippet)
-        })
-        .filter((result): result is SearchResult => Boolean(result.source_url)),
+      results,
     }
   } catch {
-    return { ok: false, results: [] as SearchResult[] }
+    return { ok: false, results: [] as SearchResult[], error: 'Netzwerkfehler' }
   }
 }
 
@@ -515,6 +554,10 @@ function isAllowedSupplier(value: string | null | undefined) {
   return allowedSupplierNames.has(normalized)
 }
 
+function countSupplierResults(results: SearchResult[], supplierName: string) {
+  return results.filter((result) => String(result?.supplier_name || '').trim().toUpperCase() === supplierName.toUpperCase()).length
+}
+
 function jsonResponse(payload: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -553,5 +596,6 @@ type SearchResult = {
   offer_valid_until: string | null
   source_url: string
   source_type: string
+  price_note?: string | null
   raw_data: Record<string, unknown>
 }
