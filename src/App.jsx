@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
 import { Html5QrcodeScanner } from 'html5-qrcode'
 import {
@@ -247,6 +247,40 @@ import { MediaPage } from './components/media/MediaPage'
 import { PublicPressPage } from './components/media/PublicPressPage'
 import { PublicSponsors } from './components/home/PublicSponsors'
 import { PurchasePage } from './components/purchase/PurchasePage'
+
+class PurchaseRouteErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  componentDidCatch(error) {
+    console.error('Purchase route failed', error)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{
+          ...cardStyle,
+          borderLeft: `6px solid ${colors.red}`,
+          background: colors.dangerBg,
+          color: colors.dangerText,
+        }}>
+          <strong>Einkauf & Preisvergleich konnte nicht geladen werden.</strong>
+          <br />
+          {this.state.error?.message || 'Unbekannter Fehler'}
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
+}
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -6093,7 +6127,29 @@ export default function App() {
       )}
 
       {activePage === 'purchase' && (
-        <PurchasePage canManagePurchase={canManagePurchase} />
+        <section style={{
+          ...sectionStyle,
+          background: colors.offWhite,
+          color: colors.text,
+          minHeight: 400,
+          overflow: 'visible',
+          opacity: 1,
+        }}>
+          <h2 style={headingStyle}>Einkauf & Preisvergleich</h2>
+          <div style={{
+            ...cardStyle,
+            background: colors.white,
+            color: colors.text,
+            borderLeft: `6px solid ${colors.red}`,
+          }}>
+            <strong>Einkauf & Preisvergleich Startseite</strong>
+            <br />
+            Die Route wurde geladen. Darunter erscheinen Dashboard, Produkte, Lieferanten, Preise und Einkaufslisten.
+          </div>
+          <PurchaseRouteErrorBoundary>
+            <PurchasePage canManagePurchase={canManagePurchase} />
+          </PurchaseRouteErrorBoundary>
+        </section>
       )}
 
       {activePage === 'portal' && (
