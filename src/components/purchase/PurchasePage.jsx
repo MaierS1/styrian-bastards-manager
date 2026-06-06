@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import {
   buttonStyle,
   cardStyle,
@@ -11,8 +13,10 @@ import {
   sectionStyle,
 } from '../../styles/appStyles'
 import {
+  addPurchaseProductFavorite,
   createPurchaseList,
   createPurchaseListItem,
+  deletePurchaseProductFavorite,
   deletePurchaseList,
   deletePurchaseListItem,
   deletePurchasePrice,
@@ -20,6 +24,7 @@ import {
   deleteSupplier,
   fetchPurchaseData,
   updatePurchaseList,
+  upsertSupplierRating,
   upsertPurchasePrice,
   upsertPurchaseProduct,
   upsertSupplier,
@@ -58,6 +63,7 @@ const emptyPriceForm = {
 
 const emptyListForm = {
   title: '',
+  event_id: '',
   status: 'draft',
   note: '',
 }
@@ -70,12 +76,24 @@ const emptyListItemForm = {
   note: '',
 }
 
+const emptyRatingForm = {
+  supplier_id: '',
+  price_rating: '',
+  quality_rating: '',
+  reliability_rating: '',
+  note: '',
+}
+
 export function PurchasePage({ canManagePurchase }) {
   const [suppliers, setSuppliers] = useState([])
   const [products, setProducts] = useState([])
   const [prices, setPrices] = useState([])
   const [lists, setLists] = useState([])
   const [listItems, setListItems] = useState([])
+  const [favorites, setFavorites] = useState([])
+  const [priceHistory, setPriceHistory] = useState([])
+  const [supplierRatings, setSupplierRatings] = useState([])
+  const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
@@ -84,11 +102,13 @@ export function PurchasePage({ canManagePurchase }) {
   const [supplierEditingId, setSupplierEditingId] = useState(null)
   const [productEditingId, setProductEditingId] = useState(null)
   const [priceEditingId, setPriceEditingId] = useState(null)
+  const [ratingEditingId, setRatingEditingId] = useState(null)
   const [supplierForm, setSupplierForm] = useState(emptySupplierForm)
   const [productForm, setProductForm] = useState(emptyProductForm)
   const [priceForm, setPriceForm] = useState(emptyPriceForm)
   const [listForm, setListForm] = useState(emptyListForm)
   const [listItemForm, setListItemForm] = useState(emptyListItemForm)
+  const [ratingForm, setRatingForm] = useState(emptyRatingForm)
 
   const loadData = async () => {
     setLoading(true)
@@ -99,6 +119,10 @@ export function PurchasePage({ canManagePurchase }) {
       result.pricesResult.error,
       result.listsResult.error,
       result.listItemsResult.error,
+      result.favoritesResult.error,
+      result.priceHistoryResult.error,
+      result.supplierRatingsResult.error,
+      result.eventsResult.error,
     ].find(Boolean)
 
     if (firstError) {
@@ -112,6 +136,10 @@ export function PurchasePage({ canManagePurchase }) {
     setPrices(result.pricesResult.data || [])
     setLists(result.listsResult.data || [])
     setListItems(result.listItemsResult.data || [])
+    setFavorites(result.favoritesResult.data || [])
+    setPriceHistory(result.priceHistoryResult.data || [])
+    setSupplierRatings(result.supplierRatingsResult.data || [])
+    setEvents(result.eventsResult.data || [])
     setLoading(false)
   }
 
@@ -144,11 +172,16 @@ export function PurchasePage({ canManagePurchase }) {
   const activeSuppliers = suppliers.filter((supplier) => supplier.is_active)
   const activeProducts = products.filter((product) => product.is_active)
   const openLists = lists.filter((list) => ['draft', 'open'].includes(list.status))
+  const favoriteProductIds = new Set(favorites.map((favorite) => favorite.product_id))
+  const favoriteProducts = products.filter((product) => favoriteProductIds.has(product.id))
+  const selectedProductHistory = priceHistory.filter((entry) => entry.product_id === selectedProductId)
+  const lastPriceChangesByProduct = getLastPriceChangesByProduct(priceHistory)
 
   const dashboardStats = [
     ['Produkte', products.length],
     ['Aktive Lieferanten', activeSuppliers.length],
     ['Preise', prices.length],
+    ['Favoriten', favorites.length],
     ['Offene Listen', openLists.length],
   ]
 
@@ -225,6 +258,40 @@ export function PurchasePage({ canManagePurchase }) {
     await loadData()
   }
 
+  const toggleFavorite = async (product) => {
+    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    const existingFavorite = favorites.find((favorite) => favorite.product_id === product.id)
+
+    const { error } = existingFavorite
+      ? await deletePurchaseProductFavorite(existingFavorite.id)
+      : await addPurchaseProductFavorite({ product_id: product.id })
+
+    if (error) return alert(error.message)
+    await loadData()
+  }
+
+  const saveSupplierRating = async () => {
+    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!ratingForm.supplier_id) return alert('Lieferant ist Pflicht.')
+
+    setSaving(true)
+    const { error } = await upsertSupplierRating({
+      id: ratingEditingId,
+      payload: {
+        supplier_id: ratingForm.supplier_id,
+        price_rating: normalizeInteger(ratingForm.price_rating),
+        quality_rating: normalizeInteger(ratingForm.quality_rating),
+        reliability_rating: normalizeInteger(ratingForm.reliability_rating),
+        note: normalizeText(ratingForm.note),
+      },
+    })
+    setSaving(false)
+
+    if (error) return alert(error.message)
+    resetRatingForm()
+    await loadData()
+  }
+
   const saveList = async () => {
     if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
     if (!listForm.title.trim()) return alert('Listentitel ist Pflicht.')
@@ -232,8 +299,11 @@ export function PurchasePage({ canManagePurchase }) {
     setSaving(true)
     const { data, error } = await createPurchaseList({
       title: listForm.title.trim(),
+      event_id: normalizeText(listForm.event_id),
       status: listForm.status,
       note: normalizeText(listForm.note),
+      estimated_total_net: 0,
+      estimated_total_gross: 0,
     })
     setSaving(false)
 
@@ -248,21 +318,37 @@ export function PurchasePage({ canManagePurchase }) {
     if (!listItemForm.list_id || !listItemForm.product_id) return alert('Liste und Produkt sind Pflicht.')
 
     setSaving(true)
-    const { error } = await createPurchaseListItem({
+    const payload = {
       list_id: listItemForm.list_id,
       product_id: listItemForm.product_id,
       quantity: normalizeNumber(listItemForm.quantity) || 1,
       preferred_supplier_id: normalizeText(listItemForm.preferred_supplier_id),
       note: normalizeText(listItemForm.note),
-    })
+    }
+    const { data, error } = await createPurchaseListItem(payload)
     setSaving(false)
 
     if (error) return alert(error.message)
+    await updateListEstimate(listItemForm.list_id, data || payload)
     setListItemForm((current) => ({
       ...emptyListItemForm,
       list_id: current.list_id,
     }))
     await loadData()
+  }
+
+  const updateListEstimate = async (listId, extraItem = null) => {
+    const currentItems = listItems.filter((item) => item.list_id === listId)
+    const nextItems = extraItem ? [...currentItems, extraItem] : currentItems
+    const totals = getListTotals(nextItems, prices)
+
+    await updatePurchaseList({
+      id: listId,
+      payload: {
+        estimated_total_net: totals.net,
+        estimated_total_gross: totals.gross,
+      },
+    })
   }
 
   const editSupplier = (supplier) => {
@@ -310,6 +396,18 @@ export function PurchasePage({ canManagePurchase }) {
     setActiveTab('prices')
   }
 
+  const editSupplierRating = (rating) => {
+    setRatingEditingId(rating.id)
+    setRatingForm({
+      supplier_id: rating.supplier_id || '',
+      price_rating: rating.price_rating ?? '',
+      quality_rating: rating.quality_rating ?? '',
+      reliability_rating: rating.reliability_rating ?? '',
+      note: rating.note || '',
+    })
+    setActiveTab('suppliers')
+  }
+
   const removeSupplier = async (supplier) => {
     if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
     if (!window.confirm(`Lieferant wirklich loeschen?\n\n${supplier.name}`)) return
@@ -345,6 +443,17 @@ export function PurchasePage({ canManagePurchase }) {
     await loadData()
   }
 
+  const changeListEvent = async (list, eventId) => {
+    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+
+    const { error } = await updatePurchaseList({
+      id: list.id,
+      payload: { event_id: normalizeText(eventId) },
+    })
+    if (error) return alert(error.message)
+    await loadData()
+  }
+
   const removeList = async (list) => {
     if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
     if (!window.confirm(`Einkaufsliste wirklich loeschen?\n\n${list.title}`)) return
@@ -359,6 +468,15 @@ export function PurchasePage({ canManagePurchase }) {
 
     const { error } = await deletePurchaseListItem(item.id)
     if (error) return alert(error.message)
+    const remainingItems = listItems.filter((listItem) => listItem.list_id === item.list_id && listItem.id !== item.id)
+    const totals = getListTotals(remainingItems, prices)
+    await updatePurchaseList({
+      id: item.list_id,
+      payload: {
+        estimated_total_net: totals.net,
+        estimated_total_gross: totals.gross,
+      },
+    })
     await loadData()
   }
 
@@ -377,6 +495,82 @@ export function PurchasePage({ canManagePurchase }) {
     setPriceForm(emptyPriceForm)
   }
 
+  const resetRatingForm = () => {
+    setRatingEditingId(null)
+    setRatingForm(emptyRatingForm)
+  }
+
+  const exportSelectedComparisonCsv = () => {
+    if (!selectedProduct) return alert('Bitte Produkt auswaehlen.')
+    const rows = buildComparisonRows(selectedProduct, selectedProductPrices, bestPrice)
+    downloadCsv(`preisvergleich-${selectedProduct.name}.csv`, rows)
+  }
+
+  const exportSelectedComparisonPdf = () => {
+    if (!selectedProduct) return alert('Bitte Produkt auswaehlen.')
+    const rows = buildComparisonRows(selectedProduct, selectedProductPrices, bestPrice)
+    const totals = getComparisonTotals(selectedProductPrices)
+    const doc = new jsPDF('landscape')
+
+    doc.text('Styrian Bastards', 14, 15)
+    doc.text(`Preisvergleich - ${selectedProduct.name}`, 14, 23)
+    doc.text(`Datum: ${new Date().toLocaleDateString('de-AT')}`, 14, 31)
+    doc.text(`Summen netto: ${formatMoney(totals.net, 'EUR')} / brutto: ${formatMoney(totals.gross, 'EUR')}`, 14, 39)
+
+    autoTable(doc, {
+      startY: 48,
+      head: [['Produkt', 'Menge', 'Lieferant', 'Netto', 'Brutto', 'Einheitspreis', 'Bestpreis']],
+      body: rows.map((row) => [
+        row.Produkt,
+        row.Menge,
+        row.Lieferant,
+        row.Netto,
+        row.Brutto,
+        row.Einheitspreis,
+        row.Bestpreis,
+      ]),
+      headStyles: { fillColor: [5, 5, 5] },
+    })
+
+    doc.save(`preisvergleich-${sanitizeFileName(selectedProduct.name)}.pdf`)
+  }
+
+  const exportListCsv = (list) => {
+    const items = listItems.filter((item) => item.list_id === list.id)
+    const rows = buildListRows(list, items, prices)
+    downloadCsv(`einkaufsliste-${list.title}.csv`, rows)
+  }
+
+  const exportListPdf = (list) => {
+    const items = listItems.filter((item) => item.list_id === list.id)
+    const rows = buildListRows(list, items, prices)
+    const totals = getListTotals(items, prices)
+    const doc = new jsPDF('landscape')
+
+    doc.text('Styrian Bastards', 14, 15)
+    doc.text(`Einkaufsliste - ${list.title}`, 14, 23)
+    doc.text(`Datum: ${new Date().toLocaleDateString('de-AT')}`, 14, 31)
+    doc.text(`Event: ${list.event?.name || '-'}`, 14, 39)
+    doc.text(`Gesamt netto: ${formatMoney(totals.net, 'EUR')} / brutto: ${formatMoney(totals.gross, 'EUR')}`, 14, 47)
+
+    autoTable(doc, {
+      startY: 56,
+      head: [['Produkt', 'Menge', 'Lieferant', 'Netto', 'Brutto', 'Einheitspreis', 'Bestpreis']],
+      body: rows.map((row) => [
+        row.Produkt,
+        row.Menge,
+        row.Lieferant,
+        row.Netto,
+        row.Brutto,
+        row.Einheitspreis,
+        row.Bestpreis,
+      ]),
+      headStyles: { fillColor: [5, 5, 5] },
+    })
+
+    doc.save(`einkaufsliste-${sanitizeFileName(list.title)}.pdf`)
+  }
+
   if (!canManagePurchase()) {
     return (
       <section style={sectionStyle}>
@@ -389,14 +583,20 @@ export function PurchasePage({ canManagePurchase }) {
   return (
     <section style={sectionStyle}>
       <h2 style={headingStyle}>Einkauf & Preisvergleich</h2>
+      <div style={infoBoxStyle}>
+        Dieses Modul ist fuer den geschuetzten Mitgliederbereich vorbereitet.
+      </div>
 
       <div style={tabsStyle}>
         {[
           ['dashboard', 'Uebersicht'],
+          ['favorites', 'Favoriten'],
           ['products', 'Produkte'],
           ['suppliers', 'Lieferanten'],
           ['prices', 'Preise'],
+          ['history', 'Preis-Historie'],
           ['lists', 'Einkaufslisten'],
+          ['exports', 'Exporte'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -440,8 +640,21 @@ export function PurchasePage({ canManagePurchase }) {
                 bestPrice={bestPrice}
                 editPrice={editPrice}
                 removePrice={removePrice}
+                exportCsv={exportSelectedComparisonCsv}
+                exportPdf={exportSelectedComparisonPdf}
               />
             </>
+          )}
+
+          {activeTab === 'favorites' && (
+            <FavoritesList
+              products={favoriteProducts}
+              prices={prices}
+              lastPriceChangesByProduct={lastPriceChangesByProduct}
+              toggleFavorite={toggleFavorite}
+              setSelectedProductId={setSelectedProductId}
+              setActiveTab={setActiveTab}
+            />
           )}
 
           {activeTab === 'products' && (
@@ -460,6 +673,9 @@ export function PurchasePage({ canManagePurchase }) {
                 <ProductsList
                   products={filteredProducts}
                   prices={prices}
+                  favorites={favorites}
+                  lastPriceChangesByProduct={lastPriceChangesByProduct}
+                  toggleFavorite={toggleFavorite}
                   editProduct={editProduct}
                   removeProduct={removeProduct}
                   setSelectedProductId={setSelectedProductId}
@@ -470,26 +686,39 @@ export function PurchasePage({ canManagePurchase }) {
           )}
 
           {activeTab === 'suppliers' && (
-            <TwoColumnLayout
-              left={(
-                <SupplierForm
-                  form={supplierForm}
-                  setForm={setSupplierForm}
-                  editingId={supplierEditingId}
-                  saving={saving}
-                  save={saveSupplier}
-                  reset={resetSupplierForm}
-                />
-              )}
-              right={(
-                <SuppliersList
-                  suppliers={suppliers}
-                  prices={prices}
-                  editSupplier={editSupplier}
-                  removeSupplier={removeSupplier}
-                />
-              )}
-            />
+            <>
+              <TwoColumnLayout
+                left={(
+                  <SupplierForm
+                    form={supplierForm}
+                    setForm={setSupplierForm}
+                    editingId={supplierEditingId}
+                    saving={saving}
+                    save={saveSupplier}
+                    reset={resetSupplierForm}
+                  />
+                )}
+                right={(
+                  <SuppliersList
+                    suppliers={suppliers}
+                    prices={prices}
+                    ratings={supplierRatings}
+                    editSupplier={editSupplier}
+                    removeSupplier={removeSupplier}
+                    editSupplierRating={editSupplierRating}
+                  />
+                )}
+              />
+              <SupplierRatingForm
+                form={ratingForm}
+                setForm={setRatingForm}
+                suppliers={suppliers}
+                editingId={ratingEditingId}
+                saving={saving}
+                save={saveSupplierRating}
+                reset={resetRatingForm}
+              />
+            </>
           )}
 
           {activeTab === 'prices' && (
@@ -514,8 +743,20 @@ export function PurchasePage({ canManagePurchase }) {
                 bestPrice={bestPrice}
                 editPrice={editPrice}
                 removePrice={removePrice}
+                exportCsv={exportSelectedComparisonCsv}
+                exportPdf={exportSelectedComparisonPdf}
               />
             </>
+          )}
+
+          {activeTab === 'history' && (
+            <PriceHistory
+              products={filteredProducts}
+              selectedProductId={selectedProductId}
+              setSelectedProductId={setSelectedProductId}
+              selectedProduct={selectedProduct}
+              history={selectedProductHistory}
+            />
           )}
 
           {activeTab === 'lists' && (
@@ -529,12 +770,28 @@ export function PurchasePage({ canManagePurchase }) {
               products={activeProducts}
               suppliers={activeSuppliers}
               prices={prices}
+              events={events}
               saving={saving}
               saveList={saveList}
               saveListItem={saveListItem}
               changeListStatus={changeListStatus}
+              changeListEvent={changeListEvent}
               removeList={removeList}
               removeListItem={removeListItem}
+              exportListCsv={exportListCsv}
+              exportListPdf={exportListPdf}
+            />
+          )}
+
+          {activeTab === 'exports' && (
+            <ExportsPanel
+              lists={lists}
+              selectedProduct={selectedProduct}
+              selectedProductPrices={selectedProductPrices}
+              exportSelectedComparisonCsv={exportSelectedComparisonCsv}
+              exportSelectedComparisonPdf={exportSelectedComparisonPdf}
+              exportListCsv={exportListCsv}
+              exportListPdf={exportListPdf}
             />
           )}
         </>
@@ -603,7 +860,44 @@ function PriceForm({ form, setForm, products, suppliers, editingId, saving, save
   )
 }
 
-function ProductsList({ products, prices, editProduct, removeProduct, setSelectedProductId, setActiveTab }) {
+function FavoritesList({ products, prices, lastPriceChangesByProduct, toggleFavorite, setSelectedProductId, setActiveTab }) {
+  if (products.length === 0) return <p style={mutedTextStyle}>Noch keine Favoriten markiert.</p>
+
+  return (
+    <div>
+      <h3 style={headingStyle}>Favoritenliste</h3>
+      {products.map((product) => {
+        const bestPrice = getSortedProductPrices(prices, product.id)[0]
+        const lastChange = lastPriceChangesByProduct[product.id]
+
+        return (
+          <div key={product.id} style={cardStyle}>
+            <strong>{product.name}</strong>
+            <br />
+            Bestpreis: {bestPrice ? formatMoney(getComparablePrice(bestPrice), bestPrice.currency) : '-'} bei {bestPrice?.supplier?.name || '-'}
+            <br />
+            Letzte Preisaenderung: {lastChange ? `${formatDateTime(lastChange.changed_at)} - vorher ${formatMoney(getComparablePriceFromHistory(lastChange), lastChange.old_currency)}` : '-'}
+            <br />
+            <button onClick={() => { setSelectedProductId(product.id); setActiveTab('prices') }} style={buttonStyle}>Preisvergleich</button>
+            <button onClick={() => toggleFavorite(product)} style={secondaryButtonStyle}>Favorit entfernen</button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ProductsList({
+  products,
+  prices,
+  favorites,
+  lastPriceChangesByProduct,
+  toggleFavorite,
+  editProduct,
+  removeProduct,
+  setSelectedProductId,
+  setActiveTab,
+}) {
   if (products.length === 0) return <p style={mutedTextStyle}>Keine Produkte gefunden.</p>
 
   return (
@@ -612,6 +906,8 @@ function ProductsList({ products, prices, editProduct, removeProduct, setSelecte
       {products.map((product) => {
         const productPrices = prices.filter((price) => price.product_id === product.id)
         const bestPrice = getSortedProductPrices(prices, product.id)[0]
+        const isFavorite = favorites.some((favorite) => favorite.product_id === product.id)
+        const lastChange = lastPriceChangesByProduct[product.id]
 
         return (
           <div key={product.id} style={{ ...cardStyle, opacity: product.is_active ? 1 : 0.68 }}>
@@ -623,9 +919,12 @@ function ProductsList({ products, prices, editProduct, removeProduct, setSelecte
             <br />
             Preise: {productPrices.length} - Bestpreis: {bestPrice ? formatMoney(getComparablePrice(bestPrice), bestPrice.currency) : '-'}
             <br />
+            Favorit: {isFavorite ? 'Ja' : 'Nein'} - Letzte Preisaenderung: {lastChange ? formatDateTime(lastChange.changed_at) : '-'}
+            <br />
             Notiz: {product.note || '-'}
             <br />
             <button onClick={() => editProduct(product)} style={buttonStyle}>Bearbeiten</button>
+            <button onClick={() => toggleFavorite(product)} style={secondaryButtonStyle}>{isFavorite ? 'Favorit entfernen' : 'Als Favorit markieren'}</button>
             <button onClick={() => { setSelectedProductId(product.id); setActiveTab('prices') }} style={secondaryButtonStyle}>Preisvergleich</button>
             <button onClick={() => removeProduct(product)} style={dangerButtonStyle}>Loeschen</button>
           </div>
@@ -635,31 +934,99 @@ function ProductsList({ products, prices, editProduct, removeProduct, setSelecte
   )
 }
 
-function SuppliersList({ suppliers, prices, editSupplier, removeSupplier }) {
+function SuppliersList({ suppliers, prices, ratings, editSupplier, removeSupplier, editSupplierRating }) {
   if (suppliers.length === 0) return <p style={mutedTextStyle}>Noch keine Lieferanten angelegt.</p>
 
   return (
     <div>
       <h3 style={headingStyle}>Lieferantenverwaltung</h3>
       {suppliers.map((supplier) => (
-        <div key={supplier.id} style={{ ...cardStyle, opacity: supplier.is_active ? 1 : 0.68 }}>
-          <strong>{supplier.name}</strong>
-          <br />
-          Website: {supplier.website || '-'}
-          <br />
-          Status: {supplier.is_active ? 'Aktiv' : 'Inaktiv'} - Preise: {prices.filter((price) => price.supplier_id === supplier.id).length}
-          <br />
-          Notiz: {supplier.note || '-'}
-          <br />
-          <button onClick={() => editSupplier(supplier)} style={buttonStyle}>Bearbeiten</button>
-          <button onClick={() => removeSupplier(supplier)} style={dangerButtonStyle}>Loeschen</button>
-        </div>
+        <SupplierCard
+          key={supplier.id}
+          supplier={supplier}
+          prices={prices}
+          rating={ratings.find((item) => item.supplier_id === supplier.id)}
+          editSupplier={editSupplier}
+          removeSupplier={removeSupplier}
+          editSupplierRating={editSupplierRating}
+        />
       ))}
     </div>
   )
 }
 
-function ProductComparison({ products, selectedProductId, setSelectedProductId, selectedProduct, prices, bestPrice, editPrice, removePrice }) {
+function SupplierCard({ supplier, prices, rating, editSupplier, removeSupplier, editSupplierRating }) {
+  return (
+    <div style={{ ...cardStyle, opacity: supplier.is_active ? 1 : 0.68 }}>
+      <strong>{supplier.name}</strong>
+      <br />
+      Website: {supplier.website || '-'}
+      <br />
+      Status: {supplier.is_active ? 'Aktiv' : 'Inaktiv'} - Preise: {prices.filter((price) => price.supplier_id === supplier.id).length}
+      <br />
+      Bewertung: Preis {rating?.price_rating || '-'} / Qualitaet {rating?.quality_rating || '-'} / Zuverlaessigkeit {rating?.reliability_rating || '-'}
+      <br />
+      Bewertungsnotiz: {rating?.note || '-'}
+      <br />
+      Notiz: {supplier.note || '-'}
+      <br />
+      <button onClick={() => editSupplier(supplier)} style={buttonStyle}>Bearbeiten</button>
+      <button
+        onClick={() => editSupplierRating(rating || { supplier_id: supplier.id })}
+        style={secondaryButtonStyle}
+      >
+        Bewertung
+      </button>
+      <button onClick={() => removeSupplier(supplier)} style={dangerButtonStyle}>Loeschen</button>
+    </div>
+  )
+}
+
+function SupplierRatingForm({ form, setForm, suppliers, editingId, saving, save, reset }) {
+  return (
+    <div style={cardStyle}>
+      <h3 style={headingStyle}>{editingId ? 'Lieferantenbewertung bearbeiten' : 'Lieferantenbewertung'}</h3>
+      <div style={formGridStyle}>
+        <select value={form.supplier_id} onChange={(event) => setFormValue(setForm, 'supplier_id', event.target.value)} style={inputStyle}>
+          <option value="">Lieferant auswaehlen</option>
+          {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+        </select>
+        <RatingSelect label="Preis" value={form.price_rating} onChange={(value) => setFormValue(setForm, 'price_rating', value)} />
+        <RatingSelect label="Qualitaet" value={form.quality_rating} onChange={(value) => setFormValue(setForm, 'quality_rating', value)} />
+        <RatingSelect label="Zuverlaessigkeit" value={form.reliability_rating} onChange={(value) => setFormValue(setForm, 'reliability_rating', value)} />
+      </div>
+      <textarea placeholder="Bewertungsnotiz" value={form.note} onChange={(event) => setFormValue(setForm, 'note', event.target.value)} style={textareaStyle} />
+      <button onClick={save} disabled={saving} style={buttonStyle}>{saving ? 'Speichern...' : 'Bewertung speichern'}</button>
+      {editingId && <button onClick={reset} style={secondaryButtonStyle}>Abbrechen</button>}
+    </div>
+  )
+}
+
+function RatingSelect({ label, value, onChange }) {
+  return (
+    <select value={value} onChange={(event) => onChange(event.target.value)} style={inputStyle}>
+      <option value="">{label} bewerten</option>
+      <option value="1">1 - schwach</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5 - sehr gut</option>
+    </select>
+  )
+}
+
+function ProductComparison({
+  products,
+  selectedProductId,
+  setSelectedProductId,
+  selectedProduct,
+  prices,
+  bestPrice,
+  editPrice,
+  removePrice,
+  exportCsv,
+  exportPdf,
+}) {
   return (
     <div style={cardStyle}>
       <h3 style={headingStyle}>Preisvergleich pro Produkt</h3>
@@ -667,6 +1034,13 @@ function ProductComparison({ products, selectedProductId, setSelectedProductId, 
         <option value="">Produkt auswaehlen</option>
         {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
       </select>
+
+      {selectedProduct && (
+        <>
+          <button onClick={exportCsv} style={secondaryButtonStyle}>Preisvergleich CSV</button>
+          <button onClick={exportPdf} style={buttonStyle}>Preisvergleich PDF</button>
+        </>
+      )}
 
       {!selectedProduct && <p style={mutedTextStyle}>Bitte Produkt auswaehlen.</p>}
       {selectedProduct && prices.length === 0 && <p style={mutedTextStyle}>Noch keine Preise fuer dieses Produkt erfasst.</p>}
@@ -715,6 +1089,50 @@ function ProductComparison({ products, selectedProductId, setSelectedProductId, 
   )
 }
 
+function PriceHistory({ products, selectedProductId, setSelectedProductId, selectedProduct, history }) {
+  return (
+    <div style={cardStyle}>
+      <h3 style={headingStyle}>Preis-Historie und Preisentwicklung</h3>
+      <select value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)} style={inputStyle}>
+        <option value="">Produkt auswaehlen</option>
+        {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+      </select>
+
+      {!selectedProduct && <p style={mutedTextStyle}>Bitte Produkt auswaehlen.</p>}
+      {selectedProduct && history.length === 0 && <p style={mutedTextStyle}>Noch keine Preis-Historie fuer dieses Produkt.</p>}
+
+      {history.length > 0 && (
+        <div style={tableWrapStyle}>
+          <table style={tableStyle}>
+            <thead>
+              <tr>
+                <th style={thStyle}>Datum</th>
+                <th style={thStyle}>Lieferant</th>
+                <th style={thStyle}>Alter Netto</th>
+                <th style={thStyle}>Alter Brutto</th>
+                <th style={thStyle}>Alter Einheitspreis</th>
+                <th style={thStyle}>Angebot</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((entry) => (
+                <tr key={entry.id}>
+                  <td style={tdStyle}>{formatDateTime(entry.changed_at)}</td>
+                  <td style={tdStyle}>{entry.supplier?.name || '-'}</td>
+                  <td style={tdStyle}>{formatMoney(entry.old_price_net, entry.old_currency)}</td>
+                  <td style={tdStyle}>{formatMoney(entry.old_price_gross, entry.old_currency)}</td>
+                  <td style={tdStyle}>{formatMoney(entry.old_unit_price, entry.old_currency)}</td>
+                  <td style={tdStyle}>{entry.old_is_offer ? `Ja${entry.old_offer_note ? ` - ${entry.old_offer_note}` : ''}` : 'Nein'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PurchaseLists({
   listForm,
   setListForm,
@@ -725,12 +1143,16 @@ function PurchaseLists({
   products,
   suppliers,
   prices,
+  events,
   saving,
   saveList,
   saveListItem,
   changeListStatus,
+  changeListEvent,
   removeList,
   removeListItem,
+  exportListCsv,
+  exportListPdf,
 }) {
   return (
     <>
@@ -739,6 +1161,14 @@ function PurchaseLists({
           <div style={cardStyle}>
             <h3 style={headingStyle}>Einkaufsliste erstellen</h3>
             <input placeholder="Titel" value={listForm.title} onChange={(event) => setFormValue(setListForm, 'title', event.target.value)} style={inputStyle} />
+            <select value={listForm.event_id} onChange={(event) => setFormValue(setListForm, 'event_id', event.target.value)} style={inputStyle}>
+              <option value="">Kein Event</option>
+              {events.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.name} {event.event_date ? `(${event.event_date})` : ''}
+                </option>
+              ))}
+            </select>
             <select value={listForm.status} onChange={(event) => setFormValue(setListForm, 'status', event.target.value)} style={inputStyle}>
               <option value="draft">Entwurf</option>
               <option value="open">Offen</option>
@@ -775,16 +1205,17 @@ function PurchaseLists({
 
       {lists.map((list) => {
         const items = listItems.filter((item) => item.list_id === list.id)
-        const total = items.reduce((sum, item) => {
-          const price = getPreferredOrBestPrice(prices, item.product_id, item.preferred_supplier_id)
-          return sum + Number(item.quantity || 0) * Number(getComparablePrice(price) || 0)
-        }, 0)
+        const totals = getListTotals(items, prices)
 
         return (
           <div key={list.id} style={cardStyle}>
             <strong>{list.title}</strong>
             <br />
-            Status: {getListStatusLabel(list.status)} - Positionen: {items.length} - Schaetzung: {formatMoney(total, 'EUR')}
+            Event: {list.event?.name || '-'}
+            <br />
+            Status: {getListStatusLabel(list.status)} - Positionen: {items.length}
+            <br />
+            Gesamtkosten netto: {formatMoney(totals.net, 'EUR')} - brutto: {formatMoney(totals.gross, 'EUR')}
             <br />
             Notiz: {list.note || '-'}
             <br />
@@ -794,17 +1225,30 @@ function PurchaseLists({
               <option value="completed">Erledigt</option>
               <option value="cancelled">Abgebrochen</option>
             </select>
+            <select value={list.event_id || ''} onChange={(event) => changeListEvent(list, event.target.value)} style={{ ...inputStyle, maxWidth: 360 }}>
+              <option value="">Kein Event</option>
+              {events.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.name} {event.event_date ? `(${event.event_date})` : ''}
+                </option>
+              ))}
+            </select>
+            <button onClick={() => exportListCsv(list)} style={secondaryButtonStyle}>Liste CSV</button>
+            <button onClick={() => exportListPdf(list)} style={buttonStyle}>Liste PDF</button>
 
             {items.length === 0 && <p style={mutedTextStyle}>Keine Positionen.</p>}
             {items.map((item) => {
               const price = getPreferredOrBestPrice(prices, item.product_id, item.preferred_supplier_id)
+              const bestPrice = getSortedProductPrices(prices, item.product_id)[0]
               const supplierName = item.preferred_supplier?.name || price?.supplier?.name || 'Bestpreis offen'
 
               return (
                 <div key={item.id} style={listItemStyle}>
                   <strong>{item.product?.name || '-'}</strong>
                   <br />
-                  Menge: {item.quantity} - Lieferant: {supplierName} - Einzel: {formatMoney(getComparablePrice(price), price?.currency || 'EUR')}
+                  Menge: {item.quantity} - Lieferant: {supplierName} {bestPrice?.id === price?.id ? '(Bestpreis)' : ''}
+                  <br />
+                  Netto: {formatMoney(price?.price_net, price?.currency || 'EUR')} - Brutto: {formatMoney(price?.price_gross, price?.currency || 'EUR')} - Einheit: {formatMoney(price?.unit_price, price?.currency || 'EUR')}
                   <br />
                   Notiz: {item.note || '-'}
                   <br />
@@ -818,6 +1262,45 @@ function PurchaseLists({
         )
       })}
     </>
+  )
+}
+
+function ExportsPanel({
+  lists,
+  selectedProduct,
+  selectedProductPrices,
+  exportSelectedComparisonCsv,
+  exportSelectedComparisonPdf,
+  exportListCsv,
+  exportListPdf,
+}) {
+  return (
+    <div style={cardStyle}>
+      <h3 style={headingStyle}>Exporte</h3>
+      <p style={mutedTextStyle}>
+        Preisvergleiche und Einkaufslisten werden clientseitig als PDF oder CSV erzeugt.
+      </p>
+
+      <h4>Aktueller Preisvergleich</h4>
+      <p>
+        Produkt: <strong>{selectedProduct?.name || '-'}</strong> - Preise: {selectedProductPrices.length}
+      </p>
+      <button onClick={exportSelectedComparisonCsv} style={secondaryButtonStyle}>Preisvergleich CSV</button>
+      <button onClick={exportSelectedComparisonPdf} style={buttonStyle}>Preisvergleich PDF</button>
+
+      <h4>Einkaufslisten</h4>
+      {lists.length === 0 && <p style={mutedTextStyle}>Keine Einkaufslisten vorhanden.</p>}
+      {lists.map((list) => (
+        <div key={list.id} style={listItemStyle}>
+          <strong>{list.title}</strong>
+          <br />
+          Event: {list.event?.name || '-'} - Status: {getListStatusLabel(list.status)}
+          <br />
+          <button onClick={() => exportListCsv(list)} style={secondaryButtonStyle}>CSV</button>
+          <button onClick={() => exportListPdf(list)} style={buttonStyle}>PDF</button>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -854,9 +1337,19 @@ function normalizeNumber(value) {
   return Number.isFinite(normalized) ? normalized : null
 }
 
+function normalizeInteger(value) {
+  const normalized = normalizeNumber(value)
+  return normalized === null ? null : Math.round(normalized)
+}
+
 function getComparablePrice(price) {
   if (!price) return null
   return price.unit_price ?? price.price_gross ?? price.price_net ?? null
+}
+
+function getComparablePriceFromHistory(entry) {
+  if (!entry) return null
+  return entry.old_unit_price ?? entry.old_price_gross ?? entry.old_price_net ?? null
 }
 
 function getSortedProductPrices(prices, productId) {
@@ -879,14 +1372,140 @@ function getPreferredOrBestPrice(prices, productId, preferredSupplierId) {
   return productPrices[0]
 }
 
+function getListTotals(items, prices) {
+  return items.reduce((totals, item) => {
+    const price = getPreferredOrBestPrice(prices, item.product_id, item.preferred_supplier_id)
+    const quantity = Number(item.quantity || 0)
+
+    return {
+      net: totals.net + quantity * Number(price?.price_net || 0),
+      gross: totals.gross + quantity * Number(price?.price_gross ?? price?.unit_price ?? price?.price_net ?? 0),
+    }
+  }, { net: 0, gross: 0 })
+}
+
+function getComparisonTotals(prices) {
+  return prices.reduce((totals, price) => ({
+    net: totals.net + Number(price?.price_net || 0),
+    gross: totals.gross + Number(price?.price_gross ?? price?.unit_price ?? price?.price_net ?? 0),
+  }), { net: 0, gross: 0 })
+}
+
+function getLastPriceChangesByProduct(history) {
+  return history.reduce((changes, entry) => {
+    if (!changes[entry.product_id]) {
+      changes[entry.product_id] = entry
+    }
+
+    return changes
+  }, {})
+}
+
 function formatMoney(value, currency = 'EUR') {
   if (value === null || value === undefined || value === '') return '-'
   return `${Number(value || 0).toFixed(2)} ${currency || 'EUR'}`
 }
 
+function formatDateTime(value) {
+  if (!value) return '-'
+  return new Date(value).toLocaleString('de-AT')
+}
+
 function formatDateRange(from, until) {
   if (!from && !until) return '-'
   return `${from || 'offen'} bis ${until || 'offen'}`
+}
+
+function buildComparisonRows(product, prices, bestPrice) {
+  const rows = prices.map((price) => ({
+    Produkt: product?.name || '-',
+    Menge: '1',
+    Lieferant: price.supplier?.name || '-',
+    Netto: formatMoney(price.price_net, price.currency),
+    Brutto: formatMoney(price.price_gross, price.currency),
+    Einheitspreis: formatMoney(price.unit_price, price.currency),
+    Bestpreis: bestPrice?.id === price.id ? 'Ja' : 'Nein',
+  }))
+  const totals = getComparisonTotals(prices)
+
+  return [
+    ...rows,
+    {
+      Produkt: 'GESAMT',
+      Menge: '',
+      Lieferant: '',
+      Netto: formatMoney(totals.net, 'EUR'),
+      Brutto: formatMoney(totals.gross, 'EUR'),
+      Einheitspreis: '',
+      Bestpreis: '',
+    },
+  ]
+}
+
+function buildListRows(list, items, prices) {
+  const rows = items.map((item) => {
+    const price = getPreferredOrBestPrice(prices, item.product_id, item.preferred_supplier_id)
+    const bestPrice = getSortedProductPrices(prices, item.product_id)[0]
+
+    return {
+      Einkaufsliste: list.title || '-',
+      Event: list.event?.name || '-',
+      Produkt: item.product?.name || '-',
+      Menge: item.quantity || 0,
+      Lieferant: item.preferred_supplier?.name || price?.supplier?.name || '-',
+      Netto: formatMoney(price?.price_net, price?.currency || 'EUR'),
+      Brutto: formatMoney(price?.price_gross, price?.currency || 'EUR'),
+      Einheitspreis: formatMoney(price?.unit_price, price?.currency || 'EUR'),
+      Bestpreis: bestPrice?.id === price?.id ? 'Ja' : 'Nein',
+    }
+  })
+  const totals = getListTotals(items, prices)
+
+  return [
+    ...rows,
+    {
+      Einkaufsliste: list.title || '-',
+      Event: list.event?.name || '-',
+      Produkt: 'GESAMT',
+      Menge: '',
+      Lieferant: '',
+      Netto: formatMoney(totals.net, 'EUR'),
+      Brutto: formatMoney(totals.gross, 'EUR'),
+      Einheitspreis: '',
+      Bestpreis: '',
+    },
+  ]
+}
+
+function downloadCsv(fileName, rows) {
+  const columns = Object.keys(rows[0] || { Hinweis: 'Keine Daten' })
+  const bodyRows = rows.length > 0 ? rows : [{ Hinweis: 'Keine Daten' }]
+  const csv = [
+    columns.join(';'),
+    ...bodyRows.map((row) => columns.map((column) => escapeCsvValue(row[column])).join(';')),
+  ].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = sanitizeFileName(fileName)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+function escapeCsvValue(value) {
+  const text = String(value ?? '')
+  return `"${text.replace(/"/g, '""')}"`
+}
+
+function sanitizeFileName(value) {
+  return String(value || 'export')
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function getListStatusLabel(status) {
