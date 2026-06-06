@@ -19,6 +19,7 @@ import {
   canManageCashRole,
   canManageEventsRole,
   canManageMembersRole,
+  canManagePurchaseMember,
   canUseCheckinRole,
   getAppRole as getMemberAppRole,
   getAppRoleLabel,
@@ -245,6 +246,7 @@ import { MerchPage } from './components/merch/MerchPage'
 import { MediaPage } from './components/media/MediaPage'
 import { PublicPressPage } from './components/media/PublicPressPage'
 import { PublicSponsors } from './components/home/PublicSponsors'
+import { PurchasePage } from './components/purchase/PurchasePage'
 
 export default function App() {
   const [email, setEmail] = useState('')
@@ -2187,6 +2189,10 @@ export default function App() {
 
   function canManageMerch() {
     return canManageMembers() || isAdmin()
+  }
+
+  function canManagePurchase() {
+    return canManagePurchaseMember(currentMember)
   }
 
   function resetMerchItemForm() {
@@ -5294,15 +5300,17 @@ export default function App() {
       </button>
 
       <nav style={navStyle}>
-        {navigationItems.map(([pageKey, label]) => (
-          <button
-            key={pageKey}
-            onClick={() => setActivePage(pageKey)}
-            style={navButtonStyle(activePage === pageKey)}
-          >
-            {label}
-          </button>
-        ))}
+        {navigationItems
+          .filter(([pageKey]) => pageKey !== 'purchase' || canManagePurchase())
+          .map(([pageKey, label]) => (
+            <button
+              key={pageKey}
+              onClick={() => setActivePage(pageKey)}
+              style={navButtonStyle(activePage === pageKey)}
+            >
+              {label}
+            </button>
+          ))}
       </nav>
 
       {linkedMemberNotice && (
@@ -6082,6 +6090,10 @@ export default function App() {
           canManageMembers={canManageMembers}
           isAdmin={isAdmin}
         />
+      )}
+
+      {activePage === 'purchase' && (
+        <PurchasePage canManagePurchase={canManagePurchase} />
       )}
 
       {activePage === 'portal' && (
