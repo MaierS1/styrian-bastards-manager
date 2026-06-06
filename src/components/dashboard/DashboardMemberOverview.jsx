@@ -1,6 +1,27 @@
 import { cardStyle, colors, dashboardLabelStyle, mutedTextStyle } from '../../styles/appStyles'
 import { DashboardStats } from './DashboardStats'
 
+const euroFormatter = new Intl.NumberFormat('de-AT', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+function formatEuro(value) {
+  return `${euroFormatter.format(Number(value || 0))} €`
+}
+
+function MetricCard({ value, label, detail, borderColor }) {
+  return (
+    <div style={{ ...cardStyle, marginBottom: 0, borderTop: `6px solid ${borderColor}` }}>
+      <div style={{ fontSize: 32, lineHeight: 1, fontWeight: 900, color: colors.black }}>
+        {value}
+      </div>
+      <div style={{ ...dashboardLabelStyle, marginTop: 10, fontSize: 13 }}>{label}</div>
+      {detail && <div style={{ ...mutedTextStyle, marginTop: 6, marginBottom: 0 }}>{detail}</div>}
+    </div>
+  )
+}
+
 export function DashboardMemberOverview({
   activeMembersCount,
   newMembersCount,
@@ -17,33 +38,37 @@ export function DashboardMemberOverview({
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
-      <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-        <div style={{ ...cardStyle, marginBottom: 0, borderTop: `6px solid ${colors.blue}` }}>
-          <strong style={dashboardLabelStyle}>Aktive Mitglieder</strong>
-          <h2 style={{ marginTop: 10, marginBottom: 0 }}>{activeMembersCount}</h2>
-          <p style={{ ...mutedTextStyle, marginTop: 6, marginBottom: 0 }}>Status: aktiv</p>
-        </div>
+      <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+        <MetricCard
+          value={Number(activeMembersCount || 0)}
+          label="Aktive Mitglieder"
+          detail="Status: aktiv"
+          borderColor={colors.blue}
+        />
 
-        <div style={{ ...cardStyle, marginBottom: 0, borderTop: `6px solid ${colors.red}` }}>
-          <strong style={dashboardLabelStyle}>Neue Mitglieder</strong>
-          <h2 style={{ marginTop: 10, marginBottom: 0 }}>{newMembersCount}</h2>
-          <p style={{ ...mutedTextStyle, marginTop: 6, marginBottom: 0 }}>Zuletzt 30 Tage</p>
-        </div>
+        <MetricCard
+          value={Number(newMembersCount || 0)}
+          label="Neue Mitglieder"
+          detail="Zuletzt 30 Tage"
+          borderColor={colors.red}
+        />
 
-        <div style={{ ...cardStyle, marginBottom: 0, borderTop: `6px solid ${colors.navy}` }}>
-          <strong style={dashboardLabelStyle}>Offene Beiträge</strong>
-          <h2 style={{ marginTop: 10, marginBottom: 0 }}>{openFeesCount}</h2>
-          <p style={{ ...mutedTextStyle, marginTop: 6, marginBottom: 0 }}>{openFeesTotal.toFixed(2)} EUR offen</p>
-        </div>
+        <MetricCard
+          value={formatEuro(openFeesTotal)}
+          label="Offene Beiträge"
+          detail={`${Number(openFeesCount || 0)} Beiträge offen`}
+          borderColor={colors.navy}
+        />
 
-        <div style={{ ...cardStyle, marginBottom: 0, borderTop: `6px solid ${colors.black}` }}>
-          <strong style={dashboardLabelStyle}>Testdaten</strong>
-          <h2 style={{ marginTop: 10, marginBottom: 0 }}>{testMembersCount}</h2>
-          <p style={{ ...mutedTextStyle, marginTop: 6, marginBottom: 0 }}>Testmitglieder vorhanden</p>
-        </div>
+        <MetricCard
+          value={Number(testMembersCount || 0)}
+          label="Testdaten"
+          detail="Testmitglieder vorhanden"
+          borderColor={colors.black}
+        />
       </div>
 
-        <DashboardStats memberTypeStats={safeMemberTypeStats} feeStats={safeFeeStats} getStatsMax={safeGetStatsMax} />
-      </div>
+      <DashboardStats memberTypeStats={safeMemberTypeStats} feeStats={safeFeeStats} getStatsMax={safeGetStatsMax} />
+    </div>
   )
 }

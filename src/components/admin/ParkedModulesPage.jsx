@@ -20,6 +20,19 @@ const parkedModules = [
     reactivation:
       'Reaktivierung bei verfügbarer API, CSV-/Excel-Import oder offizieller Lieferanten-Schnittstelle.',
   },
+  {
+    title: 'Mitgliederbereich Homepage',
+    status: 'Geparkt / Vorbereitung',
+    reason:
+      'Der Mitgliederbereich ist vorbereitet, soll aber erst später sauber mit Login, Rollenprüfung und Homepage-Anbindung verbunden werden.',
+    done: [
+      'Mitgliederbereich-Seite vorhanden',
+      'Grundstruktur im App-Routing',
+      'Berechtigungslogik vorbereitet',
+    ],
+    reactivation:
+      'Reaktivierung, wenn Homepage-Login und Rollenprüfung final umgesetzt werden.',
+  },
 ]
 
 export function ParkedModulesPage({ canAccess = false, onNavigate }) {
