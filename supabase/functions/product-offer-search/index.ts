@@ -19,6 +19,19 @@ const purchaseRoles = new Set([
 
 const allowedSupplierNames = new Set(['METRO', 'Transgourmet'])
 
+type SupplierDetection = {
+  detectedSupplier: string | null
+  rejectReason: string | null
+}
+
+type RawResultPreview = {
+  title: string
+  url: string
+  snippet: string
+  detectedSupplier: string | null
+  rejectReason: string | null
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return jsonResponse({ ok: true }, 200)
@@ -102,7 +115,7 @@ Deno.serve(async (req) => {
     }
 
     const searchOutcome = await searchPublicOffers(query)
-    const filteredResults = searchOutcome.results.filter((result) => isAllowedSupplier(result.supplier_name))
+    const filteredResults = searchOutcome.results.filter((result) => isAllowedSupplier(getDetectedSupplier(result)))
     const debug = {
       query,
       normalizedQueries: searchOutcome.normalizedQueries,
@@ -112,6 +125,7 @@ Deno.serve(async (req) => {
       transgourmetResultCount: searchOutcome.transgourmetResultCount,
       filteredResultCount: filteredResults.length,
       errors: searchOutcome.errors,
+      rawResultsPreview: searchOutcome.rawResultsPreview,
     }
 
     if (filteredResults.length === 0) {
@@ -124,7 +138,7 @@ Deno.serve(async (req) => {
 
     const rows = filteredResults.map((result) => ({
       search_query: query,
-      supplier_name: result.supplier_name,
+      supplier_name: getDetectedSupplier(result) || result.supplier_name,
       product_name: result.product_name,
       price_net: result.price_net,
       price_gross: result.price_gross,
@@ -183,6 +197,8 @@ async function searchPublicOffers(query: string) {
   const terms = buildSearchTerms(query)
   const collected: SearchResult[] = []
   const seenUrls = new Set<string>()
+  const rawResultsPreview: RawResultPreview[] = []
+  let rawResultCount = 0
   let hadFetchError = false
   const errors: Array<{ term: string; error: string }> = []
   const normalizedQueries = [...new Set([normalizeQuery(query), ...buildQuerySynonyms(query).map((item) => normalizeQuery(item))])].filter(Boolean)
@@ -199,6 +215,13 @@ async function searchPublicOffers(query: string) {
     }
 
     for (const result of pageResults.results) {
+      rawResultCount += 1
+      if (rawResultsPreview.length < 10) {
+        rawResultsPreview.push(buildRawResultPreview(result))
+      }
+
+      const detectedSupplier = getDetectedSupplier(result)
+      if (!detectedSupplier) continue
       if (!result.source_url || seenUrls.has(result.source_url)) continue
       seenUrls.add(result.source_url)
       collected.push(result)
@@ -210,7 +233,8 @@ async function searchPublicOffers(query: string) {
           normalizedQueries,
           searchedSources,
           errors,
-          rawResultCount: collected.length,
+          rawResultCount,
+          rawResultsPreview,
           metroResultCount: countSupplierResults(collected, 'METRO'),
           transgourmetResultCount: countSupplierResults(collected, 'Transgourmet'),
         }
@@ -224,7 +248,8 @@ async function searchPublicOffers(query: string) {
     normalizedQueries,
     searchedSources,
     errors,
-    rawResultCount: collected.length,
+    rawResultCount,
+    rawResultsPreview,
     metroResultCount: countSupplierResults(collected, 'METRO'),
     transgourmetResultCount: countSupplierResults(collected, 'Transgourmet'),
   }
@@ -318,13 +343,16 @@ function buildSearchResult(query: string, sourceUrl: string, title: string, snip
   const combinedText = [title, snippet].join(' ').trim()
   const priceInfo = extractPriceInfo(combinedText)
   const unitInfo = extractUnitInfo(combinedText)
-  const supplierName = extractAllowedSupplierName(title, snippet, sourceUrl)
+  const supplierDetection = detectSupplier(sourceUrl, title, snippet, query)
+  const supplierName = supplierDetection.detectedSupplier || getHostLabel(sourceUrl)
   const productName = extractProductName(title, query)
   const { validFrom, validUntil } = extractDateRange(combinedText)
   const priceNote = buildPriceNote(supplierName, priceInfo, sourceUrl)
 
   return {
     supplier_name: supplierName,
+    detected_supplier: supplierDetection.detectedSupplier,
+    reject_reason: supplierDetection.rejectReason,
     product_name: productName,
     price_net: priceInfo.priceNet,
     price_gross: priceInfo.priceGross,
@@ -343,28 +371,75 @@ function buildSearchResult(query: string, sourceUrl: string, title: string, snip
       source_url: sourceUrl,
       source_type: 'public_offer',
       price_note: priceNote,
+      detectedSupplier: supplierDetection.detectedSupplier,
+      rejectReason: supplierDetection.rejectReason,
       extracted: {
         price: priceInfo,
         unit: unitInfo,
         dates: { validFrom, validUntil },
       },
     },
+    raw_preview: {
+      title,
+      url: sourceUrl,
+      snippet,
+      detectedSupplier: supplierDetection.detectedSupplier,
+      rejectReason: supplierDetection.rejectReason,
+    },
   }
 }
 
-function extractAllowedSupplierName(title: string, snippet: string, sourceUrl: string) {
-  const combinedText = `${title} ${snippet} ${sourceUrl}`.toLowerCase()
-  const hostName = new URL(sourceUrl).hostname.toLowerCase()
+function buildRawResultPreview(result: SearchResult): RawResultPreview {
+  return {
+    title: String(result?.raw_preview?.title || result?.raw_data?.title || result.product_name || ''),
+    url: String(result?.raw_preview?.url || result.source_url || ''),
+    snippet: String(result?.raw_preview?.snippet || result?.raw_data?.snippet || ''),
+    detectedSupplier: result.detected_supplier || null,
+    rejectReason: result.reject_reason || null,
+  }
+}
 
-  if (combinedText.includes('transgourmet') || hostName.includes('transgourmet')) {
-    return 'Transgourmet'
+function detectSupplier(sourceUrl: string, title: string, snippet: string, searchTerm = ''): SupplierDetection {
+  const host = getNormalizedHost(sourceUrl)
+  const combinedText = normalizeQuery([host, title, snippet, searchTerm].join(' '))
+  const titleSnippetText = normalizeQuery([title, snippet].join(' '))
+  const searchText = String(searchTerm || '').toLowerCase()
+
+  const metroHostMatched = matchesAnyHost(host, ['metro.at', 'shop.metro.at', 'produkte.metro.at'])
+  const transgourmetHostMatched = matchesAnyHost(host, ['transgourmet.at', 'shop.transgourmet.at', 'www.transgourmet.at'])
+  const metroTextMatched = /\bmetro\b/.test(titleSnippetText)
+  const transgourmetTextMatched = /\btransgourmet\b/.test(titleSnippetText)
+  const metroSiteSearch = /site:(?:www\.)?(?:shop\.)?(?:produkte\.)?metro\.at/.test(searchText)
+  const transgourmetSiteSearch = /site:(?:www\.)?shop\.transgourmet\.at|site:(?:www\.)?transgourmet\.at/.test(searchText)
+
+  if ((transgourmetSiteSearch && transgourmetHostMatched) || transgourmetHostMatched || transgourmetTextMatched) {
+    return { detectedSupplier: 'Transgourmet', rejectReason: null }
   }
 
-  if (combinedText.includes('metro') || hostName.includes('metro')) {
-    return 'METRO'
+  if ((metroSiteSearch && metroHostMatched) || metroHostMatched || metroTextMatched) {
+    return { detectedSupplier: 'METRO', rejectReason: null }
   }
 
-  return getHostLabel(sourceUrl)
+  if (transgourmetSiteSearch && (transgourmetHostMatched || transgourmetTextMatched)) {
+    return { detectedSupplier: 'Transgourmet', rejectReason: null }
+  }
+
+  if (metroSiteSearch && (metroHostMatched || metroTextMatched)) {
+    return { detectedSupplier: 'METRO', rejectReason: null }
+  }
+
+  if (combinedText.includes('transgourmet')) {
+    return { detectedSupplier: 'Transgourmet', rejectReason: null }
+  }
+
+  if (combinedText.includes('metro')) {
+    return { detectedSupplier: 'METRO', rejectReason: null }
+  }
+
+  return {
+    detectedSupplier: null,
+    rejectReason: `Kein eindeutiger Lieferant in URL, Titel oder Snippet erkennbar (${host || 'unknown host'}).`,
+  }
 }
 
 function buildPriceNote(
@@ -522,6 +597,18 @@ function getHostLabel(sourceUrl: string) {
   }
 }
 
+function getNormalizedHost(sourceUrl: string) {
+  try {
+    return new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, '')
+  } catch {
+    return ''
+  }
+}
+
+function matchesAnyHost(host: string, domains: string[]) {
+  return domains.some((domain) => host === domain || host.endsWith(`.${domain}`) || host.includes(domain))
+}
+
 function cleanHtmlText(value: string) {
   return decodeHtmlEntities(
     value
@@ -555,7 +642,14 @@ function isAllowedSupplier(value: string | null | undefined) {
 }
 
 function countSupplierResults(results: SearchResult[], supplierName: string) {
-  return results.filter((result) => String(result?.supplier_name || '').trim().toUpperCase() === supplierName.toUpperCase()).length
+  return results.filter((result) => getDetectedSupplier(result) === supplierName).length
+}
+
+function getDetectedSupplier(result: SearchResult | null | undefined) {
+  const detected = String(result?.detected_supplier || '').trim()
+  if (detected.toLowerCase() === 'metro') return 'METRO'
+  if (detected.toLowerCase() === 'transgourmet') return 'Transgourmet'
+  return null
 }
 
 function jsonResponse(payload: Record<string, unknown>, status = 200) {
@@ -586,6 +680,8 @@ function getErrorDetails(error: unknown) {
 
 type SearchResult = {
   supplier_name: string
+  detected_supplier?: string | null
+  reject_reason?: string | null
   product_name: string
   price_net: number | null
   price_gross: number | null
@@ -598,4 +694,5 @@ type SearchResult = {
   source_type: string
   price_note?: string | null
   raw_data: Record<string, unknown>
+  raw_preview?: RawResultPreview
 }

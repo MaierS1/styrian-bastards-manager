@@ -252,7 +252,7 @@ export function PurchasePage({ canManagePurchase }) {
 
   const importSearchResult = async (result) => {
     if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
-    if (!allowedSearchSupplierNames.has(String(result?.supplier_name || '').trim().toUpperCase())) {
+    if (!allowedSearchSupplierNames.has(getSearchResultSupplierKey(result))) {
       return alert('Nur METRO oder Transgourmet sind erlaubt.')
     }
 
@@ -325,6 +325,7 @@ export function PurchasePage({ canManagePurchase }) {
   const safeRecentSearchResults = ensureArray(recentSearchResults)
   const allowedSearchSupplierNames = new Set(['METRO', 'TRANSGOURMET'])
   const supplierSearchLinks = buildSupplierSearchLinksV2(offerSearchQuery)
+  const offerSearchRawResultsPreview = ensureArray(offerSearchDebug?.rawResultsPreview)
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -361,7 +362,7 @@ export function PurchasePage({ canManagePurchase }) {
   const searchResultsSorted = useMemo(() => {
     const results = ensureArray(offerSearchResults)
     return [...results]
-      .filter((result) => allowedSearchSupplierNames.has(String(result?.supplier_name || '').trim().toUpperCase()))
+      .filter((result) => allowedSearchSupplierNames.has(getSearchResultSupplierKey(result)))
       .sort((a, b) => {
         const aComparable = getComparablePrice(a)
         const bComparable = getComparablePrice(b)
@@ -842,6 +843,43 @@ export function PurchasePage({ canManagePurchase }) {
                 <strong>Fehler je Quelle:</strong>
                 <pre style={debugPreStyle}>{JSON.stringify(ensureArray(offerSearchDebug.errors), null, 2)}</pre>
               </div>
+              <div>
+                <strong>Roh-Treffer Vorschau:</strong>
+                {offerSearchRawResultsPreview.length === 0 ? (
+                  <div style={mutedTextStyle}>-</div>
+                ) : (
+                  <div style={debugTableWrapStyle}>
+                    <table style={debugTableStyle}>
+                      <thead>
+                        <tr>
+                          <th style={debugThStyle}>Titel</th>
+                          <th style={debugThStyle}>URL</th>
+                          <th style={debugThStyle}>Snippet</th>
+                          <th style={debugThStyle}>Erkannter Lieferant</th>
+                          <th style={debugThStyle}>Ablehnungsgrund</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {offerSearchRawResultsPreview.slice(0, 10).map((row, index) => (
+                          <tr key={`${row.url || 'raw'}-${index}`}>
+                            <td style={debugTdStyle}>{row.title || '-'}</td>
+                            <td style={debugTdStyle}>
+                              {row.url ? (
+                                <a href={row.url} target="_blank" rel="noreferrer" style={searchLinkStyle}>
+                                  {row.url}
+                                </a>
+                              ) : '-'}
+                            </td>
+                            <td style={debugTdStyle}>{row.snippet || '-'}</td>
+                            <td style={debugTdStyle}>{row.detectedSupplier || '-'}</td>
+                            <td style={debugTdStyle}>{row.rejectReason || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           </details>
         )}
@@ -857,7 +895,7 @@ export function PurchasePage({ canManagePurchase }) {
                   <strong>{result.product_name}</strong>
                   {isBest && <span style={bestBadgeStyle}>Bestpreis</span>}
                   <br />
-                  Lieferant: {result.supplier_name || '-'}
+                  Lieferant: {getSearchResultSupplierLabel(result) || result.supplier_name || '-'}
                   <br />
                   Netto: {hasPublicPrice ? formatMoney(result.price_net, 'EUR') : 'Preis nicht öffentlich verfügbar'}
                   <br />
@@ -1904,6 +1942,17 @@ function formatSearchOfferRange(from, until) {
   return from || until || '-'
 }
 
+function getSearchResultSupplierKey(result) {
+  return String(result?.detected_supplier || result?.supplier_name || '').trim().toUpperCase()
+}
+
+function getSearchResultSupplierLabel(result) {
+  const supplierKey = getSearchResultSupplierKey(result)
+  if (supplierKey === 'METRO') return 'METRO'
+  if (supplierKey === 'TRANSGOURMET') return 'Transgourmet'
+  return String(result?.supplier_name || '').trim() || '-'
+}
+
 function normalizeSearchQuery(value) {
   return String(value || '')
     .trim()
@@ -2141,6 +2190,34 @@ const debugPreStyle = {
   padding: 12,
   borderRadius: 10,
   marginTop: 8,
+}
+
+const debugTableWrapStyle = {
+  overflowX: 'auto',
+  marginTop: 8,
+}
+
+const debugTableStyle = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  minWidth: 900,
+}
+
+const debugThStyle = {
+  textAlign: 'left',
+  padding: '8px 10px',
+  borderBottom: `1px solid ${colors.border}`,
+  background: colors.offWhite,
+  fontSize: 13,
+}
+
+const debugTdStyle = {
+  verticalAlign: 'top',
+  padding: '8px 10px',
+  borderBottom: `1px solid ${colors.border}`,
+  fontSize: 13,
+  maxWidth: 260,
+  wordBreak: 'break-word',
 }
 
 const statsGridStyle = {
