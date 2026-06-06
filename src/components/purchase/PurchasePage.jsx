@@ -21,6 +21,9 @@ import {
   deletePurchaseProduct,
   deleteSupplier,
   fetchPurchaseData,
+  listRecentSearchResults,
+  saveSearchResultToPriceComparison,
+  searchProductOffers,
   updatePurchaseList,
   upsertSupplierRating,
   upsertPurchasePrice,
@@ -108,6 +111,12 @@ export function PurchasePage({ canManagePurchase }) {
   const [listForm, setListForm] = useState(emptyListForm)
   const [listItemForm, setListItemForm] = useState(emptyListItemForm)
   const [ratingForm, setRatingForm] = useState(emptyRatingForm)
+  const [offerSearchQuery, setOfferSearchQuery] = useState('')
+  const [offerSearchResults, setOfferSearchResults] = useState([])
+  const [offerSearchLoading, setOfferSearchLoading] = useState(false)
+  const [offerSearchError, setOfferSearchError] = useState('')
+  const [offerSearchMessage, setOfferSearchMessage] = useState('')
+  const [recentSearchResults, setRecentSearchResults] = useState([])
   const hasPurchaseAccess = getSafePurchaseAccess(canManagePurchase)
 
   const loadData = async () => {
@@ -156,8 +165,26 @@ export function PurchasePage({ canManagePurchase }) {
     }
   }
 
+  const loadRecentSearchResults = async () => {
+    try {
+      const { data, error } = await listRecentSearchResults()
+      if (error) {
+        console.warn(error.message)
+        return
+      }
+
+      setRecentSearchResults(ensureArray(data))
+    } catch (error) {
+      console.warn(error)
+    }
+  }
+
   useEffect(() => {
     loadData()
+  }, [])
+
+  useEffect(() => {
+    loadRecentSearchResults()
   }, [])
 
   useEffect(() => {
@@ -166,6 +193,64 @@ export function PurchasePage({ canManagePurchase }) {
       setSelectedProductId(loadedProducts[0].id)
     }
   }, [products, selectedProductId])
+
+  const handleOfferSearch = async (event) => {
+    event?.preventDefault?.()
+
+    const query = offerSearchQuery.trim()
+    if (!query) {
+      setOfferSearchError('Bitte einen Suchbegriff eingeben.')
+      setOfferSearchResults([])
+      setOfferSearchMessage('')
+      return
+    }
+
+    setOfferSearchLoading(true)
+    setOfferSearchError('')
+    setOfferSearchMessage('')
+    setOfferSearchResults([])
+
+    try {
+      const { data, error } = await searchProductOffers(query)
+
+      if (error) {
+        setOfferSearchError(error.message || 'Die Angebotssuche ist fehlgeschlagen.')
+        setOfferSearchResults([])
+        setOfferSearchLoading(false)
+        return
+      }
+
+      const results = ensureArray(data?.results || data?.data || [])
+      setOfferSearchResults(results)
+      setOfferSearchMessage(
+        data?.message || (results.length === 0
+          ? 'Fuer diesen Suchbegriff wurden keine oeffentlich verfuegbaren Angebote gefunden.'
+          : `Es wurden ${results.length} Angebote gefunden.`),
+      )
+      await loadRecentSearchResults()
+    } catch (error) {
+      console.error(error)
+      setOfferSearchError(error?.message || 'Die Angebotssuche ist fehlgeschlagen.')
+      setOfferSearchResults([])
+    } finally {
+      setOfferSearchLoading(false)
+    }
+  }
+
+  const importSearchResult = async (result) => {
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
+
+    const { data, error } = await saveSearchResultToPriceComparison(result)
+    if (error) return alert(error.message)
+
+    if (data?.product?.id) {
+      setSelectedProductId(data.product.id)
+    }
+
+    setActiveTab('prices')
+    await loadData()
+    await loadRecentSearchResults()
+  }
 
   const safeSuppliers = ensureArray(suppliers)
   const safeProducts = ensureArray(products)
@@ -176,6 +261,7 @@ export function PurchasePage({ canManagePurchase }) {
   const safePriceHistory = ensureArray(priceHistory)
   const safeSupplierRatings = ensureArray(supplierRatings)
   const safeEvents = ensureArray(events)
+  const safeRecentSearchResults = ensureArray(recentSearchResults)
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -208,6 +294,15 @@ export function PurchasePage({ canManagePurchase }) {
     ['Favoriten', safeFavorites.length],
     ['Offene Listen', openLists.length],
   ]
+
+  const searchResultsSorted = useMemo(() => {
+    const results = ensureArray(offerSearchResults)
+    return [...results].sort((a, b) => {
+      const aPrice = Number(getComparablePrice(a) ?? Number.MAX_SAFE_INTEGER)
+      const bPrice = Number(getComparablePrice(b) ?? Number.MAX_SAFE_INTEGER)
+      return aPrice - bPrice
+    })
+  }, [offerSearchResults])
 
   const saveSupplier = async () => {
     if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
@@ -622,6 +717,107 @@ export function PurchasePage({ canManagePurchase }) {
       <h2 style={headingStyle}>Einkauf & Preisvergleich</h2>
       <div style={infoBoxStyle}>
         Dieses Modul ist fuer den geschuetzten Mitgliederbereich vorbereitet.
+      </div>
+
+      <div style={cardStyle}>
+        <h3 style={headingStyle}>Produkt oder Angebot suchen</h3>
+        <form onSubmit={handleOfferSearch}>
+          <input
+            placeholder="Produkt oder Angebot suchen"
+            value={offerSearchQuery}
+            onChange={(event) => setOfferSearchQuery(event.target.value)}
+            style={inputStyle}
+          />
+          <button type="submit" disabled={offerSearchLoading} style={buttonStyle}>
+            {offerSearchLoading ? 'Suche laeuft...' : 'Angebote suchen'}
+          </button>
+        </form>
+
+        <p style={mutedTextStyle}>
+          Nur oeffentlich verfuegbare Angebotsseiten werden verwendet. Keine Zugangsdaten, kein Login, kein aggressives Scraping.
+        </p>
+
+        {offerSearchError && (
+          <div style={errorBoxStyle}>
+            <strong>Suchfehler</strong>
+            <br />
+            {offerSearchError}
+          </div>
+        )}
+
+        {!offerSearchError && offerSearchMessage && (
+          <div style={infoBoxStyle}>
+            {offerSearchMessage}
+          </div>
+        )}
+
+        {searchResultsSorted.length > 0 && (
+          <div style={searchResultsGridStyle}>
+            {searchResultsSorted.map((result, index) => {
+              const bestComparablePrice = getComparablePrice(searchResultsSorted[0])
+              const currentComparablePrice = getComparablePrice(result)
+              const isBest = currentComparablePrice !== null && currentComparablePrice !== undefined && Number(currentComparablePrice) === Number(bestComparablePrice)
+              const canImport = [result?.price_net, result?.price_gross, result?.unit_price].some((value) => value !== null && value !== undefined && value !== '')
+
+              return (
+                <div key={result.id || `${result.source_url}-${index}`} style={searchResultCardStyle(isBest)}>
+                  <strong>{result.product_name}</strong>
+                  {isBest && <span style={bestBadgeStyle}>Bestpreis</span>}
+                  <br />
+                  Lieferant: {result.supplier_name || '-'}
+                  <br />
+                  Netto: {formatMoney(result.price_net, 'EUR')}
+                  <br />
+                  Brutto: {formatMoney(result.price_gross, 'EUR')}
+                  <br />
+                  Einheitspreis: {formatMoney(result.unit_price, 'EUR')}
+                  <br />
+                  Einheit: {result.unit || '-'} {result.package_size ? `- Packung: ${result.package_size}` : ''}
+                  <br />
+                  Angebotszeitraum: {formatSearchOfferRange(result.offer_valid_from, result.offer_valid_until)}
+                  <br />
+                  Quelle:{' '}
+                  <a href={result.source_url} target="_blank" rel="noreferrer" style={searchLinkStyle}>
+                    {result.source_url}
+                  </a>
+                  <br />
+                  <button
+                    type="button"
+                    onClick={() => importSearchResult(result)}
+                    disabled={!hasPurchaseAccess || !canImport}
+                    style={buttonStyle}
+                  >
+                    In Preisvergleich uebernehmen
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {!offerSearchLoading && !offerSearchError && offerSearchMessage && searchResultsSorted.length === 0 && (
+          <p style={mutedTextStyle}>Keine Treffer fuer die aktuelle Suche.</p>
+        )}
+
+        {safeRecentSearchResults.length > 0 && (
+          <div style={recentSearchPanelStyle}>
+            <h4 style={{ ...headingStyle, marginTop: 12 }}>Zuletzt gefundene Angebote</h4>
+            {safeRecentSearchResults.slice(0, 8).map((result) => (
+              <div key={result.id} style={recentSearchRowStyle}>
+                <strong>{result.product_name}</strong>
+                <br />
+                {result.search_query} - {result.supplier_name} - {formatMoney(result.price_gross ?? result.price_net ?? result.unit_price, 'EUR')}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={cardStyle}>
+        <h3 style={headingStyle}>Manuelle Pflege</h3>
+        <p style={mutedTextStyle}>
+          Produkt-, Lieferanten-, Preis- und Listenpflege bleibt als Zusatzfunktion erhalten.
+        </p>
       </div>
 
       <div style={tabsStyle}>
@@ -1533,6 +1729,12 @@ function formatDateRange(from, until) {
   return `${from || 'offen'} bis ${until || 'offen'}`
 }
 
+function formatSearchOfferRange(from, until) {
+  if (!from && !until) return '-'
+  if (from && until) return `${from} bis ${until}`
+  return from || until || '-'
+}
+
 function buildComparisonRows(product, prices, bestPrice) {
   const safePrices = ensureArray(prices)
   const rows = safePrices.map((price) => ({
@@ -1662,15 +1864,45 @@ const debugHeaderStyle = {
 
 const infoBoxStyle = {
   ...cardStyle,
-  borderLeft: `6px solid ${colors.primary}`,
+  borderLeft: `6px solid ${colors.blue}`,
   background: colors.white,
   color: colors.text,
+}
+
+function searchResultCardStyle(isBest) {
+  return {
+    ...cardStyle,
+    background: isBest ? colors.successBg : colors.white,
+    borderLeft: isBest ? `6px solid ${colors.successText}` : `1px solid ${colors.border}`,
+  }
+}
+
+const searchLinkStyle = {
+  color: colors.blue,
+  wordBreak: 'break-all',
 }
 
 const statsGridStyle = {
   display: 'grid',
   gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)',
   gap: 12,
+}
+
+const searchResultsGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))',
+  gap: 12,
+}
+
+const recentSearchPanelStyle = {
+  ...cardStyle,
+  marginTop: 12,
+}
+
+const recentSearchRowStyle = {
+  ...cardStyle,
+  marginBottom: 8,
+  background: colors.offWhite,
 }
 
 const statNumberStyle = {
