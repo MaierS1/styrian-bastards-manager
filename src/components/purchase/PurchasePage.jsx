@@ -239,6 +239,9 @@ export function PurchasePage({ canManagePurchase }) {
 
   const importSearchResult = async (result) => {
     if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!allowedSearchSupplierNames.has(String(result?.supplier_name || '').trim().toUpperCase())) {
+      return alert('Nur METRO oder Transgourmet sind erlaubt.')
+    }
 
     const { data, error } = await saveSearchResultToPriceComparison(result)
     if (error) return alert(error.message)
@@ -262,6 +265,7 @@ export function PurchasePage({ canManagePurchase }) {
   const safeSupplierRatings = ensureArray(supplierRatings)
   const safeEvents = ensureArray(events)
   const safeRecentSearchResults = ensureArray(recentSearchResults)
+  const allowedSearchSupplierNames = new Set(['METRO', 'TRANSGOURMET'])
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -297,12 +301,14 @@ export function PurchasePage({ canManagePurchase }) {
 
   const searchResultsSorted = useMemo(() => {
     const results = ensureArray(offerSearchResults)
-    return [...results].sort((a, b) => {
-      const aPrice = Number(getComparablePrice(a) ?? Number.MAX_SAFE_INTEGER)
-      const bPrice = Number(getComparablePrice(b) ?? Number.MAX_SAFE_INTEGER)
-      return aPrice - bPrice
-    })
-  }, [offerSearchResults])
+    return [...results]
+      .filter((result) => allowedSearchSupplierNames.has(String(result?.supplier_name || '').trim().toUpperCase()))
+      .sort((a, b) => {
+        const aPrice = Number(getComparablePrice(a) ?? Number.MAX_SAFE_INTEGER)
+        const bPrice = Number(getComparablePrice(b) ?? Number.MAX_SAFE_INTEGER)
+        return aPrice - bPrice
+      })
+  }, [allowedSearchSupplierNames, offerSearchResults])
 
   const saveSupplier = async () => {
     if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
@@ -736,6 +742,9 @@ export function PurchasePage({ canManagePurchase }) {
         <p style={mutedTextStyle}>
           Nur oeffentlich verfuegbare Angebotsseiten werden verwendet. Keine Zugangsdaten, kein Login, kein aggressives Scraping.
         </p>
+        <p style={mutedTextStyle}>
+          Der Suchagent beruecksichtigt derzeit nur METRO und Transgourmet.
+        </p>
 
         {offerSearchError && (
           <div style={errorBoxStyle}>
@@ -796,7 +805,7 @@ export function PurchasePage({ canManagePurchase }) {
         )}
 
         {!offerSearchLoading && !offerSearchError && offerSearchMessage && searchResultsSorted.length === 0 && (
-          <p style={mutedTextStyle}>Keine Treffer fuer die aktuelle Suche.</p>
+          <p style={mutedTextStyle}>Keine Angebote von METRO oder Transgourmet gefunden.</p>
         )}
 
         {safeRecentSearchResults.length > 0 && (

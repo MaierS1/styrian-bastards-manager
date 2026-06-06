@@ -17,9 +17,11 @@ const purchaseRoles = new Set([
   'kassier_stv',
 ])
 
+const allowedSupplierNames = new Set(['METRO', 'Transgourmet'])
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return jsonResponse({ ok: true }, 200)
   }
 
   try {
@@ -28,7 +30,13 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-      return jsonResponse({ error: 'Supabase Function Secrets fehlen.' }, 500)
+      return jsonResponse(
+        {
+          error: 'Suche konnte nicht ausgefuehrt werden.',
+          details: 'Supabase Function Secrets fehlen.',
+        },
+        500,
+      )
     }
 
     const authHeader = req.headers.get('Authorization') || ''
@@ -50,7 +58,13 @@ Deno.serve(async (req) => {
     } = await userClient.auth.getUser()
 
     if (userError || !user) {
-      return jsonResponse({ error: 'Benutzer konnte nicht geprueft werden.' }, 401)
+      return jsonResponse(
+        {
+          error: 'Suche konnte nicht ausgefuehrt werden.',
+          details: 'Benutzer konnte nicht geprueft werden.',
+        },
+        401,
+      )
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
@@ -67,33 +81,37 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     if (memberError) {
-      return jsonResponse({ error: memberError.message }, 500)
+      return jsonResponse(
+        {
+          error: 'Suche konnte nicht ausgefuehrt werden.',
+          details: memberError.message,
+        },
+        500,
+      )
     }
 
     if (!member || !isPurchaseManager(member)) {
       return jsonResponse({ error: 'Keine Berechtigung fuer Einkauf & Preisvergleich.' }, 403)
     }
 
-    const body = await req.json().catch(() => ({}))
-    const query = String(body?.query || '').trim()
+    const body = await parseRequestBody(req)
+    const query = String(body.query || '').trim()
 
     if (!query) {
-      return jsonResponse({ error: 'query ist Pflicht.' }, 400)
+      return jsonResponse({ error: 'Bitte Suchbegriff eingeben.' }, 400)
     }
 
     const searchOutcome = await searchPublicOffers(query)
-    const results = searchOutcome.results
+    const filteredResults = searchOutcome.results.filter((result) => isAllowedSupplier(result.supplier_name))
 
-    if (results.length === 0) {
+    if (filteredResults.length === 0) {
       return jsonResponse({
         results: [],
-        message: searchOutcome.hadFetchError
-          ? 'Eine oeffentliche Angebotsquelle ist derzeit nicht erreichbar.'
-          : 'Fuer diesen Suchbegriff wurden keine oeffentlich verfuegbaren Angebote gefunden.',
+        message: 'Keine Angebote von METRO oder Transgourmet gefunden.',
       })
     }
 
-    const rows = results.map((result) => ({
+    const rows = filteredResults.map((result) => ({
       search_query: query,
       supplier_name: result.supplier_name,
       product_name: result.product_name,
@@ -115,34 +133,47 @@ Deno.serve(async (req) => {
       .select('*')
 
     if (insertError) {
-      return jsonResponse({ error: insertError.message }, 500)
+      return jsonResponse(
+        {
+          error: 'Suche konnte nicht ausgefuehrt werden.',
+          details: insertError.message,
+        },
+        500,
+      )
     }
 
     return jsonResponse({
       results: insertedRows || [],
-      message: insertedRows?.length
-        ? `Es wurden ${insertedRows.length} oeffentlich verfuegbare Angebote gefunden.`
-        : 'Fuer diesen Suchbegriff wurden keine oeffentlich verfuegbaren Angebote gefunden.',
+      message: `Es wurden ${insertedRows?.length || 0} oeffentlich verfuegbare Angebote gefunden.`,
+      fallback_used: false,
     })
   } catch (error) {
-    return jsonResponse({
-      error: getErrorMessage(error, 'Unbekannter Fehler bei der Angebotssuche.'),
-    }, 500)
+    return jsonResponse(
+      {
+        error: 'Suche konnte nicht ausgefuehrt werden.',
+        details: getErrorDetails(error),
+      },
+      500,
+    )
   }
 })
 
-async function searchPublicOffers(query: string) {
-  const searchTerms = [
-    query,
-    `${query} Angebot`,
-    `${query} Aktion`,
-  ]
+async function parseRequestBody(req: Request) {
+  try {
+    const body = await req.json()
+    return typeof body === 'object' && body !== null ? body : {}
+  } catch {
+    return {}
+  }
+}
 
+async function searchPublicOffers(query: string) {
+  const terms = [query, `${query} Angebot`, `${query} Aktion`]
   const collected: SearchResult[] = []
   const seenUrls = new Set<string>()
   let hadFetchError = false
 
-  for (const term of searchTerms) {
+  for (const term of terms) {
     const pageResults = await searchDuckDuckGo(term)
     if (!pageResults.ok) {
       hadFetchError = true
@@ -154,42 +185,46 @@ async function searchPublicOffers(query: string) {
       collected.push(result)
 
       if (collected.length >= 12) {
-        return collected
+        return { results: collected, hadFetchError }
       }
     }
   }
 
-  return {
-    results: collected,
-    hadFetchError,
-  }
+  return { results: collected, hadFetchError }
 }
 
 async function searchDuckDuckGo(term: string) {
-  const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(term)}`
-  const response = await fetch(searchUrl, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (compatible; StyrianBastardsPurchaseSearch/1.0)',
-      Accept: 'text/html,application/xhtml+xml',
-    },
-  })
+  try {
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(term)}`
+    const response = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; StyrianBastardsPurchaseSearch/1.0)',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+    })
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return { ok: false, results: [] as SearchResult[] }
+    }
+
+    const html = await response.text()
+    const titleMatches = [...html.matchAll(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)]
+    const snippetMatches = [...html.matchAll(/<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g)]
+
+    return {
+      ok: true,
+      results: titleMatches
+        .slice(0, 10)
+        .map((match, index) => {
+          const url = normalizeResultUrl(match[1])
+          const title = cleanHtmlText(match[2])
+          const snippet = cleanHtmlText(snippetMatches[index]?.[1] || '')
+          return buildSearchResult(term, url, title, snippet)
+        })
+        .filter((result): result is SearchResult => Boolean(result.source_url)),
+    }
+  } catch {
     return { ok: false, results: [] as SearchResult[] }
-  }
-
-  const html = await response.text()
-  const titleMatches = [...html.matchAll(/<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)]
-  const snippetMatches = [...html.matchAll(/<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g)]
-
-  return {
-    ok: true,
-    results: titleMatches.slice(0, 10).map((match, index) => {
-    const url = normalizeResultUrl(match[1])
-    const title = cleanHtmlText(match[2])
-    const snippet = cleanHtmlText(snippetMatches[index]?.[1] || '')
-    return buildSearchResult(term, url, title, snippet)
-    }).filter((result): result is SearchResult => Boolean(result.source_url)),
   }
 }
 
@@ -252,7 +287,10 @@ function extractProductName(title: string, query: string) {
 function extractPriceInfo(text: string) {
   const pricePattern = /(?:€|EUR)\s?(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s?(?:€|EUR)/gi
   const matches = [...text.matchAll(pricePattern)].map((match) => match[1] || match[2]).filter(Boolean)
-  const parsedPrices = matches.map((value) => Number(String(value).replace(',', '.'))).filter((value) => Number.isFinite(value))
+  const parsedPrices = matches
+    .map((value) => Number(String(value).replace(',', '.')))
+    .filter((value) => Number.isFinite(value))
+
   const firstPrice = parsedPrices[0] ?? null
   const secondPrice = parsedPrices[1] ?? null
 
@@ -339,9 +377,11 @@ function normalizeResultUrl(value: string) {
     const decoded = decodeURIComponent(value)
     const parsed = new URL(decoded.startsWith('//') ? `https:${decoded}` : decoded)
     const redirectedUrl = parsed.searchParams.get('uddg') || parsed.searchParams.get('u')
+
     if (redirectedUrl) {
       return decodeURIComponent(redirectedUrl)
     }
+
     return parsed.toString()
   } catch {
     return value
@@ -384,6 +424,11 @@ function isPurchaseManager(member: { app_role?: string | null; role?: string | n
   return purchaseRoles.has(String(member?.role || '').trim())
 }
 
+function isAllowedSupplier(value: string | null | undefined) {
+  const normalized = String(value || '').trim().toUpperCase()
+  return allowedSupplierNames.has(normalized)
+}
+
 function jsonResponse(payload: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -394,10 +439,20 @@ function jsonResponse(payload: Record<string, unknown>, status = 200) {
   })
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error) return error.message || fallback
-  if (typeof error === 'string' && error.trim()) return error
-  return fallback
+function getErrorDetails(error: unknown) {
+  if (error instanceof Error) {
+    return [error.message, error.stack].filter(Boolean).join('\n')
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    try {
+      return JSON.stringify(error)
+    } catch {
+      return 'Unbekannter Fehler'
+    }
+  }
+
+  return String(error || 'Unbekannter Fehler')
 }
 
 type SearchResult = {

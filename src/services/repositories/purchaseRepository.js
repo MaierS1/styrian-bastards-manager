@@ -234,11 +234,20 @@ export async function listRecentSearchResults() {
 export async function saveSearchResultToPriceComparison(result) {
   const supplierName = String(result?.supplier_name || '').trim()
   const productName = String(result?.product_name || '').trim()
+  const allowedSuppliers = new Set(['METRO', 'TRANSGOURMET'])
+  const normalizedSupplierName = supplierName.toUpperCase()
 
   if (!supplierName || !productName) {
     return {
       data: null,
       error: new Error('Lieferant und Produktname sind Pflicht.'),
+    }
+  }
+
+  if (!allowedSuppliers.has(normalizedSupplierName)) {
+    return {
+      data: null,
+      error: new Error('Nur METRO oder Transgourmet sind erlaubt.'),
     }
   }
 
