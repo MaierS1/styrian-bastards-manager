@@ -5126,7 +5126,7 @@ export default function App() {
       return
     }
 
-    await uploadDocumentRecord({
+    const { error } = await uploadDocumentRecord({
       documentTitle,
       documentCategory,
       documentDate,
@@ -5141,6 +5141,8 @@ export default function App() {
       loadDocuments,
       resetDocumentForm,
     })
+
+    if (error) alert(error.message)
   }
 
   async function saveDocumentMemberAreaSettings(document, settings) {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   buttonStyle,
   cardStyle,
@@ -35,9 +35,23 @@ export function DocumentsList({
           <br />
           Beschreibung: {document.description || '-'}
           <br />
-          Mitgliederbereich: {document.show_in_member_area ? 'sichtbar' : 'nicht sichtbar'} -{' '}
-          {document.members_only !== false ? 'nur Mitglieder' : 'nicht Mitglieder-only'} -{' '}
-          {document.is_active !== false ? 'aktiv' : 'inaktiv'}
+          <div style={badgeRowStyle}>
+            <StatusBadge
+              active={Boolean(document.show_in_member_area)}
+              label={document.show_in_member_area ? 'Mitgliederbereich' : 'Nicht im Mitgliederbereich'}
+            />
+            <StatusBadge
+              active={document.members_only !== false}
+              label={document.members_only !== false ? 'Nur Mitglieder' : 'Nicht Mitglieder-only'}
+            />
+            <StatusBadge
+              active={document.is_active !== false}
+              label={document.is_active !== false ? 'Aktiv' : 'Inaktiv'}
+            />
+          </div>
+          Kategorie im Mitgliederbereich: {document.member_area_category || '-'}
+          <br />
+          Sortierung im Mitgliederbereich: {document.sort_order ?? 0}
           <br />
 
           <button onClick={() => openDocument(document.file_path)} style={buttonStyle}>
@@ -73,6 +87,20 @@ function DocumentMemberAreaSettings({ document, saveDocumentMemberAreaSettings }
   const [isActive, setIsActive] = useState(document.is_active !== false)
   const [saving, setSaving] = useState(false)
 
+  useEffect(() => {
+    setShowInMemberArea(Boolean(document.show_in_member_area))
+    setMembersOnly(document.members_only !== false)
+    setMemberAreaCategory(document.member_area_category || '')
+    setSortOrder(String(document.sort_order ?? 0))
+    setIsActive(document.is_active !== false)
+  }, [
+    document.show_in_member_area,
+    document.members_only,
+    document.member_area_category,
+    document.sort_order,
+    document.is_active,
+  ])
+
   async function saveSettings() {
     const parsedSortOrder = Number.parseInt(sortOrder, 10)
 
@@ -97,7 +125,11 @@ function DocumentMemberAreaSettings({ document, saveDocumentMemberAreaSettings }
 
   return (
     <div style={settingsStyle}>
-      <strong>Mitgliederbereich</strong>
+      <strong>Freigabe fuer den Mitgliederbereich bearbeiten</strong>
+      <p style={hintStyle}>
+        Standardmaessig werden Dokumente nicht im Mitgliederbereich angezeigt. Aktiviere die Freigabe
+        nur fuer Dokumente, die eingeloggte Mitglieder sehen duerfen.
+      </p>
 
       <label style={checkboxLabelStyle}>
         <input
@@ -150,10 +182,54 @@ function DocumentMemberAreaSettings({ document, saveDocumentMemberAreaSettings }
   )
 }
 
+function StatusBadge({ active, label }) {
+  return (
+    <span style={active ? activeBadgeStyle : inactiveBadgeStyle}>
+      {label}
+    </span>
+  )
+}
+
+const badgeRowStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 8,
+  margin: '10px 0 6px',
+}
+
+const badgeBaseStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  borderRadius: 999,
+  padding: '3px 9px',
+  fontSize: 13,
+  fontWeight: 800,
+}
+
+const activeBadgeStyle = {
+  ...badgeBaseStyle,
+  background: colors.successBg,
+  color: colors.successText,
+}
+
+const inactiveBadgeStyle = {
+  ...badgeBaseStyle,
+  background: colors.dangerBg,
+  color: colors.dangerText,
+}
+
 const settingsStyle = {
   marginTop: 12,
-  paddingTop: 12,
-  borderTop: `1px solid ${colors.border}`,
+  padding: 14,
+  border: `2px solid ${colors.border}`,
+  borderRadius: 10,
+  background: colors.offWhite,
+}
+
+const hintStyle = {
+  ...mutedTextStyle,
+  marginTop: 6,
+  marginBottom: 12,
 }
 
 const checkboxLabelStyle = {

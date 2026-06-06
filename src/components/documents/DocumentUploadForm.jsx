@@ -71,6 +71,10 @@ export function DocumentUploadForm({
       />
 
       <h4 style={subHeadingStyle}>Mitgliederbereich</h4>
+      <p style={hintStyle}>
+        Neue Dokumente sind standardmaessig nicht im Mitgliederbereich sichtbar. Aktiviere die
+        Freigabe nur fuer Dokumente, die eingeloggte Mitglieder sehen duerfen.
+      </p>
 
       <label style={checkboxLabelStyle}>
         <input
@@ -130,6 +134,13 @@ export function DocumentUploadForm({
 const subHeadingStyle = {
   margin: '14px 0 8px',
   color: colors.black,
+}
+
+const hintStyle = {
+  marginTop: 0,
+  marginBottom: 12,
+  color: colors.muted,
+  lineHeight: 1.5,
 }
 
 const checkboxLabelStyle = {
