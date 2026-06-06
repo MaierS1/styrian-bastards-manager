@@ -804,6 +804,8 @@ export function PurchasePage({ canManagePurchase }) {
         <h3 style={headingStyle}>Lieferanten-Suche</h3>
         <p style={mutedTextStyle}>
           METRO und Transgourmet zeigen Produkte und Preise teilweise erst nach Login oder über dynamische Shops. Deshalb öffnet der Assistent die passenden Lieferantenseiten direkt. Gefundene Preise können anschließend übernommen werden.
+          <br />
+          METRO stellt die öffentliche Produktsuche nicht zuverlässig als direkte Suchseite bereit. Bitte über Getränke, aktuelle Angebote oder METRO Post prüfen.
         </p>
 
         <input
@@ -2019,11 +2021,23 @@ function buildSupplierAssistantLinks(query) {
   const cleaned = String(query || '').trim() || 'Cola'
   return [
     {
-      label: 'Bei METRO suchen',
-      url: `https://www.metro.at/search?search=${encodeURIComponent(cleaned)}`,
+      label: 'METRO Getränke öffnen',
+      url: 'https://www.metro.at/mein-markt/produktwelten/getraenke',
     },
     {
-      label: 'Bei Transgourmet suchen',
+      label: 'METRO aktuelle Angebote öffnen',
+      url: 'https://www.metro.at/mein-markt/aktuelle-angebote',
+    },
+    {
+      label: 'METRO Post öffnen',
+      url: 'https://www.metro.at/mein-markt/aktuelle-angebote/metro-post',
+    },
+    {
+      label: 'METRO Startseite öffnen',
+      url: 'https://www.metro.at',
+    },
+    {
+      label: `Transgourmet suchen: ${cleaned}`,
       url: `https://shop.transgourmet.at/search?q=${encodeURIComponent(cleaned)}`,
     },
   ]
