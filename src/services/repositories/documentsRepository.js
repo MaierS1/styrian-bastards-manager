@@ -14,6 +14,11 @@ export async function uploadDocumentRecord({
   documentDate,
   documentDescription,
   documentFile,
+  documentShowInMemberArea = false,
+  documentMembersOnly = true,
+  documentMemberAreaCategory = '',
+  documentSortOrder = 0,
+  documentIsActive = true,
   createAuditLog,
   loadDocuments,
   resetDocumentForm,
@@ -36,6 +41,11 @@ export async function uploadDocumentRecord({
     file_path: filePath,
     file_name: documentFile.name,
     mime_type: documentFile.type || null,
+    show_in_member_area: documentShowInMemberArea,
+    members_only: documentMembersOnly,
+    member_area_category: documentMemberAreaCategory || null,
+    sort_order: documentSortOrder,
+    is_active: documentIsActive,
   })
 
   if (error) return { error }
@@ -52,6 +62,29 @@ export async function uploadDocumentRecord({
   alertFn('Dokument wurde hochgeladen.')
 
   return { filePath }
+}
+
+export async function updateDocumentMemberAreaSettings({
+  documentId,
+  settings,
+  createAuditLog,
+  loadDocuments,
+  alertFn = alert,
+}) {
+  const { data: updatedDocument, error } = await supabase
+    .from('documents')
+    .update(settings)
+    .eq('id', documentId)
+    .select()
+    .single()
+
+  if (error) return { error }
+
+  await createAuditLog('update', 'documents', documentId, null, settings)
+  await loadDocuments()
+  alertFn('Dokument-Einstellungen wurden gespeichert.')
+
+  return { document: updatedDocument }
 }
 
 export async function deleteDocumentRecord({

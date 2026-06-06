@@ -126,6 +126,7 @@ import {
 } from './services/repositories/eventsRepository'
 import {
   deleteDocumentRecord,
+  updateDocumentMemberAreaSettings,
   uploadDocumentRecord,
 } from './services/repositories/documentsRepository'
 import {
@@ -385,6 +386,11 @@ export default function App() {
   const [documentDate, setDocumentDate] = useState('')
   const [documentDescription, setDocumentDescription] = useState('')
   const [documentFile, setDocumentFile] = useState(null)
+  const [documentShowInMemberArea, setDocumentShowInMemberArea] = useState(false)
+  const [documentMembersOnly, setDocumentMembersOnly] = useState(true)
+  const [documentMemberAreaCategory, setDocumentMemberAreaCategory] = useState('')
+  const [documentSortOrder, setDocumentSortOrder] = useState('0')
+  const [documentIsActive, setDocumentIsActive] = useState(true)
 
   const [inventorySearch, setInventorySearch] = useState('')
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('alle')
@@ -5095,6 +5101,11 @@ export default function App() {
     setDocumentDate('')
     setDocumentDescription('')
     setDocumentFile(null)
+    setDocumentShowInMemberArea(false)
+    setDocumentMembersOnly(true)
+    setDocumentMemberAreaCategory('')
+    setDocumentSortOrder('0')
+    setDocumentIsActive(true)
   }
 
   async function uploadDocument() {
@@ -5108,16 +5119,44 @@ export default function App() {
       return
     }
 
+    const sortOrder = Number.parseInt(documentSortOrder, 10)
+
+    if (Number.isNaN(sortOrder) || sortOrder < 0) {
+      alert('Sortierung muss eine positive ganze Zahl sein.')
+      return
+    }
+
     await uploadDocumentRecord({
       documentTitle,
       documentCategory,
       documentDate,
       documentDescription,
       documentFile,
+      documentShowInMemberArea,
+      documentMembersOnly,
+      documentMemberAreaCategory: documentMemberAreaCategory.trim(),
+      documentSortOrder: sortOrder,
+      documentIsActive,
       createAuditLog,
       loadDocuments,
       resetDocumentForm,
     })
+  }
+
+  async function saveDocumentMemberAreaSettings(document, settings) {
+    if (!canManageMembers() && !isAdmin()) {
+      alert('Keine Berechtigung fuer Dokument-Einstellungen.')
+      return
+    }
+
+    const { error } = await updateDocumentMemberAreaSettings({
+      documentId: document.id,
+      settings,
+      createAuditLog,
+      loadDocuments,
+    })
+
+    if (error) alert(error.message)
   }
 
   async function openDocument(path) {
@@ -5638,14 +5677,26 @@ export default function App() {
             documentDescription,
             setDocumentDescription,
             setDocumentFile,
+            documentShowInMemberArea,
+            setDocumentShowInMemberArea,
+            documentMembersOnly,
+            setDocumentMembersOnly,
+            documentMemberAreaCategory,
+            setDocumentMemberAreaCategory,
+            documentSortOrder,
+            setDocumentSortOrder,
+            documentIsActive,
+            setDocumentIsActive,
             uploadDocument,
             resetDocumentForm,
           }}
           listProps={{
             documents,
             isAdmin,
+            canManageDocuments: () => canManageMembers() || isAdmin(),
             openDocument,
             deleteDocument,
+            saveDocumentMemberAreaSettings,
           }}
         />
       )}

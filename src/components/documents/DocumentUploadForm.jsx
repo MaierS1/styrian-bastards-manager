@@ -1,5 +1,6 @@
 import {
   buttonStyle,
+  colors,
   headingStyle,
   inputStyle,
   secondaryButtonStyle,
@@ -15,6 +16,16 @@ export function DocumentUploadForm({
   documentDescription,
   setDocumentDescription,
   setDocumentFile,
+  documentShowInMemberArea,
+  setDocumentShowInMemberArea,
+  documentMembersOnly,
+  setDocumentMembersOnly,
+  documentMemberAreaCategory,
+  setDocumentMemberAreaCategory,
+  documentSortOrder,
+  setDocumentSortOrder,
+  documentIsActive,
+  setDocumentIsActive,
   uploadDocument,
   resetDocumentForm,
 }) {
@@ -59,6 +70,52 @@ export function DocumentUploadForm({
         style={inputStyle}
       />
 
+      <h4 style={subHeadingStyle}>Mitgliederbereich</h4>
+
+      <label style={checkboxLabelStyle}>
+        <input
+          type="checkbox"
+          checked={documentShowInMemberArea}
+          onChange={(e) => setDocumentShowInMemberArea(e.target.checked)}
+        />
+        Im Mitgliederbereich anzeigen
+      </label>
+
+      <label style={checkboxLabelStyle}>
+        <input
+          type="checkbox"
+          checked={documentMembersOnly}
+          onChange={(e) => setDocumentMembersOnly(e.target.checked)}
+        />
+        Nur fuer Mitglieder
+      </label>
+
+      <input
+        placeholder="Kategorie fuer Mitgliederbereich"
+        value={documentMemberAreaCategory}
+        onChange={(e) => setDocumentMemberAreaCategory(e.target.value)}
+        style={inputStyle}
+      />
+
+      <input
+        type="number"
+        min="0"
+        step="1"
+        placeholder="Sortierung"
+        value={documentSortOrder}
+        onChange={(e) => setDocumentSortOrder(e.target.value)}
+        style={inputStyle}
+      />
+
+      <label style={checkboxLabelStyle}>
+        <input
+          type="checkbox"
+          checked={documentIsActive}
+          onChange={(e) => setDocumentIsActive(e.target.checked)}
+        />
+        Aktiv
+      </label>
+
       <button onClick={uploadDocument} style={buttonStyle}>
         Dokument hochladen
       </button>
@@ -68,4 +125,18 @@ export function DocumentUploadForm({
       </button>
     </>
   )
+}
+
+const subHeadingStyle = {
+  margin: '14px 0 8px',
+  color: colors.black,
+}
+
+const checkboxLabelStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  margin: '8px 0',
+  color: colors.text,
+  fontWeight: 700,
 }
