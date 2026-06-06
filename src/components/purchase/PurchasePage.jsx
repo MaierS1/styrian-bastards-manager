@@ -1660,6 +1660,13 @@ const debugHeaderStyle = {
   fontSize: isMobile ? 17 : 16,
 }
 
+const infoBoxStyle = {
+  ...cardStyle,
+  borderLeft: `6px solid ${colors.primary}`,
+  background: colors.white,
+  color: colors.text,
+}
+
 const statsGridStyle = {
   display: 'grid',
   gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)',
