@@ -108,6 +108,7 @@ export function PurchasePage({ canManagePurchase }) {
   const [listForm, setListForm] = useState(emptyListForm)
   const [listItemForm, setListItemForm] = useState(emptyListItemForm)
   const [ratingForm, setRatingForm] = useState(emptyRatingForm)
+  const hasPurchaseAccess = getSafePurchaseAccess(canManagePurchase)
 
   const loadData = async () => {
     setLoading(true)
@@ -209,7 +210,7 @@ export function PurchasePage({ canManagePurchase }) {
   ]
 
   const saveSupplier = async () => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!supplierForm.name.trim()) return alert('Lieferantenname ist Pflicht.')
 
     setSaving(true)
@@ -230,7 +231,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const saveProduct = async () => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!productForm.name.trim()) return alert('Produktname ist Pflicht.')
 
     setSaving(true)
@@ -254,7 +255,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const savePrice = async () => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!priceForm.product_id || !priceForm.supplier_id) return alert('Produkt und Lieferant sind Pflicht.')
 
     setSaving(true)
@@ -282,7 +283,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const toggleFavorite = async (product) => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     const existingFavorite = safeFavorites.find((favorite) => favorite?.product_id === product?.id)
 
     const { error } = existingFavorite
@@ -294,7 +295,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const saveSupplierRating = async () => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!ratingForm.supplier_id) return alert('Lieferant ist Pflicht.')
 
     setSaving(true)
@@ -316,7 +317,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const saveList = async () => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!listForm.title.trim()) return alert('Listentitel ist Pflicht.')
 
     setSaving(true)
@@ -337,7 +338,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const saveListItem = async () => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!listItemForm.list_id || !listItemForm.product_id) return alert('Liste und Produkt sind Pflicht.')
 
     setSaving(true)
@@ -432,7 +433,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const removeSupplier = async (supplier) => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!window.confirm(`Lieferant wirklich loeschen?\n\n${supplier.name}`)) return
 
     const { error } = await deleteSupplier(supplier.id)
@@ -441,7 +442,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const removeProduct = async (product) => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!window.confirm(`Produkt wirklich loeschen?\n\n${product.name}`)) return
 
     const { error } = await deletePurchaseProduct(product.id)
@@ -450,7 +451,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const removePrice = async (price) => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!window.confirm('Preis wirklich loeschen?')) return
 
     const { error } = await deletePurchasePrice(price.id)
@@ -459,7 +460,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const changeListStatus = async (list, status) => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
 
     const { error } = await updatePurchaseList({ id: list.id, payload: { status } })
     if (error) return alert(error.message)
@@ -467,7 +468,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const changeListEvent = async (list, eventId) => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
 
     const { error } = await updatePurchaseList({
       id: list.id,
@@ -478,7 +479,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const removeList = async (list) => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
     if (!window.confirm(`Einkaufsliste wirklich loeschen?\n\n${list.title}`)) return
 
     const { error } = await deletePurchaseList(list.id)
@@ -487,7 +488,7 @@ export function PurchasePage({ canManagePurchase }) {
   }
 
   const removeListItem = async (item) => {
-    if (!canManagePurchase()) return alert('Keine Berechtigung fuer Einkauf.')
+    if (!hasPurchaseAccess) return alert('Keine Berechtigung fuer Einkauf.')
 
     const { error } = await deletePurchaseListItem(item.id)
     if (error) return alert(error.message)
@@ -602,17 +603,22 @@ export function PurchasePage({ canManagePurchase }) {
     doc.save(`einkaufsliste-${sanitizeFileName(list.title)}.pdf`)
   }
 
-  if (!canManagePurchase()) {
+  if (!hasPurchaseAccess) {
     return (
-      <section style={sectionStyle}>
-        <h2 style={headingStyle}>Einkauf & Preisvergleich</h2>
-        <p>Fuer diesen Bereich hast du keine Berechtigung.</p>
+      <section style={purchaseSectionStyle}>
+        <PurchaseDebugHeader />
+        <div style={errorBoxStyle}>
+          <strong>Kein Zugriff auf Einkauf & Preisvergleich.</strong>
+          <br />
+          Dieser Bereich ist nur fuer Vorstand, Admin und Kassier sichtbar.
+        </div>
       </section>
     )
   }
 
   return (
-    <section style={sectionStyle}>
+    <section style={purchaseSectionStyle}>
+      <PurchaseDebugHeader />
       <h2 style={headingStyle}>Einkauf & Preisvergleich</h2>
       <div style={infoBoxStyle}>
         Dieses Modul ist fuer den geschuetzten Mitgliederbereich vorbereitet.
@@ -658,6 +664,9 @@ export function PurchasePage({ canManagePurchase }) {
               <strong>Noch keine Einkaufsdaten vorhanden.</strong>
               <br />
               Lege zuerst einen Lieferanten oder ein Produkt an.
+              <br />
+              <button onClick={() => setActiveTab('suppliers')} style={buttonStyle}>Lieferant anlegen</button>
+              <button onClick={() => setActiveTab('products')} style={secondaryButtonStyle}>Produkt anlegen</button>
             </div>
           )}
 
@@ -1403,6 +1412,16 @@ function Checkbox({ checked, onChange, label }) {
   )
 }
 
+function PurchaseDebugHeader() {
+  return (
+    <div style={debugHeaderStyle}>
+      <strong>Einkauf & Preisvergleich geladen</strong>
+      <br />
+      Interner Bereich fuer manuelle Lieferanten, Produkte, Preise und Einkaufslisten.
+    </div>
+  )
+}
+
 function setFormValue(setForm, key, value) {
   setForm((current) => ({ ...current, [key]: value }))
 }
@@ -1609,6 +1628,23 @@ const tabsStyle = {
   flexWrap: 'wrap',
   gap: 8,
   marginBottom: 12,
+}
+
+const purchaseSectionStyle = {
+  ...sectionStyle,
+  background: colors.offWhite,
+  color: colors.text,
+  minHeight: 240,
+  opacity: 1,
+  overflow: 'visible',
+}
+
+const debugHeaderStyle = {
+  ...cardStyle,
+  borderLeft: `6px solid ${colors.red}`,
+  background: colors.white,
+  color: colors.text,
+  fontSize: isMobile ? 17 : 16,
 }
 
 const statsGridStyle = {
