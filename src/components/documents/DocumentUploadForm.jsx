@@ -41,11 +41,12 @@ export function DocumentUploadForm({
       />
 
       <select value={documentCategory} onChange={(e) => setDocumentCategory(e.target.value)} style={inputStyle}>
+        <option value="vereinsdokumente">Vereinsdokumente</option>
         <option value="statuten">Statuten</option>
-        <option value="sitzung">Sitzung / Protokoll</option>
+        <option value="vollmacht">Vollmacht</option>
         <option value="bescheid">Bescheid</option>
-        <option value="rechnung">Rechnung</option>
         <option value="vertrag">Vertrag</option>
+        <option value="formular">Formular</option>
         <option value="sonstiges">Sonstiges</option>
       </select>
 
