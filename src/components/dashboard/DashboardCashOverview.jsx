@@ -6,13 +6,29 @@ export function DashboardCashOverview({
   expenseTotal,
   inventoryTotalValue,
   cashEntries,
-  getDashboardBarHeight,
   monthlyData,
 }) {
   const safeCashEntries = Array.isArray(cashEntries) ? cashEntries : []
   const safeMonthlyData = Array.isArray(monthlyData) ? monthlyData : []
-  const safeGetDashboardBarHeight = typeof getDashboardBarHeight === 'function' ? getDashboardBarHeight : () => 0
   const latestCashEntries = safeCashEntries.slice(0, 5)
+
+  function getMonthlyBalance(month) {
+    const income = Number(month?.income || 0)
+    const expense = Number(month?.expense || 0)
+    const balance = Number(month?.balance)
+
+    return Number.isFinite(balance) ? balance : income - expense
+  }
+
+  function getMonthlyBarWidth(value) {
+    if (monthlyBalanceMax <= 0) return '0%'
+    return `${(Math.abs(value) / monthlyBalanceMax) * 100}%`
+  }
+
+  const monthlyBalanceMax = Math.max(
+    ...safeMonthlyData.map((month) => Math.abs(getMonthlyBalance(month))),
+    0
+  )
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
@@ -46,23 +62,32 @@ export function DashboardCashOverview({
       <div style={cardStyle}>
         <strong style={dashboardLabelStyle}>Jahresübersicht</strong>
         <div style={{ width: '100%', display: 'grid', gap: 10, marginTop: 14 }}>
-          {safeMonthlyData.slice(0, 6).map((month, index) => {
+          {safeMonthlyData.map((month, index) => {
             const monthItem = month || {}
+            const income = Number(monthItem.income || 0)
+            const expense = Number(monthItem.expense || 0)
+            const balance = getMonthlyBalance(monthItem)
 
             return (
-            <div key={monthItem.label || index} style={{ display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 10, alignItems: 'center' }}>
-              <span style={mutedTextStyle}>{monthItem.label || '-'}</span>
-              <div style={{ height: 12, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
-                <div
-                  style={{
-                    height: '100%',
-                    width: `${safeGetDashboardBarHeight(monthItem)}%`,
-                    background: (monthItem.balance || 0) >= 0 ? colors.blue : colors.red,
-                  }}
-                />
+              <div key={monthItem.month || monthItem.label || index} style={{ display: 'grid', gridTemplateColumns: '64px minmax(160px, 1fr) minmax(220px, auto)', gap: 10, alignItems: 'center' }}>
+                <span style={mutedTextStyle}>{monthItem.month || monthItem.label || '-'}</span>
+                <div style={{ height: 12, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden' }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      width: getMonthlyBarWidth(balance),
+                      background: balance >= 0 ? colors.blue : colors.red,
+                    }}
+                  />
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ color: colors.blue }}>{income.toFixed(2)} EUR</span>
+                  {' / '}
+                  <span style={{ color: colors.red }}>{expense.toFixed(2)} EUR</span>
+                  {' / '}
+                  <strong>{balance.toFixed(2)} EUR</strong>
+                </div>
               </div>
-              <strong>{(monthItem.balance || 0).toFixed(2)} EUR</strong>
-            </div>
             )
           })}
         </div>

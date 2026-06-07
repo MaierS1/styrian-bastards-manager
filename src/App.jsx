@@ -1925,7 +1925,12 @@ export default function App() {
         .filter((entry) => {
           if (!entry.entry_date) return false
           const date = new Date(entry.entry_date)
-          return date.getMonth() + 1 === monthNumber && entry.type === 'einnahme' && buildIsValidCashEntry(entry)
+          return (
+            date.getMonth() + 1 === monthNumber
+            && entry.type === 'einnahme'
+            && !entry.is_opening
+            && buildIsValidCashEntry(entry)
+          )
         })
         .reduce((sum, entry) => sum + buildCashAmountCents(entry), 0) / 100
 
@@ -1933,11 +1938,22 @@ export default function App() {
         .filter((entry) => {
           if (!entry.entry_date) return false
           const date = new Date(entry.entry_date)
-          return date.getMonth() + 1 === monthNumber && entry.type === 'ausgabe' && buildIsValidCashEntry(entry)
+          return (
+            date.getMonth() + 1 === monthNumber
+            && entry.type === 'ausgabe'
+            && !entry.is_opening
+            && buildIsValidCashEntry(entry)
+          )
         })
         .reduce((sum, entry) => sum + buildCashAmountCents(entry), 0) / 100
 
-      return { month, income, expense }
+      return {
+        month,
+        label: month,
+        income,
+        expense,
+        balance: income - expense,
+      }
     })
   }
 
