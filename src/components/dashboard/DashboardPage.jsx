@@ -1,6 +1,7 @@
 import { headingStyle, sectionStyle } from '../../styles/appStyles'
 import { DashboardSmartAlerts } from './DashboardSmartAlerts'
 import { DashboardMemberOverview } from './DashboardMemberOverview'
+import { DashboardUpcomingBirthdays } from './DashboardUpcomingBirthdays'
 import { DashboardCashOverview } from './DashboardCashOverview'
 import { DashboardFinanceOverview } from './DashboardFinanceOverview'
 import { DashboardCommercialOverview } from './DashboardCommercialOverview'
@@ -27,6 +28,7 @@ export function DashboardPage(props) {
     getDashboardBarHeight,
     memberTypeStats,
     feeStats,
+    upcomingBirthdays,
     getStatsMax,
     financeData,
     financeHealthStatus,
@@ -42,10 +44,10 @@ export function DashboardPage(props) {
     <section style={sectionStyle}>
       <h2 style={headingStyle}>Dashboard</h2>
 
-      <DashboardSmartAlerts alerts={alerts} getAlertStyle={getAlertStyle} />
+      <DashboardSmartAlerts alerts={alerts} getAlertStyle={getAlertStyle} onNavigate={onNavigate} />
 
       <div style={{ marginBottom: 18 }}>
-        <h3 style={headingStyle}>Mitglieder-Übersicht</h3>
+        <h3 style={headingStyle}>Mitglieder-Uebersicht</h3>
         <DashboardMemberOverview
           activeMembersCount={activeMembersCount}
           newMembersCount={newMembersCount}
@@ -59,7 +61,12 @@ export function DashboardPage(props) {
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <h3 style={headingStyle}>Kassa-Übersicht</h3>
+        <h3 style={headingStyle}>Naechste Geburtstage</h3>
+        <DashboardUpcomingBirthdays birthdays={upcomingBirthdays} onNavigate={onNavigate} />
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <h3 style={headingStyle}>Kassa-Uebersicht</h3>
         <DashboardCashOverview
           cashBalance={cashBalance}
           incomeTotal={incomeTotal}
@@ -85,13 +92,18 @@ export function DashboardPage(props) {
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <h3 style={headingStyle}>Nächstes Event</h3>
+        <h3 style={headingStyle}>Naechstes Event</h3>
         <DashboardNextEventCard nextEvent={nextEvent} onNavigate={onNavigate} />
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <h3 style={headingStyle}>Fanartikel/Shop-Status</h3>
-        <DashboardCommercialOverview commercialData={commercialData} onNavigate={onNavigate} />
+        <h3 style={headingStyle}>Fanartikel-/Shop-Status</h3>
+        <DashboardCommercialOverview commercialData={commercialData} onNavigate={onNavigate} section="merch" />
+      </div>
+
+      <div style={{ marginBottom: 18 }}>
+        <h3 style={headingStyle}>Sponsoren-Status</h3>
+        <DashboardCommercialOverview commercialData={commercialData} onNavigate={onNavigate} section="sponsors" />
       </div>
 
       <div style={{ marginBottom: 18 }}>

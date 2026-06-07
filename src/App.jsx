@@ -40,6 +40,7 @@ import {
   getDashboardCockpitTasks as buildDashboardCockpitTasks,
   getFinanceDashboardData as buildFinanceDashboardData,
   getFinanceHealthStatus as buildFinanceHealthStatus,
+  getUpcomingBirthdays as buildUpcomingBirthdays,
   isValidCashEntry as buildIsValidCashEntry,
 } from './services/helpers/dashboardHelpers'
 import {
@@ -1345,7 +1346,7 @@ export default function App() {
   }
 
   function getDashboardAlerts() {
-    const alerts = buildDashboardAlerts({
+    return buildDashboardAlerts({
       members,
       documents,
       fees,
@@ -1361,7 +1362,15 @@ export default function App() {
       getFee,
       getMemberById,
       commercialData: getCommercialDashboardData(),
+      events,
+      eventCheckins,
+      merchItems,
+      merchVariants,
+      shopOrders,
+      parkedProjectsVisible: canAccessParkedModules(),
     })
+  }
+    /*
 
     const currentBalance = getCashBalance()
     const upcomingEvents = getUpcomingEvents(14)
@@ -1403,6 +1412,11 @@ export default function App() {
     }
 
     return alerts
+  }
+
+    */
+  function getUpcomingBirthdays() {
+    return buildUpcomingBirthdays(members, { limit: 5 })
   }
 
   function getDashboardCockpitTasks() {
@@ -5681,6 +5695,7 @@ export default function App() {
             getDashboardBarHeight={getDashboardBarHeight}
             memberTypeStats={getMemberTypeStats()}
             feeStats={getFeeStats()}
+            upcomingBirthdays={getUpcomingBirthdays()}
             getStatsMax={getStatsMax}
             financeData={getFinanceDashboardData()}
             financeHealthStatus={getFinanceHealthStatus()}

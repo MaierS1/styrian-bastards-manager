@@ -92,6 +92,8 @@ export function getCommercialDashboardData({
 
   const expiringUntil = new Date(startOfToday)
   expiringUntil.setDate(startOfToday.getDate() + 30)
+  const expiringUntil90 = new Date(startOfToday)
+  expiringUntil90.setDate(startOfToday.getDate() + 90)
 
   const activeSponsors = sponsors.filter((sponsor) => sponsor.status === 'active')
   const activeContracts = sponsorContracts.filter((contract) => contract.status === 'active')
@@ -103,6 +105,16 @@ export function getCommercialDashboardData({
       endsOn.setHours(0, 0, 0, 0)
 
       return endsOn >= startOfToday && endsOn <= expiringUntil
+    })
+    .sort((a, b) => new Date(a.ends_on) - new Date(b.ends_on))
+  const expiringContracts90 = activeContracts
+    .filter((contract) => {
+      if (!contract.ends_on) return false
+
+      const endsOn = new Date(contract.ends_on)
+      endsOn.setHours(0, 0, 0, 0)
+
+      return endsOn >= startOfToday && endsOn <= expiringUntil90
     })
     .sort((a, b) => new Date(a.ends_on) - new Date(b.ends_on))
 
@@ -157,6 +169,7 @@ export function getCommercialDashboardData({
     activeSponsorsCount: activeSponsors.length,
     activeContractsCount: activeContracts.length,
     expiringContracts,
+    expiringContracts90,
     sponsorshipContractVolumeCents,
     merchRevenueCents,
     merchQuantitySold,
@@ -165,7 +178,7 @@ export function getCommercialDashboardData({
   }
 }
 
-export function getDashboardAlerts({
+function getLegacyDashboardAlerts({
   members,
   documents,
   fees,
@@ -282,7 +295,457 @@ export function getDashboardAlerts({
   return alerts
 }
 
-function getDaysUntil(dateValue, today = new Date()) {
+function createAlert({
+  id,
+  priority,
+  type,
+  title,
+  message,
+  targetPage,
+  sortValue = 0,
+}) {
+  return {
+    id,
+    priority,
+    type,
+    title,
+    message,
+    targetPage,
+    sortValue,
+  }
+}
+
+function parseBirthdate(value) {
+  if (!value) return null
+
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function getNextBirthdayDate(birthdate, today = new Date()) {
+  const parsedBirthdate = parseBirthdate(birthdate)
+  if (!parsedBirthdate) return null
+
+  const startOfToday = new Date(today)
+  startOfToday.setHours(0, 0, 0, 0)
+
+  const nextBirthday = new Date(
+    startOfToday.getFullYear(),
+    parsedBirthdate.getMonth(),
+    parsedBirthdate.getDate()
+  )
+  nextBirthday.setHours(0, 0, 0, 0)
+
+  if (nextBirthday < startOfToday) {
+    nextBirthday.setFullYear(startOfToday.getFullYear() + 1)
+  }
+
+  return nextBirthday
+}
+
+export function getAgeOnBirthday(birthdate, birthdayDate) {
+  const parsedBirthdate = parseBirthdate(birthdate)
+  if (!parsedBirthdate || !birthdayDate) return null
+
+  return birthdayDate.getFullYear() - parsedBirthdate.getFullYear()
+}
+
+export function getUpcomingBirthdays(members = [], { today = new Date(), limit = 5, daysAhead = 366 } = {}) {
+  const safeMembers = Array.isArray(members) ? members : []
+
+  return safeMembers
+    .filter((member) => member && !member.is_test && member.birthdate)
+    .map((member) => {
+      const nextBirthdayDate = getNextBirthdayDate(member.birthdate, today)
+      const daysUntil = getDaysUntil(nextBirthdayDate, today)
+
+      return {
+        id: member.id,
+        member,
+        name: `${member.first_name || ''} ${member.last_name || ''}`.trim() || 'Mitglied',
+        birthdate: member.birthdate,
+        nextBirthdayDate,
+        age: getAgeOnBirthday(member.birthdate, nextBirthdayDate),
+        daysUntil,
+      }
+    })
+    .filter((birthday) => birthday.nextBirthdayDate && birthday.daysUntil !== null && birthday.daysUntil <= daysAhead)
+    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .slice(0, limit)
+}
+
+function isNewWithinDays(dateValue, days, today = new Date()) {
+  if (!dateValue) return false
+
+  const createdAt = new Date(dateValue).getTime()
+  if (!Number.isFinite(createdAt)) return false
+
+  return createdAt >= today.getTime() - days * 24 * 60 * 60 * 1000
+}
+
+function isOpenShopOrder(order) {
+  return !['completed', 'cancelled'].includes(String(order?.status || '').toLowerCase())
+}
+
+function getMemberMissingRequiredFields(member) {
+  return [
+    ['email', 'E-Mail'],
+    ['phone', 'Telefon'],
+    ['street', 'Strasse'],
+    ['postal_code', 'PLZ'],
+    ['city', 'Ort'],
+    ['birthdate', 'Geburtsdatum'],
+  ].filter(([field]) => isBlank(member?.[field])).map(([, label]) => label)
+}
+
+export function getDashboardAlerts({
+  members = [],
+  documents = [],
+  fees = [],
+  cashEntries = [],
+  selectedCashYear,
+  hasOpeningForYear,
+  getEntryYear,
+  getUpcomingEvents,
+  getTestMembers,
+  getTestInvoices,
+  getTestCashEntries,
+  getCashBalance,
+  getFee,
+  getMemberById,
+  commercialData,
+  events = [],
+  eventCheckins = [],
+  merchItems = [],
+  merchVariants = [],
+  shopOrders = [],
+  parkedProjectsVisible = false,
+  minimumCashBalance = 200,
+  today = new Date(),
+}) {
+  const alerts = []
+  const safeMembers = Array.isArray(members) ? members : []
+  const safeDocuments = Array.isArray(documents) ? documents : []
+  const safeFees = Array.isArray(fees) ? fees : []
+  const safeCashEntries = Array.isArray(cashEntries) ? cashEntries : []
+  const safeEventCheckins = Array.isArray(eventCheckins) ? eventCheckins : []
+  const safeMerchItems = Array.isArray(merchItems) ? merchItems : []
+  const safeMerchVariants = Array.isArray(merchVariants) ? merchVariants : []
+  const safeShopOrders = Array.isArray(shopOrders) ? shopOrders : []
+  const safeGetUpcomingEvents = typeof getUpcomingEvents === 'function' ? getUpcomingEvents : () => []
+  const safeGetFee = typeof getFee === 'function' ? getFee : () => null
+  const safeGetMemberById = typeof getMemberById === 'function' ? getMemberById : () => null
+  const safeGetCashBalance = typeof getCashBalance === 'function' ? getCashBalance : () => 0
+  const safeHasOpeningForYear = typeof hasOpeningForYear === 'function' ? hasOpeningForYear : () => true
+  const safeGetEntryYear = typeof getEntryYear === 'function' ? getEntryYear : () => ''
+  const safeCommercialData = commercialData || {}
+  const next7DayEvents = safeGetUpcomingEvents(7)
+  const next30DayEvents = safeGetUpcomingEvents(30)
+  const openFeeMembers = safeMembers.filter((member) => {
+    if (member.is_test) return false
+
+    const fee = safeGetFee(member.id)
+    return fee && !fee.paid && Number(fee.amount || 0) > 0
+  })
+  const openFeeTotal = getOpenFeesTotal(safeFees, safeGetMemberById)
+  const currentBalance = Number(safeGetCashBalance() || 0)
+  const missingRequiredDocuments = []
+  const activeMerchVariants = safeMerchVariants.filter((variant) => {
+    const item = safeMerchItems.find((candidate) => candidate.id === variant?.merch_item_id)
+    return variant?.status === 'active' && item?.status === 'active'
+  })
+  const emptyStockVariants = activeMerchVariants.filter((variant) => Number(variant.stock_quantity || 0) === 0)
+  const lowStockVariants = activeMerchVariants.filter((variant) => {
+    const stock = Number(variant.stock_quantity || 0)
+    const reorderLevel = Number(variant.reorder_level || 0)
+    return stock > 0 && reorderLevel > 0 && stock < reorderLevel
+  })
+  const openShopOrders = safeShopOrders.filter(isOpenShopOrder)
+  const newShopOrders = safeShopOrders.filter((order) => isNewWithinDays(order.created_at || order.order_date, 30, today))
+  const newMembers = safeMembers.filter((member) => !member.is_test && isNewWithinDays(member.created_at, 30, today))
+  const missingRequiredMembers = safeMembers.filter((member) => !member.is_test && getMemberMissingRequiredFields(member).length > 0)
+  const upcomingBirthdays = getUpcomingBirthdays(safeMembers, { today, limit: safeMembers.length || 1, daysAhead: 3 })
+  const expiringContracts30 = Array.isArray(safeCommercialData.expiringContracts) ? safeCommercialData.expiringContracts : []
+  const expiringContracts90 = Array.isArray(safeCommercialData.expiringContracts90) ? safeCommercialData.expiringContracts90 : expiringContracts30
+  const contractsUnder30 = expiringContracts30.filter((contract) => {
+    const daysUntil = getDaysUntil(contract?.ends_on, today)
+    return daysUntil !== null && daysUntil >= 0 && daysUntil < 30
+  })
+  const contracts30To90 = expiringContracts90.filter((contract) => {
+    const daysUntil = getDaysUntil(contract?.ends_on, today)
+    return daysUntil !== null && daysUntil >= 30 && daysUntil <= 90
+  })
+  const eventsWithoutParticipants = next7DayEvents.filter((event) => {
+    const registeredCount = Number(event?.registered_count || 0)
+    const checkedInCount = safeEventCheckins.filter((checkin) => checkin?.event_name === event?.name).length
+    return registeredCount + checkedInCount === 0
+  })
+
+  if (!safeDocuments.some((document) => document.category === 'statuten')) {
+    missingRequiredDocuments.push('Statuten')
+  }
+
+  if (openFeeTotal > 500) {
+    alerts.push(createAlert({
+      id: 'fees-open-critical',
+      priority: 'critical',
+      type: 'danger',
+      title: 'Offene Mitgliedsbeitraege ueber 500 EUR',
+      message: `${openFeeMembers.length} Mitglied(er) haben offene Beitraege. Offene Summe: ${openFeeTotal.toFixed(2)} EUR.`,
+      targetPage: 'fees',
+      sortValue: -openFeeTotal,
+    }))
+  }
+
+  if (contractsUnder30.length > 0) {
+    const nextContract = contractsUnder30[0] || {}
+    const daysUntil = getDaysUntil(nextContract.ends_on, today)
+
+    alerts.push(createAlert({
+      id: 'sponsors-expiring-critical',
+      type: 'danger',
+      priority: 'critical',
+      title: 'Sponsor laeuft in weniger als 30 Tagen aus',
+      message: `${contractsUnder30.length} aktive Sponsor-Vertrag/Vertraege laufen bald aus. Naechster: ${nextContract.title || 'Ohne Titel'} in ${daysUntil} Tag(en).`,
+      targetPage: 'sponsors',
+      sortValue: daysUntil ?? 99,
+    }))
+  }
+
+  if (eventsWithoutParticipants.length > 0) {
+    const nextEvent = eventsWithoutParticipants[0] || {}
+    const daysUntil = getDaysUntil(nextEvent.event_date, today)
+
+    alerts.push(createAlert({
+      id: 'events-no-participants-critical',
+      type: 'danger',
+      priority: 'critical',
+      title: 'Event ohne Teilnehmer',
+      message: `${eventsWithoutParticipants.length} Event(s) in den naechsten 7 Tagen haben keine Teilnehmer. Naechstes: ${nextEvent.name || 'Event'} in ${daysUntil} Tag(en).`,
+      targetPage: 'events',
+      sortValue: daysUntil ?? 99,
+    }))
+  }
+
+  if (currentBalance < minimumCashBalance) {
+    alerts.push(createAlert({
+      id: 'cash-below-minimum',
+      type: 'danger',
+      priority: 'critical',
+      title: 'Kassastand unter Mindestwert',
+      message: `Der aktuelle Kassastand liegt bei ${currentBalance.toFixed(2)} EUR. Mindestwert: ${Number(minimumCashBalance || 0).toFixed(2)} EUR.`,
+      targetPage: 'cash',
+      sortValue: currentBalance,
+    }))
+  }
+
+  if (emptyStockVariants.length > 0) {
+    alerts.push(createAlert({
+      id: 'merch-empty-stock',
+      type: 'danger',
+      priority: 'critical',
+      title: 'Fanartikel ausverkauft',
+      message: `${emptyStockVariants.length} aktive Fanartikel-Variante(n) haben Bestand 0.`,
+      targetPage: 'merch',
+      sortValue: -emptyStockVariants.length,
+    }))
+  }
+
+  if (lowStockVariants.length > 0) {
+    const nextVariant = lowStockVariants[0] || {}
+
+    alerts.push(createAlert({
+      id: 'merch-low-stock',
+      type: 'warning',
+      priority: 'attention',
+      title: 'Lagerbestand unter Mindestbestand',
+      message: `${lowStockVariants.length} aktive Variante(n) liegen unter dem Mindestbestand. Niedrigster Bestand: ${Number(nextVariant.stock_quantity || 0)}.`,
+      targetPage: 'merch',
+      sortValue: Number(nextVariant.stock_quantity || 0),
+    }))
+  }
+
+  if (openShopOrders.length > 5) {
+    alerts.push(createAlert({
+      id: 'shop-orders-open-attention',
+      type: 'warning',
+      priority: 'attention',
+      title: 'Mehr als 5 offene Bestellungen',
+      message: `${openShopOrders.length} Shop-Bestellung(en) sind noch offen.`,
+      targetPage: 'merch',
+      sortValue: -openShopOrders.length,
+    }))
+  }
+
+  if (next30DayEvents.length > 0) {
+    const nextEvent = next30DayEvents[0] || {}
+    const daysUntil = getDaysUntil(nextEvent.event_date, today)
+
+    alerts.push(createAlert({
+      id: 'events-next-30-days',
+      type: 'warning',
+      priority: 'attention',
+      title: 'Event in den naechsten 30 Tagen',
+      message: `${next30DayEvents.length} Event(s) stehen in den naechsten 30 Tagen an. Naechstes: ${nextEvent.name || 'Event'} in ${daysUntil} Tag(en).`,
+      targetPage: 'events',
+      sortValue: daysUntil ?? 99,
+    }))
+  }
+
+  if (contracts30To90.length > 0) {
+    const nextContract = contracts30To90[0] || {}
+    const daysUntil = getDaysUntil(nextContract.ends_on, today)
+
+    alerts.push(createAlert({
+      id: 'sponsors-expiring-90-days',
+      type: 'warning',
+      priority: 'attention',
+      title: 'Sponsor laeuft in den naechsten 90 Tagen aus',
+      message: `${contracts30To90.length} Sponsor-Vertrag/Vertraege laufen in 30 bis 90 Tagen aus. Naechster: ${nextContract.title || 'Ohne Titel'} in ${daysUntil} Tag(en).`,
+      targetPage: 'sponsors',
+      sortValue: daysUntil ?? 99,
+    }))
+  }
+
+  if (missingRequiredMembers.length > 0) {
+    alerts.push(createAlert({
+      id: 'members-missing-required-fields',
+      type: 'warning',
+      priority: 'attention',
+      title: 'Mitglieder mit fehlenden Pflichtdaten',
+      message: `${missingRequiredMembers.length} Mitglied(er) haben fehlende Pflichtdaten.`,
+      targetPage: 'members',
+      sortValue: -missingRequiredMembers.length,
+    }))
+  }
+
+  if (missingRequiredDocuments.length > 0) {
+    alerts.push(createAlert({
+      id: 'documents-missing-required',
+      type: 'warning',
+      priority: 'attention',
+      title: 'Wichtige Dokumente fehlen',
+      message: `${missingRequiredDocuments.join(', ')} noch nicht im Dokumentenbereich hochgeladen.`,
+      targetPage: 'documents',
+    }))
+  }
+
+  if (getTestMembers?.().length > 0 || getTestInvoices?.().length > 0 || getTestCashEntries?.().length > 0) {
+    alerts.push(createAlert({
+      id: 'test-data-present',
+      type: 'warning',
+      priority: 'attention',
+      title: 'Testdaten vorhanden',
+      message: `${getTestMembers?.().length || 0} Testmitglied(er), ${getTestInvoices?.().length || 0} Testrechnung(en) und ${getTestCashEntries?.().length || 0} Test-Kassa-Eintrag/Eintraege vorhanden.`,
+      targetPage: 'admin',
+    }))
+  }
+
+  if (newMembers.length > 0) {
+    alerts.push(createAlert({
+      id: 'members-new-30-days',
+      type: 'info',
+      priority: 'info',
+      title: 'Neue Mitglieder',
+      message: `${newMembers.length} neue Mitglied(er) in den letzten 30 Tagen.`,
+      targetPage: 'members',
+      sortValue: -newMembers.length,
+    }))
+  }
+
+  if (newShopOrders.length > 0) {
+    alerts.push(createAlert({
+      id: 'shop-orders-new',
+      type: 'info',
+      priority: 'info',
+      title: 'Neue Bestellungen',
+      message: `${newShopOrders.length} neue Bestellung(en) in den letzten 30 Tagen.`,
+      targetPage: 'merch',
+      sortValue: -newShopOrders.length,
+    }))
+  }
+
+  if (parkedProjectsVisible) {
+    alerts.push(createAlert({
+      id: 'parked-projects',
+      type: 'info',
+      priority: 'info',
+      title: 'Geparkte Projekte vorhanden',
+      message: 'Einkauf & Preisvergleich ist vorlaeufig deaktiviert und im Bereich Geparkte Module dokumentiert.',
+      targetPage: 'parkedModules',
+    }))
+  }
+
+  upcomingBirthdays.forEach((birthday) => {
+    if (birthday.daysUntil === 0) {
+      alerts.push(createAlert({
+        id: `birthday-today-${birthday.id}`,
+        type: 'info',
+        priority: 'info',
+        title: 'Geburtstag heute',
+        message: `${birthday.name} hat heute Geburtstag.`,
+        targetPage: 'members',
+      }))
+    } else if (birthday.daysUntil > 0 && birthday.daysUntil <= 3) {
+      alerts.push(createAlert({
+        id: `birthday-soon-${birthday.id}`,
+        type: 'info',
+        priority: 'info',
+        title: 'Geburtstag in Kuerze',
+        message: `${birthday.name} hat in ${birthday.daysUntil} Tag(en) Geburtstag.`,
+        targetPage: 'members',
+        sortValue: birthday.daysUntil,
+      }))
+    }
+  })
+
+  if (openFeeMembers.length > 0 && openFeeTotal <= 500) {
+    alerts.push(createAlert({
+      id: 'fees-open-info',
+      type: 'info',
+      priority: 'info',
+      title: 'Offene Mitgliedsbeitraege',
+      message: `${openFeeMembers.length} Mitglied(er) haben offene Beitraege. Offene Summe: ${openFeeTotal.toFixed(2)} EUR.`,
+      targetPage: 'fees',
+    }))
+  }
+
+  if (!safeHasOpeningForYear(selectedCashYear) && selectedCashYear !== 'alle') {
+    const previousYear = Number(selectedCashYear) - 1
+    const hasPreviousYearEntries = safeCashEntries.some((entry) => safeGetEntryYear(entry) === String(previousYear))
+
+    if (hasPreviousYearEntries) {
+      alerts.push(createAlert({
+        id: 'cash-carryover-missing',
+        type: 'info',
+        priority: 'info',
+        title: 'Jahresuebertrag pruefen',
+        message: `Fuer ${selectedCashYear} ist noch kein Uebertrag Vorjahr vorhanden. Du kannst ihn aus ${previousYear} automatisch erstellen.`,
+        targetPage: 'cash',
+      }))
+    }
+  }
+
+  if (alerts.length === 0) {
+    alerts.push(createAlert({
+      id: 'all-clear',
+      priority: 'info',
+      type: 'success',
+      title: 'Alles im gruenen Bereich',
+      message: 'Keine dringenden Hinweise vorhanden.',
+      targetPage: 'dashboard',
+    }))
+  }
+
+  const priorityOrder = { critical: 0, attention: 1, info: 2 }
+  return alerts.sort((a, b) => {
+    const priorityDiff = (priorityOrder[a.priority] ?? 3) - (priorityOrder[b.priority] ?? 3)
+    if (priorityDiff !== 0) return priorityDiff
+    return Number(a.sortValue || 0) - Number(b.sortValue || 0)
+  })
+}
+
+export function getDaysUntil(dateValue, today = new Date()) {
   if (!dateValue) return null
 
   const startOfToday = new Date(today)
