@@ -543,11 +543,21 @@ export function exportFullBackupJson({
     ...normalizedTables,
   }
 
+  const filename = `styrian-bastards-backup-${exportedAt.slice(0, 10)}.json`
+
   downloadTextFileFn(
-    `styrian-bastards-backup-${exportedAt.slice(0, 10)}.json`,
+    filename,
     JSON.stringify(backup, null, 2),
     'application/json;charset=utf-8'
   )
+
+  return {
+    filename,
+    exported_at: exportedAt,
+    backup_version: backup.backup_version,
+    includes_asset_manifest: backup.includes_asset_manifest,
+    asset_count: backup.asset_count,
+  }
 }
 
 export function exportAuditLogsCsv({

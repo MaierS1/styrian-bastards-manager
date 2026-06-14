@@ -273,6 +273,108 @@ async function buildStorageAssetManifest(tableData) {
   }
 }
 
+async function checkStorageBucket(bucket) {
+  try {
+    const { data, error } = await supabase.storage
+      .from(bucket.name)
+      .list('', { limit: 1, offset: 0 })
+
+    if (error) {
+      return {
+        bucket: bucket.name,
+        status: 'warning',
+        readable: false,
+        message: error.message || 'Bucket ist nicht lesbar.',
+      }
+    }
+
+    return {
+      bucket: bucket.name,
+      status: 'ok',
+      readable: true,
+      sample_count: Array.isArray(data) ? data.length : 0,
+      message: 'Bucket erreichbar.',
+    }
+  } catch (error) {
+    return {
+      bucket: bucket.name,
+      status: 'warning',
+      readable: false,
+      message: error?.message || 'Bucket ist nicht lesbar.',
+    }
+  }
+}
+
+export async function checkBackupSystemStatus() {
+  const checkedAt = new Date().toISOString()
+  const database = {
+    status: 'error',
+    label: 'nicht erreichbar',
+    member_count: null,
+    message: '',
+  }
+
+  try {
+    const { count, error } = await supabase
+      .from('members')
+      .select('id', { count: 'exact', head: true })
+
+    if (error) {
+      database.message = error.message || 'Supabase Datenbank konnte nicht abgefragt werden.'
+    } else {
+      database.status = 'ok'
+      database.label = 'erreichbar'
+      database.member_count = count ?? 0
+      database.message = 'Members-Count erfolgreich abgefragt.'
+    }
+  } catch (error) {
+    database.message = error?.message || 'Supabase Datenbank konnte nicht abgefragt werden.'
+  }
+
+  const bucketResult = await getStorageBuckets()
+  const bucketChecks = await Promise.all(bucketResult.buckets.map(checkStorageBucket))
+  const readableBuckets = bucketChecks.filter((bucket) => bucket.readable)
+  const skippedBuckets = [
+    ...bucketResult.warnings,
+    ...bucketChecks
+      .filter((bucket) => !bucket.readable)
+      .map((bucket) => ({ bucket: bucket.bucket, reason: bucket.message })),
+  ]
+  const storage = {
+    status: bucketChecks.length === 0 ? 'error' : skippedBuckets.length > 0 ? 'warning' : 'ok',
+    label: bucketChecks.length === 0 ? 'nicht erreichbar' : skippedBuckets.length > 0 ? 'Warnung' : 'erreichbar',
+    bucket_count: readableBuckets.length,
+    buckets_checked: bucketChecks,
+    skipped_buckets: skippedBuckets,
+    message: skippedBuckets.length > 0
+      ? 'Einige Buckets konnten nicht gelesen werden.'
+      : 'Storage-Buckets erreichbar.',
+  }
+
+  return {
+    checked_at: checkedAt,
+    database,
+    storage,
+    backup_module: {
+      status: 'ok',
+      label: 'unterstützt',
+      manifest_supported: true,
+      asset_manifest_supported: true,
+      restore_mode: 'additive_only',
+      local_download_note: 'Lokale Downloads werden nicht automatisch serverseitig gespeichert.',
+    },
+    integration: {
+      status: 'manual',
+      label: 'manuell prüfen',
+      notes: [
+        'Homepage-Daten kommen teilweise aus Supabase.',
+        'Die Manager-App ist die zentrale Datenquelle.',
+        'GitHub/Cloudflare-Status wird in dieser Version nur als manuelle Prüfliste angezeigt.',
+      ],
+    },
+  }
+}
+
 export async function exportFullBackupJson({
   selectedCashYear,
   members,
