@@ -184,6 +184,7 @@ import {
 import {
   exportFullBackupJson as exportFullBackupJsonBackupService,
   getRestoreCount as getRestoreCountService,
+  getSafeRestorePreview as getSafeRestorePreviewService,
   handleRestoreFile as handleRestoreFileService,
   restoreFullBackup as restoreFullBackupService,
 } from './services/backup/backupRestoreService'
@@ -2215,6 +2216,16 @@ export default function App() {
     return getRestoreCountService(restoreData, key)
   }
 
+  function getSafeRestorePreview() {
+    return getSafeRestorePreviewService({
+      restoreData,
+      sponsors,
+      sponsorContracts,
+      mediaItems,
+      events,
+    })
+  }
+
   async function restoreFullBackup() {
     return restoreFullBackupService({
       isAdmin,
@@ -2227,6 +2238,9 @@ export default function App() {
       cashEntries,
       eventCheckins,
       documents,
+      sponsors,
+      sponsorContracts,
+      mediaItems,
       setRestoreData,
       setRestoreFileName,
       setRestoreImporting,
@@ -6331,6 +6345,7 @@ export default function App() {
             restoreFileName,
             restoreData,
             getRestoreCount,
+            getSafeRestorePreview,
             restoreFullBackup,
             restoreImporting,
             setRestoreData,

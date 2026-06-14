@@ -509,6 +509,194 @@ export function deduplicateById(rows, existingRows) {
     .map(stripSystemFields)
 }
 
+function normalizeConflictValue(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function getRowsWithId(restoreData, key) {
+  return (Array.isArray(restoreData?.[key]) ? restoreData[key] : []).filter((row) => row?.id)
+}
+
+function buildExistingIdSet(rows) {
+  return new Set((rows || []).map((row) => row.id).filter(Boolean))
+}
+
+function buildExistingValueMap(rows, field) {
+  const valueMap = new Map()
+
+  ;(rows || []).forEach((row) => {
+    const value = normalizeConflictValue(row?.[field])
+    if (value) valueMap.set(value, row.id)
+  })
+
+  return valueMap
+}
+
+function createPlanSummary(total, importable, skipped, conflicts) {
+  return {
+    total,
+    importable: importable.length,
+    skipped: skipped.length,
+    conflicts: conflicts.length,
+  }
+}
+
+function planSponsorRestore(restoreData, existingSponsors) {
+  const rows = getRowsWithId(restoreData, 'sponsors')
+  const existingIds = buildExistingIdSet(existingSponsors)
+  const existingNames = buildExistingValueMap(existingSponsors, 'name')
+  const importable = []
+  const skipped = []
+  const conflicts = []
+
+  rows.forEach((row) => {
+    if (existingIds.has(row.id)) {
+      skipped.push({ id: row.id, reason: 'ID existiert bereits.' })
+      return
+    }
+
+    const name = normalizeConflictValue(row.name)
+    const existingNameId = name ? existingNames.get(name) : null
+
+    if (existingNameId && existingNameId !== row.id) {
+      conflicts.push({ id: row.id, reason: `Sponsor-Name existiert bereits: ${row.name}` })
+      return
+    }
+
+    importable.push(row)
+  })
+
+  return {
+    rows: importable.map(stripSystemFields),
+    importedIds: new Set(importable.map((row) => row.id)),
+    skipped,
+    conflicts,
+    summary: createPlanSummary(rows.length, importable, skipped, conflicts),
+  }
+}
+
+function planSponsorContractRestore(restoreData, existingSponsorContracts, existingSponsors, importedSponsorIds) {
+  const rows = getRowsWithId(restoreData, 'sponsor_contracts')
+  const existingIds = buildExistingIdSet(existingSponsorContracts)
+  const availableSponsorIds = buildExistingIdSet(existingSponsors)
+  const importable = []
+  const skipped = []
+  const conflicts = []
+
+  importedSponsorIds.forEach((id) => availableSponsorIds.add(id))
+
+  rows.forEach((row) => {
+    if (existingIds.has(row.id)) {
+      skipped.push({ id: row.id, reason: 'ID existiert bereits.' })
+      return
+    }
+
+    if (!row.sponsor_id || !availableSponsorIds.has(row.sponsor_id)) {
+      skipped.push({ id: row.id, reason: 'Zugehöriger sponsor_id fehlt.' })
+      return
+    }
+
+    importable.push(row)
+  })
+
+  return {
+    rows: importable.map(stripSystemFields),
+    skipped,
+    conflicts,
+    summary: createPlanSummary(rows.length, importable, skipped, conflicts),
+  }
+}
+
+function hasMissingReference(row, fields, availableIds) {
+  return fields.some((field) => row[field] && !availableIds.has(row[field]))
+}
+
+function planMediaRestore(restoreData, existingMediaItems, existingEvents, existingSponsors, importedSponsorIds) {
+  const rows = getRowsWithId(restoreData, 'media_items')
+  const existingIds = buildExistingIdSet(existingMediaItems)
+  const existingSlugs = buildExistingValueMap(existingMediaItems, 'slug')
+  const availableEventIds = buildExistingIdSet(existingEvents)
+  const availableSponsorIds = buildExistingIdSet(existingSponsors)
+  const importable = []
+  const skipped = []
+  const conflicts = []
+
+  importedSponsorIds.forEach((id) => availableSponsorIds.add(id))
+
+  rows.forEach((row) => {
+    if (existingIds.has(row.id)) {
+      skipped.push({ id: row.id, reason: 'ID existiert bereits.' })
+      return
+    }
+
+    const slug = normalizeConflictValue(row.slug)
+    const existingSlugId = slug ? existingSlugs.get(slug) : null
+
+    if (existingSlugId && existingSlugId !== row.id) {
+      conflicts.push({ id: row.id, reason: `Slug existiert bereits: ${row.slug}` })
+      return
+    }
+
+    if (hasMissingReference(row, ['related_event_id', 'event_id'], availableEventIds)) {
+      skipped.push({ id: row.id, reason: 'Zugehöriger Event fehlt.' })
+      return
+    }
+
+    if (hasMissingReference(row, ['related_sponsor_id', 'sponsor_id'], availableSponsorIds)) {
+      skipped.push({ id: row.id, reason: 'Zugehöriger Sponsor fehlt.' })
+      return
+    }
+
+    importable.push(row)
+  })
+
+  return {
+    rows: importable.map(stripSystemFields),
+    skipped,
+    conflicts,
+    summary: createPlanSummary(rows.length, importable, skipped, conflicts),
+  }
+}
+
+export function getSafeRestorePreview({
+  restoreData,
+  sponsors = [],
+  sponsorContracts = [],
+  mediaItems = [],
+  events = [],
+}) {
+  const sponsorsPlan = planSponsorRestore(restoreData, sponsors)
+  const sponsorContractsPlan = planSponsorContractRestore(
+    restoreData,
+    sponsorContracts,
+    sponsors,
+    sponsorsPlan.importedIds
+  )
+  const mediaItemsPlan = planMediaRestore(
+    restoreData,
+    mediaItems,
+    events,
+    sponsors,
+    sponsorsPlan.importedIds
+  )
+
+  return {
+    sponsors: sponsorsPlan.summary,
+    sponsor_contracts: sponsorContractsPlan.summary,
+    media_items: mediaItemsPlan.summary,
+    conflicts: [
+      ...sponsorsPlan.conflicts.map((item) => ({ table: 'sponsors', ...item })),
+      ...sponsorContractsPlan.conflicts.map((item) => ({ table: 'sponsor_contracts', ...item })),
+      ...mediaItemsPlan.conflicts.map((item) => ({ table: 'media_items', ...item })),
+    ],
+    skipped: [
+      ...sponsorsPlan.skipped.map((item) => ({ table: 'sponsors', ...item })),
+      ...sponsorContractsPlan.skipped.map((item) => ({ table: 'sponsor_contracts', ...item })),
+      ...mediaItemsPlan.skipped.map((item) => ({ table: 'media_items', ...item })),
+    ],
+  }
+}
+
 export async function restoreFullBackup({
   isAdmin,
   restoreData,
@@ -520,6 +708,9 @@ export async function restoreFullBackup({
   cashEntries,
   eventCheckins,
   documents,
+  sponsors,
+  sponsorContracts,
+  mediaItems,
   setRestoreData,
   setRestoreFileName,
   setRestoreImporting,
@@ -534,6 +725,20 @@ export async function restoreFullBackup({
     return
   }
 
+  const sponsorsPlan = planSponsorRestore(restoreData, sponsors)
+  const sponsorContractsPlan = planSponsorContractRestore(
+    restoreData,
+    sponsorContracts,
+    sponsors,
+    sponsorsPlan.importedIds
+  )
+  const mediaItemsPlan = planMediaRestore(
+    restoreData,
+    mediaItems,
+    events,
+    sponsors,
+    sponsorsPlan.importedIds
+  )
   const confirmed = confirmFn(
       `Backup wiederherstellen?\n\n` +
       `Mitglieder: ${getRestoreCount(restoreData, 'members')}\n` +
@@ -543,7 +748,10 @@ export async function restoreFullBackup({
       `Kassa: ${getRestoreCount(restoreData, 'cash_entries')}\n` +
       `Events: ${getRestoreCount(restoreData, 'events')}\n` +
       `Check-ins: ${getRestoreCount(restoreData, 'event_checkins')}\n` +
-      `Dokumente: ${getRestoreCount(restoreData, 'documents')}\n\n` +
+      `Dokumente: ${getRestoreCount(restoreData, 'documents')}\n` +
+      `Sponsoren: ${getRestoreCount(restoreData, 'sponsors')} (importierbar: ${sponsorsPlan.summary.importable})\n` +
+      `Sponsor-Verträge: ${getRestoreCount(restoreData, 'sponsor_contracts')} (importierbar: ${sponsorContractsPlan.summary.importable})\n` +
+      `Medien: ${getRestoreCount(restoreData, 'media_items')} (importierbar: ${mediaItemsPlan.summary.importable})\n\n` +
       `Es werden nur Datensätze mit noch nicht vorhandener ID importiert. Bestehende Daten werden nicht überschrieben.`
   )
 
@@ -579,6 +787,21 @@ export async function restoreFullBackup({
         existing: events,
       },
       {
+        table: 'sponsors',
+        backupKey: 'sponsors',
+        plannedRows: sponsorsPlan.rows,
+      },
+      {
+        table: 'sponsor_contracts',
+        backupKey: 'sponsor_contracts',
+        plannedRows: sponsorContractsPlan.rows,
+      },
+      {
+        table: 'media_items',
+        backupKey: 'media_items',
+        plannedRows: mediaItemsPlan.rows,
+      },
+      {
         table: 'cash_entries',
         backupKey: 'cash_entries',
         existing: cashEntries,
@@ -596,10 +819,20 @@ export async function restoreFullBackup({
     ]
 
     const importedSummary = []
+    const skippedSummary = [
+      ...sponsorsPlan.skipped.map((item) => `sponsors ${item.id}: ${item.reason}`),
+      ...sponsorsPlan.conflicts.map((item) => `sponsors ${item.id}: ${item.reason}`),
+      ...sponsorContractsPlan.skipped.map((item) => `sponsor_contracts ${item.id}: ${item.reason}`),
+      ...sponsorContractsPlan.conflicts.map((item) => `sponsor_contracts ${item.id}: ${item.reason}`),
+      ...mediaItemsPlan.skipped.map((item) => `media_items ${item.id}: ${item.reason}`),
+      ...mediaItemsPlan.conflicts.map((item) => `media_items ${item.id}: ${item.reason}`),
+    ]
 
     for (const step of restoreSteps) {
-      const rows = Array.isArray(restoreData[step.backupKey]) ? restoreData[step.backupKey] : []
-      const rowsToInsert = deduplicateById(rows, step.existing)
+      const rowsToInsert = step.plannedRows || deduplicateById(
+        Array.isArray(restoreData[step.backupKey]) ? restoreData[step.backupKey] : [],
+        step.existing
+      )
 
       if (rowsToInsert.length === 0) {
         importedSummary.push(`${step.table}: 0`)
@@ -609,8 +842,8 @@ export async function restoreFullBackup({
       const { error } = await supabase.from(step.table).insert(rowsToInsert)
 
       if (error) {
-        alertFn(`Fehler beim Restore in ${step.table}: ${error.message}`)
-        return
+        importedSummary.push(`${step.table}: Fehler (${error.message})`)
+        continue
       }
 
       importedSummary.push(`${step.table}: ${rowsToInsert.length}`)
@@ -620,7 +853,11 @@ export async function restoreFullBackup({
     setRestoreFileName('')
     await loadAll()
 
-    alertFn(`Backup wurde wiederhergestellt.\n\nImportiert:\n${importedSummary.join('\n')}`)
+    alertFn(
+      `Backup wurde wiederhergestellt.\n\n` +
+      `Importiert:\n${importedSummary.join('\n')}` +
+      (skippedSummary.length > 0 ? `\n\nÜbersprungen/Konflikte:\n${skippedSummary.join('\n')}` : '')
+    )
   } finally {
     setRestoreImporting(false)
   }

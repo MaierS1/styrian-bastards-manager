@@ -35,6 +35,7 @@ export function AdminBackupRestore({
   restoreFileName,
   restoreData,
   getRestoreCount,
+  getSafeRestorePreview,
   restoreFullBackup,
   restoreImporting,
   setRestoreData,
@@ -168,6 +169,8 @@ export function AdminBackupRestore({
       setBackupExporting(false)
     }
   }
+
+  const safeRestorePreview = restoreData && getSafeRestorePreview ? getSafeRestorePreview() : null
 
   return (
     <section style={sectionStyle}>
@@ -428,6 +431,9 @@ export function AdminBackupRestore({
             Wähle eine zuvor exportierte JSON-Backup-Datei aus. Die App importiert nur Datensätze,
             deren ID noch nicht vorhanden ist. Bestehende Daten werden nicht überschrieben.
           </p>
+          <p style={{ ...mutedTextStyle, fontWeight: 700 }}>
+            Der Restore ist additiv. Bestehende Daten werden nicht überschrieben.
+          </p>
 
           <input
             type="file"
@@ -463,6 +469,42 @@ export function AdminBackupRestore({
               Check-ins: {getRestoreCount('event_checkins')}
               <br />
               Dokumente: {getRestoreCount('documents')}
+              <br />
+              Sponsoren: {getRestoreCount('sponsors')}
+              {safeRestorePreview && ` · importierbar: ${safeRestorePreview.sponsors.importable}, Konflikte: ${safeRestorePreview.sponsors.conflicts}, übersprungen: ${safeRestorePreview.sponsors.skipped}`}
+              <br />
+              Sponsor-Verträge: {getRestoreCount('sponsor_contracts')}
+              {safeRestorePreview && ` · importierbar: ${safeRestorePreview.sponsor_contracts.importable}, Konflikte: ${safeRestorePreview.sponsor_contracts.conflicts}, übersprungen: ${safeRestorePreview.sponsor_contracts.skipped}`}
+              <br />
+              Medien: {getRestoreCount('media_items')}
+              {safeRestorePreview && ` · importierbar: ${safeRestorePreview.media_items.importable}, Konflikte: ${safeRestorePreview.media_items.conflicts}, übersprungen: ${safeRestorePreview.media_items.skipped}`}
+              {safeRestorePreview?.conflicts?.length > 0 && (
+                <>
+                  <br />
+                  <br />
+                  <strong>Konflikte</strong>
+                  <ul style={statusListStyle}>
+                    {safeRestorePreview.conflicts.slice(0, 8).map((item) => (
+                      <li key={`${item.table}-${item.id}-${item.reason}`}>
+                        {item.table} {item.id}: {item.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {safeRestorePreview?.skipped?.length > 0 && (
+                <>
+                  <br />
+                  <strong>Übersprungen</strong>
+                  <ul style={statusListStyle}>
+                    {safeRestorePreview.skipped.slice(0, 8).map((item) => (
+                      <li key={`${item.table}-${item.id}-${item.reason}`}>
+                        {item.table} {item.id}: {item.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
             </div>
           )}
 
