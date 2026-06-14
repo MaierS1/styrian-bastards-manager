@@ -521,8 +521,9 @@ export function exportFullBackupJson({
   const tableCounts = Object.fromEntries(
     tables.map((table) => [table, normalizedTables[table].length])
   )
+  const totalRecords = Object.values(tableCounts).reduce((sum, count) => sum + count, 0)
   const backup = {
-    backup_version: '1.2.0',
+    backup_version: '2.0.0',
     exported_at: exportedAt,
     app_name: appName,
     ...(appVersion ? { app_version: appVersion } : {}),
@@ -544,10 +545,12 @@ export function exportFullBackupJson({
   }
 
   const filename = `styrian-bastards-backup-${exportedAt.slice(0, 10)}.json`
+  const content = JSON.stringify(backup, null, 2)
+  const fileSize = new Blob([content], { type: 'application/json;charset=utf-8' }).size
 
   downloadTextFileFn(
     filename,
-    JSON.stringify(backup, null, 2),
+    content,
     'application/json;charset=utf-8'
   )
 
@@ -555,8 +558,12 @@ export function exportFullBackupJson({
     filename,
     exported_at: exportedAt,
     backup_version: backup.backup_version,
+    asset_manifest_version: backup.asset_manifest_version,
+    tables_count: tables.length,
+    total_records: totalRecords,
     includes_asset_manifest: backup.includes_asset_manifest,
     asset_count: backup.asset_count,
+    file_size: fileSize,
   }
 }
 
