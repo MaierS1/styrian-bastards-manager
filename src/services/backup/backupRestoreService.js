@@ -1,7 +1,55 @@
 import { supabase } from '../../lib/supabase'
 import { exportFullBackupJson as exportFullBackupJsonService } from '../export/csvExports'
+import packageJson from '../../../package.json'
 
-export function exportFullBackupJson({
+const OPTIONAL_BACKUP_TABLES = [
+  'sponsors',
+  'sponsor_contracts',
+  'media_items',
+  'merch_items',
+  'merch_variants',
+  'merch_sales',
+  'merch_sale_items',
+  'shop_orders',
+  'shop_order_items',
+  'event_registrations',
+  'cash_month_closings',
+  'member_change_requests',
+]
+
+async function fetchOptionalBackupTable(table) {
+  try {
+    const { data, error } = await supabase.from(table).select('*')
+
+    if (error) {
+      return {
+        table,
+        rows: null,
+        skipped: {
+          table,
+          reason: error.message || 'Tabelle konnte nicht exportiert werden.',
+        },
+      }
+    }
+
+    return {
+      table,
+      rows: Array.isArray(data) ? data : [],
+      skipped: null,
+    }
+  } catch (error) {
+    return {
+      table,
+      rows: null,
+      skipped: {
+        table,
+        reason: error?.message || 'Tabelle konnte nicht exportiert werden.',
+      },
+    }
+  }
+}
+
+export async function exportFullBackupJson({
   selectedCashYear,
   members,
   fees,
@@ -17,6 +65,21 @@ export function exportFullBackupJson({
   invoiceItems,
   invoiceCustomers,
 }) {
+  const optionalResults = await Promise.all(OPTIONAL_BACKUP_TABLES.map(fetchOptionalBackupTable))
+  const optionalTables = {}
+  const skippedTables = []
+
+  optionalResults.forEach((result) => {
+    if (Array.isArray(result.rows)) {
+      optionalTables[result.table] = result.rows
+      return
+    }
+
+    if (result.skipped) {
+      skippedTables.push(result.skipped)
+    }
+  })
+
   return exportFullBackupJsonService({
     selectedCashYear,
     members,
@@ -32,6 +95,10 @@ export function exportFullBackupJson({
     invoices,
     invoiceItems,
     invoiceCustomers,
+    appName: packageJson.name || 'styrian-bastards-manager',
+    appVersion: packageJson.version,
+    optionalTables,
+    skippedTables,
   })
 }
 

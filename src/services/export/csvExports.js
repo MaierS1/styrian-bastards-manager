@@ -476,11 +476,14 @@ export function exportFullBackupJson({
   invoices,
   invoiceItems,
   invoiceCustomers,
+  appName = 'styrian-bastards-manager',
+  appVersion,
+  optionalTables = {},
+  skippedTables = [],
   downloadTextFile: downloadTextFileFn = downloadTextFile,
 }) {
-  const backup = {
-    exported_at: new Date().toISOString(),
-    selected_cash_year: selectedCashYear,
+  const exportedAt = new Date().toISOString()
+  const baseTables = {
     members,
     membership_fees: fees,
     membership_fee_periods: membershipFeePeriods,
@@ -495,9 +498,44 @@ export function exportFullBackupJson({
     invoice_items: invoiceItems,
     invoice_customers: invoiceCustomers,
   }
+  const tableData = { ...baseTables, ...optionalTables }
+  const normalizedTables = {}
+  const normalizedSkippedTables = [...skippedTables]
+
+  Object.entries(tableData).forEach(([table, rows]) => {
+    if (Array.isArray(rows)) {
+      normalizedTables[table] = rows
+      return
+    }
+
+    normalizedSkippedTables.push({
+      table,
+      reason: 'Tabelle wurde nicht geladen oder ist nicht als Liste verfügbar.',
+    })
+  })
+
+  const tables = Object.keys(normalizedTables)
+  const tableCounts = Object.fromEntries(
+    tables.map((table) => [table, normalizedTables[table].length])
+  )
+  const backup = {
+    backup_version: '1.1.0',
+    exported_at: exportedAt,
+    app_name: appName,
+    ...(appVersion ? { app_version: appVersion } : {}),
+    source: 'styrian-bastards-manager',
+    tables,
+    table_counts: tableCounts,
+    skipped_tables: normalizedSkippedTables,
+    contains_personal_data: true,
+    contains_financial_data: true,
+    restore_mode: 'additive_only',
+    selected_cash_year: selectedCashYear,
+    ...normalizedTables,
+  }
 
   downloadTextFileFn(
-    `styrian-bastards-backup-${new Date().toISOString().slice(0, 10)}.json`,
+    `styrian-bastards-backup-${exportedAt.slice(0, 10)}.json`,
     JSON.stringify(backup, null, 2),
     'application/json;charset=utf-8'
   )

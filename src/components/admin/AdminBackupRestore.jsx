@@ -36,6 +36,11 @@ export function AdminBackupRestore({
         das JSON-Backup enthält alle Hauptdaten als Sicherheitskopie.
       </p>
 
+      <p style={{ ...mutedTextStyle, color: colors.dangerText, fontWeight: 700 }}>
+        Das Komplettbackup enthält personenbezogene und finanzielle Daten. Die Datei sollte sicher gespeichert
+        und nicht unverschlüsselt weitergegeben werden.
+      </p>
+
       <div style={{ width: '100%', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <button onClick={exportMembersCsv} style={secondaryButtonStyle}>
           Mitglieder CSV
