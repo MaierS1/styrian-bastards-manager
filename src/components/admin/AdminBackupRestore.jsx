@@ -112,6 +112,11 @@ export function AdminBackupRestore({
         Diese liegen weiterhin im Supabase Storage.
       </p>
 
+      <p style={mutedTextStyle}>
+        Das Asset-Manifest enthält nur Dateiinformationen und Links, aber nicht die Dateien selbst. Für eine vollständige
+        Wiederherstellung müssen die Dateien später separat exportiert werden.
+      </p>
+
       {canRestore && (
         <div style={{ ...cardStyle, borderTop: `6px solid ${colors.red}` }}>
           <h3 style={headingStyle}>Backup wiederherstellen</h3>

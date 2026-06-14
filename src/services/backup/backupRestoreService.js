@@ -17,6 +17,24 @@ const OPTIONAL_BACKUP_TABLES = [
   'member_change_requests',
 ]
 
+const KNOWN_STORAGE_BUCKETS = [
+  { id: 'documents', name: 'documents', public: false },
+  { id: 'invoice-archive', name: 'invoice-archive', public: false },
+  { id: 'public-assets', name: 'public-assets', public: true },
+  { id: 'receipts', name: 'receipts', public: false },
+]
+
+const ASSET_LINK_FIELDS = [
+  { table: 'documents', bucket: 'documents', fields: ['file_path'] },
+  { table: 'invoices', bucket: 'invoice-archive', fields: ['pdf_url'] },
+  { table: 'cash_entries', bucket: 'receipts', fields: ['receipt_url'] },
+  { table: 'sponsor_contracts', bucket: 'documents', fields: ['document_path'] },
+  { table: 'sponsors', bucket: 'public-assets', fields: ['logo_path'] },
+  { table: 'merch_items', bucket: 'public-assets', fields: ['image_path'] },
+  { table: 'events', bucket: 'public-assets', fields: ['public_image_path', 'public_image_url', 'event_image_url'] },
+  { table: 'media_items', bucket: 'public-assets', fields: ['image_path', 'audio_url'] },
+]
+
 async function fetchOptionalBackupTable(table) {
   try {
     const { data, error } = await supabase.from(table).select('*')
@@ -46,6 +64,212 @@ async function fetchOptionalBackupTable(table) {
         reason: error?.message || 'Tabelle konnte nicht exportiert werden.',
       },
     }
+  }
+}
+
+function normalizeBucket(bucket) {
+  if (typeof bucket === 'string') return { id: bucket, name: bucket, public: bucket === 'public-assets' }
+
+  const name = bucket?.name || bucket?.id
+
+  return {
+    id: bucket?.id || name,
+    name,
+    public: bucket?.public === true,
+  }
+}
+
+async function getStorageBuckets() {
+  try {
+    const { data, error } = await supabase.storage.listBuckets()
+
+    if (error) {
+      return {
+        buckets: KNOWN_STORAGE_BUCKETS,
+        warnings: [{
+          bucket: 'storage.buckets',
+          reason: `Bucket-Liste konnte nicht gelesen werden: ${error.message}. Bekannte Buckets werden einzeln geprüft.`,
+        }],
+      }
+    }
+
+    const bucketsByName = new Map()
+
+    KNOWN_STORAGE_BUCKETS.forEach((bucket) => {
+      bucketsByName.set(bucket.name, normalizeBucket(bucket))
+    })
+
+    const remoteBuckets = data || []
+
+    remoteBuckets.forEach((bucket) => {
+      const normalized = normalizeBucket(bucket)
+      if (normalized.name) bucketsByName.set(normalized.name, normalized)
+    })
+
+    return {
+      buckets: Array.from(bucketsByName.values()),
+      warnings: [],
+    }
+  } catch (error) {
+    return {
+      buckets: KNOWN_STORAGE_BUCKETS,
+      warnings: [{
+        bucket: 'storage.buckets',
+        reason: `Bucket-Liste konnte nicht gelesen werden: ${error?.message || 'Unbekannter Fehler'}. Bekannte Buckets werden einzeln geprüft.`,
+      }],
+    }
+  }
+}
+
+function isStorageFolder(item) {
+  return !item?.id && !item?.metadata?.size && !item?.metadata?.mimetype && !item?.metadata?.mimeType
+}
+
+async function listBucketFiles(bucket, prefix = '') {
+  const limit = 1000
+  let offset = 0
+  const files = []
+
+  while (true) {
+    const { data, error } = await supabase.storage
+      .from(bucket.name)
+      .list(prefix, { limit, offset, sortBy: { column: 'name', order: 'asc' } })
+
+    if (error) throw error
+
+    const entries = data || []
+
+    for (const entry of entries) {
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name
+
+      if (isStorageFolder(entry)) {
+        const nestedFiles = await listBucketFiles(bucket, path)
+        files.push(...nestedFiles)
+        continue
+      }
+
+      files.push({ ...entry, path })
+    }
+
+    if (entries.length < limit) break
+    offset += limit
+  }
+
+  return files
+}
+
+function decodeStorageValue(value) {
+  try {
+    return decodeURIComponent(String(value || '').trim())
+  } catch {
+    return String(value || '').trim()
+  }
+}
+
+function extractStoragePath(value, bucketName) {
+  const text = decodeStorageValue(value)
+  if (!text) return null
+
+  const cleanText = text.split('?')[0].split('#')[0]
+
+  if (/^https?:\/\//i.test(cleanText)) {
+    const publicMarker = `/storage/v1/object/public/${bucketName}/`
+    const signedMarker = `/storage/v1/object/sign/${bucketName}/`
+    const publicIndex = cleanText.indexOf(publicMarker)
+    const signedIndex = cleanText.indexOf(signedMarker)
+
+    if (publicIndex >= 0) return cleanText.slice(publicIndex + publicMarker.length)
+    if (signedIndex >= 0) return cleanText.slice(signedIndex + signedMarker.length)
+    return null
+  }
+
+  if (cleanText.startsWith(`${bucketName}/`)) return cleanText.slice(bucketName.length + 1)
+
+  return cleanText
+}
+
+function addAssetLink(assetLinks, bucket, path, table, sourceField, row) {
+  if (!path) return
+
+  const key = `${bucket}:${path}`
+  if (assetLinks.has(key)) return
+
+  assetLinks.set(key, {
+    linked_table: table,
+    linked_record_id: row?.id || null,
+    source_field: sourceField,
+  })
+}
+
+function buildAssetLinkIndex(tableData) {
+  const assetLinks = new Map()
+
+  ASSET_LINK_FIELDS.forEach(({ table, bucket, fields }) => {
+    const rows = Array.isArray(tableData[table]) ? tableData[table] : []
+
+    rows.forEach((row) => {
+      fields.forEach((field) => {
+        addAssetLink(assetLinks, bucket, extractStoragePath(row?.[field], bucket), table, field, row)
+      })
+    })
+  })
+
+  return assetLinks
+}
+
+function getPublicUrl(bucket, path) {
+  if (!bucket.public && bucket.name !== 'public-assets') return null
+
+  const { data } = supabase.storage.from(bucket.name).getPublicUrl(path)
+  return data?.publicUrl || null
+}
+
+function toAssetManifestEntry(bucket, file, assetLinks) {
+  const metadata = file.metadata || {}
+  const link = assetLinks.get(`${bucket.name}:${file.path}`)
+
+  return {
+    bucket: bucket.name,
+    path: file.path,
+    file_name: file.name,
+    size: metadata.size ?? null,
+    mime_type: metadata.mimetype || metadata.mimeType || metadata.contentType || null,
+    created_at: file.created_at || null,
+    updated_at: file.updated_at || file.last_accessed_at || null,
+    public_url: getPublicUrl(bucket, file.path),
+    linked_table: link?.linked_table || null,
+    linked_record_id: link?.linked_record_id || null,
+    source_field: link?.source_field || null,
+    status: link ? 'linked' : 'unlinked',
+  }
+}
+
+async function buildStorageAssetManifest(tableData) {
+  const { buckets, warnings } = await getStorageBuckets()
+  const assetLinks = buildAssetLinkIndex(tableData)
+  const assetManifest = []
+  const skippedBuckets = [...warnings]
+  const storageBucketsScanned = []
+
+  for (const bucket of buckets) {
+    if (!bucket.name) continue
+
+    try {
+      const files = await listBucketFiles(bucket)
+      storageBucketsScanned.push(bucket.name)
+      assetManifest.push(...files.map((file) => toAssetManifestEntry(bucket, file, assetLinks)))
+    } catch (error) {
+      skippedBuckets.push({
+        bucket: bucket.name,
+        reason: error?.message || 'Bucket konnte nicht gelesen werden.',
+      })
+    }
+  }
+
+  return {
+    assetManifest,
+    storageBucketsScanned,
+    skippedBuckets,
   }
 }
 
@@ -80,6 +304,28 @@ export async function exportFullBackupJson({
     }
   })
 
+  const tableData = {
+    members,
+    membership_fees: fees,
+    membership_fee_periods: membershipFeePeriods,
+    membership_fee_items: membershipFeeItems,
+    cash_entries: cashEntries,
+    events,
+    event_checkins: eventCheckins,
+    documents,
+    audit_logs: auditLogs,
+    inventory_items: inventoryItems,
+    invoices,
+    invoice_items: invoiceItems,
+    invoice_customers: invoiceCustomers,
+    ...optionalTables,
+  }
+  const {
+    assetManifest,
+    storageBucketsScanned,
+    skippedBuckets,
+  } = await buildStorageAssetManifest(tableData)
+
   return exportFullBackupJsonService({
     selectedCashYear,
     members,
@@ -99,6 +345,9 @@ export async function exportFullBackupJson({
     appVersion: packageJson.version,
     optionalTables,
     skippedTables,
+    assetManifest,
+    storageBucketsScanned,
+    skippedBuckets,
   })
 }
 

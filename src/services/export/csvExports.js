@@ -480,6 +480,9 @@ export function exportFullBackupJson({
   appVersion,
   optionalTables = {},
   skippedTables = [],
+  assetManifest = [],
+  storageBucketsScanned = [],
+  skippedBuckets = [],
   downloadTextFile: downloadTextFileFn = downloadTextFile,
 }) {
   const exportedAt = new Date().toISOString()
@@ -519,7 +522,7 @@ export function exportFullBackupJson({
     tables.map((table) => [table, normalizedTables[table].length])
   )
   const backup = {
-    backup_version: '1.1.0',
+    backup_version: '1.2.0',
     exported_at: exportedAt,
     app_name: appName,
     ...(appVersion ? { app_version: appVersion } : {}),
@@ -527,10 +530,16 @@ export function exportFullBackupJson({
     tables,
     table_counts: tableCounts,
     skipped_tables: normalizedSkippedTables,
+    includes_asset_manifest: true,
+    asset_count: assetManifest.length,
+    storage_buckets_scanned: storageBucketsScanned,
+    skipped_buckets: skippedBuckets,
+    asset_manifest_version: 1,
     contains_personal_data: true,
     contains_financial_data: true,
     restore_mode: 'additive_only',
     selected_cash_year: selectedCashYear,
+    asset_manifest: assetManifest,
     ...normalizedTables,
   }
 
