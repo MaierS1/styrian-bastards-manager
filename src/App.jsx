@@ -249,6 +249,7 @@ import { MerchPage } from './components/merch/MerchPage'
 import { MediaPage } from './components/media/MediaPage'
 import { PublicPressPage } from './components/media/PublicPressPage'
 import { PublicSponsors } from './components/home/PublicSponsors'
+import { VirtualBastardKnowledgePage } from './components/virtual-bastard/VirtualBastardKnowledgePage'
 
 class DashboardPageErrorBoundary extends Component {
   constructor(props) {
@@ -2330,6 +2331,10 @@ export default function App() {
   }
 
   function canAccessParkedModules() {
+    return isAdmin() || ['obmann', 'obmann_stv', 'schriftfuehrer', 'schriftfuehrer_stv', 'kassier', 'kassier_stv'].includes(currentMember?.role)
+  }
+
+  function canManageVirtualBastardKnowledge() {
     return isAdmin() || ['obmann', 'obmann_stv', 'schriftfuehrer', 'schriftfuehrer_stv', 'kassier', 'kassier_stv'].includes(currentMember?.role)
   }
 
@@ -5441,6 +5446,7 @@ export default function App() {
         {navigationItems
           .filter(([pageKey]) => pageKey !== 'purchase')
           .filter(([pageKey]) => pageKey !== 'parkedModules' || canAccessParkedModules())
+          .filter(([pageKey]) => pageKey !== 'virtualBastardKnowledge' || canManageVirtualBastardKnowledge())
           .map(([pageKey, label]) => (
             <button
               key={pageKey}
@@ -5910,6 +5916,13 @@ export default function App() {
           resetMediaForm={resetMediaForm}
           editMediaItem={editMediaItem}
           deleteMediaItem={deleteMediaItem}
+        />
+      )}
+
+      {activePage === 'virtualBastardKnowledge' && (
+        <VirtualBastardKnowledgePage
+          canManage={canManageVirtualBastardKnowledge()}
+          currentUserId={user?.id}
         />
       )}
 

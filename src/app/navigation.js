@@ -10,6 +10,7 @@ export const navigationItems = [
   ['documents', 'Dokumente'],
   ['memberArea', 'Mitgliederbereich'],
   ['media', 'Medien / Presse'],
+  ['virtualBastardKnowledge', 'Virtual Bastard Wissen'],
   ['sponsors', 'Sponsoren'],
   ['merch', 'Shop & Fanartikel'],
   ['inventory', 'Inventar'],
