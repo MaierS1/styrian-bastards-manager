@@ -13,10 +13,7 @@ export async function fetchEvents() {
 }
 
 export async function fetchEventRegistrationCounts() {
-  return supabase
-    .from('event_registrations')
-    .select('event_id,status')
-    .in('status', ['registered', 'waitlist', 'cancelled'])
+  return supabase.rpc('get_event_registration_counts')
 }
 
 export async function fetchEventRegistrations(eventId) {

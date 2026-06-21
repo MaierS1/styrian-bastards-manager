@@ -108,16 +108,13 @@ export async function loadEvents({ setEvents, selectedEventId, setSelectedEventI
   if (registrationError) return alertFn(registrationError.message)
 
   const registrationCountsByEventId = (registrationRows || []).reduce((counts, registration) => {
-    const eventCounts = counts[registration.event_id] || {
-      registered: 0,
-      waitlist: 0,
-      cancelled: 0,
+    counts[registration.event_id] = {
+      registered: Number(registration.registered_count || 0),
+      waitlist: Number(registration.waitlist_count || 0),
+      cancelled: Number(registration.cancelled_count || 0),
+      total: Number(registration.total_count || 0),
     }
-    if (registration.status === 'registered') eventCounts.registered += 1
-    if (registration.status === 'waitlist') eventCounts.waitlist += 1
-    if (registration.status === 'cancelled') eventCounts.cancelled += 1
 
-    counts[registration.event_id] = eventCounts
     return counts
   }, {})
 
@@ -143,6 +140,7 @@ export async function loadEvents({ setEvents, selectedEventId, setSelectedEventI
       registered_count: registeredCount,
       waitlist_count: registrationCounts.waitlist || 0,
       cancelled_count: registrationCounts.cancelled || 0,
+      total_count: registrationCounts.total || registeredCount,
       registration_status: getRegistrationStatus(event, registeredCount),
     }
   })
