@@ -9,7 +9,7 @@ export function EventsList({
   updateEventStatus,
   editEvent,
   deleteEvent,
-  isAdmin,
+  canDeleteEvents,
   exportEventFinancePdf,
 }) {
   return (
@@ -64,7 +64,7 @@ export function EventsList({
             Event bearbeiten
           </button>
 
-          {isAdmin() && (
+          {canDeleteEvents() && (
             <button
               onClick={() => deleteEvent(event)}
               style={{ ...secondaryButtonStyle, borderColor: '#b91c1c', color: '#b91c1c' }}

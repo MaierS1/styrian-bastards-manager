@@ -88,7 +88,7 @@ export function EventsPage({
   updateEventStatus,
   editEvent,
   deleteEvent,
-  isAdmin,
+  canDeleteEvents,
   exportEventFinancePdf,
   canUseCheckin,
   scanning,
@@ -225,7 +225,7 @@ export function EventsPage({
           updateEventStatus={updateEventStatus}
           editEvent={editEvent}
           deleteEvent={deleteEvent}
-          isAdmin={isAdmin}
+          canDeleteEvents={canDeleteEvents}
           exportEventFinancePdf={exportEventFinancePdf}
         />
       </section>

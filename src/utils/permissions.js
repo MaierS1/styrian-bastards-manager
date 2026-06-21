@@ -22,6 +22,14 @@ export function canManageEventsRole(role) {
   return ['admin', 'checkin'].includes(role)
 }
 
+export function getEventPermissions(role) {
+  return {
+    canManage: canManageEventsRole(role),
+    canCheckIn: canUseCheckinRole(role),
+    canDelete: isAdminRole(role),
+  }
+}
+
 export function canManagePurchaseMember(member) {
   const boardRoles = [
     'obmann',

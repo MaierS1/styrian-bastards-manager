@@ -17,12 +17,11 @@ import {
 } from './styles/appStyles'
 import {
   canManageCashRole,
-  canManageEventsRole,
   canManageMembersRole,
   canManagePurchaseMember,
-  canUseCheckinRole,
   getAppRole as getMemberAppRole,
   getAppRoleLabel,
+  getEventPermissions,
   isAdminRole,
 } from './utils/permissions'
 import { navigationItems } from './app/navigation'
@@ -722,7 +721,7 @@ export default function App() {
   }, [getAppRole])
 
   const canUseCheckin = useCallback(() => {
-    return canUseCheckinRole(getAppRole())
+    return getEventPermissions(getAppRole()).canCheckIn
   }, [getAppRole])
 
   const getTodayDate = useCallback(() => {
@@ -969,7 +968,11 @@ export default function App() {
   }
 
   function canManageEvents() {
-    return canManageEventsRole(getAppRole())
+    return getEventPermissions(getAppRole()).canManage
+  }
+
+  function canDeleteEvents() {
+    return getEventPermissions(getAppRole()).canDelete
   }
 
   async function login() {
@@ -4846,7 +4849,7 @@ export default function App() {
   }
 
   async function deleteEvent(event) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Events löschen.')
+    if (!canDeleteEvents()) return alert('Nur Admins dürfen Events löschen.')
 
     await deleteEventRecord({
       event,
@@ -5699,7 +5702,7 @@ export default function App() {
           updateEventStatus={updateEventStatus}
           editEvent={editEvent}
           deleteEvent={deleteEvent}
-          isAdmin={isAdmin}
+          canDeleteEvents={canDeleteEvents}
           exportEventFinancePdf={exportEventFinancePdf}
           canUseCheckin={canUseCheckin}
           scanning={scanning}
