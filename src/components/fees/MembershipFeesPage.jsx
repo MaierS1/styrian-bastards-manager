@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   buttonStyle,
   cardStyle,
@@ -61,7 +61,66 @@ function escapePreviewText(value) {
     .replaceAll("'", '&#39;')
 }
 
-function buildFeeNotificationPreview(item, type = 'fee_reminder') {
+function hasText(value) {
+  return String(value || '').trim().length > 0
+}
+
+function getContributionPaymentOptions(settings) {
+  const options = [{ value: 'ebanking', label: 'E-Banking' }]
+
+  if (settings?.cash_enabled) {
+    options.push({ value: 'bar', label: 'Barzahlung' })
+  }
+
+  if (settings?.paypal_enabled) {
+    options.push({ value: 'paypal', label: 'PayPal' })
+  }
+
+  return options
+}
+
+function buildPaymentBlocks(item, settings) {
+  const blocks = []
+  const periodLabel = item.periodLabel || 'Mitgliedsbeitrag'
+  const paymentPurpose = `Mitgliedsbeitrag ${periodLabel} – ${item.memberName}`
+
+  if (hasText(settings?.iban)) {
+    blocks.push(`
+      <h4>E-Banking</h4>
+      <p>
+        ${hasText(settings?.account_holder) ? `Kontoinhaber: <strong>${escapePreviewText(settings.account_holder)}</strong><br />` : ''}
+        IBAN: <strong>${escapePreviewText(settings.iban)}</strong><br />
+        ${hasText(settings?.bic) ? `BIC: <strong>${escapePreviewText(settings.bic)}</strong><br />` : ''}
+        ${hasText(settings?.bank_name) ? `Bank: <strong>${escapePreviewText(settings.bank_name)}</strong><br />` : ''}
+        Verwendungszweck: <strong>${escapePreviewText(paymentPurpose)}</strong>
+      </p>
+    `)
+  }
+
+  if (settings?.cash_enabled) {
+    blocks.push(`
+      <h4>Barzahlung</h4>
+      <p>Der Beitrag kann bei einem Vereinstreffen oder direkt bei einem Vorstandsmitglied bezahlt werden.</p>
+    `)
+  }
+
+  if (settings?.paypal_enabled && (hasText(settings?.paypal_address) || hasText(settings?.paypal_link))) {
+    const paypalTarget = settings.paypal_link || settings.paypal_address
+    blocks.push(`
+      <h4>PayPal</h4>
+      <p>Zahlung per PayPal an <strong>${escapePreviewText(paypalTarget)}</strong>.</p>
+      <p>Bitte im Verwendungszweck Namen und Saison angeben.</p>
+    `)
+  }
+
+  if (blocks.length === 0) {
+    return '<p><strong>Keine Zahlungsoptionen hinterlegt.</strong></p>'
+  }
+
+  return blocks.join('')
+}
+
+function buildFeeNotificationPreview(item, settings, type = 'fee_reminder') {
   const periodLabel = item.periodLabel || 'Mitgliedsbeitrag'
   const amount = formatMoney(item.amount).replace('€', 'EUR')
   const dueDate = item.due_date || item.period?.due_date || ''
@@ -84,6 +143,7 @@ function buildFeeNotificationPreview(item, type = 'fee_reminder') {
       <p>für <strong>${escapePreviewText(periodLabel)}</strong> ist ein Mitgliedsbeitrag über <strong>${escapePreviewText(amount)}</strong> offen.</p>
       ${dueDate ? `<p>Fällig am: <strong>${escapePreviewText(dueDate)}</strong></p>` : ''}
       <p>Bitte um zeitnahe Erledigung.</p>
+      ${buildPaymentBlocks(item, settings)}
     `,
   }
 }
@@ -93,6 +153,7 @@ export function MembershipFeesPage({
   members,
   membershipFeePeriods,
   membershipFeeItems,
+  clubPaymentSettings,
   yearFilter,
   setYearFilter,
   statusFilter,
@@ -126,6 +187,20 @@ export function MembershipFeesPage({
   const [previewType, setPreviewType] = useState('fee_reminder')
   const memberMap = useMemo(() => new Map(members.map((member) => [member.id, member])), [members])
   const periodMap = useMemo(() => new Map(membershipFeePeriods.map((period) => [period.id, period])), [membershipFeePeriods])
+  const paymentMethodOptions = useMemo(
+    () => getContributionPaymentOptions(clubPaymentSettings),
+    [clubPaymentSettings]
+  )
+
+  useEffect(() => {
+    if (!paymentMethodOptions.some((option) => option.value === paymentMethod)) {
+      setPaymentMethod(
+        paymentMethodOptions.some((option) => option.value === clubPaymentSettings?.default_payment_method)
+          ? clubPaymentSettings.default_payment_method
+          : paymentMethodOptions[0]?.value || 'ebanking'
+      )
+    }
+  }, [clubPaymentSettings?.default_payment_method, paymentMethod, paymentMethodOptions, setPaymentMethod])
 
   const enrichedItems = useMemo(
     () =>
@@ -397,7 +472,6 @@ export function MembershipFeesPage({
     if (!confirmed) return
 
     for (const item of openReminderItems) {
-      // eslint-disable-next-line no-await-in-loop
       await handleSendReminder(item, true)
     }
   }
@@ -462,8 +536,11 @@ export function MembershipFeesPage({
             Kassa-Eintrag beim Bezahlen anlegen
           </label>
           <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} style={inputStyle}>
-            <option value="bar">Bar</option>
-            <option value="ebanking">E-Banking</option>
+            {paymentMethodOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <button onClick={handleSendAllReminders} style={secondaryButtonStyle}>
             Sammelversand nach Bestätigung ({openReminderItems.length})
@@ -576,7 +653,7 @@ export function MembershipFeesPage({
         const showReopenButton = item.status === 'paid'
         const feedback = actionFeedback?.itemId === item.id ? actionFeedback : null
         const canDeleteItem = item.status !== 'paid' && !item.cash_entry_id
-        const preview = previewItemId === item.id ? buildFeeNotificationPreview(item, previewType) : null
+        const preview = previewItemId === item.id ? buildFeeNotificationPreview(item, clubPaymentSettings, previewType) : null
 
         return (
           <div key={item.id} style={{ ...cardStyle, borderTop: `6px solid ${item.status === 'paid' ? colors.blue : colors.red}` }}>

@@ -201,6 +201,10 @@ import {
   reopenMembershipFeeItem as reopenMembershipFeeItemRecord,
   sendMembershipFeeNotification as sendMembershipFeeNotificationRecord,
 } from './services/repositories/membershipFeesRepository'
+import {
+  defaultClubPaymentSettings,
+  saveClubPaymentSettings,
+} from './services/repositories/clubPaymentSettingsRepository'
 import { MembersPage } from './components/members/MembersPage'
 import { MembershipFeesPage } from './components/fees/MembershipFeesPage'
 import { CashPage } from './components/cash/CashPage'
@@ -290,6 +294,7 @@ export default function App() {
   const [fees, setFees] = useState([])
   const [membershipFeePeriods, setMembershipFeePeriods] = useState([])
   const [membershipFeeItems, setMembershipFeeItems] = useState([])
+  const [clubPaymentSettings, setClubPaymentSettings] = useState(defaultClubPaymentSettings)
   const [cashEntries, setCashEntries] = useState([])
   const [cashMonthClosings, setCashMonthClosings] = useState([])
   const [auditLogs, setAuditLogs] = useState([])
@@ -666,6 +671,7 @@ export default function App() {
             loadMembershipFeeDataService({
               setMembershipFeePeriods,
               setMembershipFeeItems,
+              setClubPaymentSettings,
             })
         : undefined,
       loadCashEntriesFn: () => loadCashEntriesService({ setCashEntries }),
@@ -1175,6 +1181,22 @@ export default function App() {
     } finally {
       setMembershipFeeGenerationLoading(false)
     }
+  }
+
+  async function saveClubPaymentSettingsAction(settings) {
+    if (!isAdmin()) return alert('Nur Admins dürfen Vereins-Zahlungseinstellungen ändern.')
+
+    const { data, error } = await saveClubPaymentSettings(settings)
+
+    if (error) {
+      alert(error.message)
+      return { error }
+    }
+
+    const nextSettings = { ...defaultClubPaymentSettings, ...data }
+    setClubPaymentSettings(nextSettings)
+    await createAuditLog('update_club_payment_settings', 'club_payment_settings', '1', clubPaymentSettings, nextSettings)
+    return { ok: true, data: nextSettings }
   }
 
   async function markMembershipFeeItemPaidAction({
@@ -5493,6 +5515,7 @@ export default function App() {
           members={members}
           membershipFeePeriods={membershipFeePeriods}
           membershipFeeItems={membershipFeeItems}
+          clubPaymentSettings={clubPaymentSettings}
           yearFilter={membershipFeeYearFilter}
           setYearFilter={setMembershipFeeYearFilter}
           statusFilter={membershipFeeStatusFilter}
@@ -6327,6 +6350,8 @@ export default function App() {
       {activePage === 'admin' && (
         <AdminPage
           exportsProps={{
+            clubPaymentSettings,
+            saveClubPaymentSettings: saveClubPaymentSettingsAction,
             exportMembersPdf,
             exportAllMemberCardsPdf,
             exportCashPdf,

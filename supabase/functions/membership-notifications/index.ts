@@ -184,6 +184,16 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: periodError.message }, 500)
     }
 
+    const { data: paymentSettings, error: paymentSettingsError } = await adminClient
+      .from('club_payment_settings')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle()
+
+    if (paymentSettingsError) {
+      return jsonResponse({ error: paymentSettingsError.message }, 500)
+    }
+
     const memberName = `${member.first_name || ''} ${member.last_name || ''}`.trim() || 'Mitglied'
     const periodLabel = period?.title
       ? `${period.year} · ${period.title}`
@@ -206,6 +216,7 @@ Deno.serve(async (req) => {
       periodLabel,
       amount,
       dueDate: feeItem.due_date || period?.due_date || null,
+      paymentSettings,
       isTest,
     })
 
@@ -283,6 +294,7 @@ function buildMessage({
   periodLabel,
   amount,
   dueDate,
+  paymentSettings,
   isTest,
 }: {
   type: string
@@ -290,6 +302,7 @@ function buildMessage({
   periodLabel: string
   amount: string
   dueDate: string | null
+  paymentSettings: Record<string, unknown> | null
   isTest: boolean
 }) {
   if (type === 'fee_paid_confirmation') {
@@ -310,8 +323,64 @@ function buildMessage({
       <p>für <strong>${escapeHtml(periodLabel)}</strong> ist ein Mitgliedsbeitrag über <strong>${escapeHtml(amount)} EUR</strong> offen.</p>
       ${dueDate ? `<p>Fällig am: <strong>${escapeHtml(dueDate)}</strong></p>` : ''}
       <p>Bitte um zeitnahe Erledigung.</p>
+      ${buildPaymentBlocks({ memberName, periodLabel, paymentSettings })}
     `,
   }
+}
+
+function buildPaymentBlocks({
+  memberName,
+  periodLabel,
+  paymentSettings,
+}: {
+  memberName: string
+  periodLabel: string
+  paymentSettings: Record<string, unknown> | null
+}) {
+  const blocks: string[] = []
+  const paymentPurpose = `Mitgliedsbeitrag ${periodLabel} – ${memberName}`
+
+  if (hasText(paymentSettings?.iban)) {
+    blocks.push(`
+      <h4>E-Banking</h4>
+      <p>
+        ${hasText(paymentSettings?.account_holder) ? `Kontoinhaber: <strong>${escapeHtml(String(paymentSettings?.account_holder))}</strong><br />` : ''}
+        IBAN: <strong>${escapeHtml(String(paymentSettings?.iban))}</strong><br />
+        ${hasText(paymentSettings?.bic) ? `BIC: <strong>${escapeHtml(String(paymentSettings?.bic))}</strong><br />` : ''}
+        ${hasText(paymentSettings?.bank_name) ? `Bank: <strong>${escapeHtml(String(paymentSettings?.bank_name))}</strong><br />` : ''}
+        Verwendungszweck: <strong>${escapeHtml(paymentPurpose)}</strong>
+      </p>
+    `)
+  }
+
+  if (paymentSettings?.cash_enabled === true) {
+    blocks.push(`
+      <h4>Barzahlung</h4>
+      <p>Der Beitrag kann bei einem Vereinstreffen oder direkt bei einem Vorstandsmitglied bezahlt werden.</p>
+    `)
+  }
+
+  if (
+    paymentSettings?.paypal_enabled === true &&
+    (hasText(paymentSettings?.paypal_address) || hasText(paymentSettings?.paypal_link))
+  ) {
+    const paypalTarget = String(paymentSettings?.paypal_link || paymentSettings?.paypal_address || '')
+    blocks.push(`
+      <h4>PayPal</h4>
+      <p>Zahlung per PayPal an <strong>${escapeHtml(paypalTarget)}</strong>.</p>
+      <p>Bitte im Verwendungszweck Namen und Saison angeben.</p>
+    `)
+  }
+
+  if (blocks.length === 0) {
+    return '<p><strong>Keine Zahlungsoptionen hinterlegt.</strong></p>'
+  }
+
+  return blocks.join('')
+}
+
+function hasText(value: unknown) {
+  return String(value || '').trim().length > 0
 }
 
 function getRecipientEmail({

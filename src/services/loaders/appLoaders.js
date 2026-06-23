@@ -22,6 +22,7 @@ import {
   fetchShopOrders,
 } from '../repositories/merchRepository'
 import { fetchSponsorContracts, fetchSponsors } from '../repositories/sponsorsRepository'
+import { fetchClubPaymentSettings } from '../repositories/clubPaymentSettingsRepository'
 
 export async function loadCurrentMember({ authUserId, setCurrentMember, alertFn = alert }) {
   const { data, error } = await fetchCurrentMemberByAuthUserId(authUserId)
@@ -52,18 +53,22 @@ export async function loadFees({ year = 2026, setFees, alertFn = alert }) {
 export async function loadMembershipFeeData({
   setMembershipFeePeriods,
   setMembershipFeeItems,
+  setClubPaymentSettings,
   alertFn = alert,
 }) {
-  const [periodsResult, itemsResult] = await Promise.all([
+  const [periodsResult, itemsResult, paymentSettingsResult] = await Promise.all([
     fetchMembershipFeePeriods(),
     fetchMembershipFeeItems(),
+    fetchClubPaymentSettings(),
   ])
 
   if (periodsResult.error) return alertFn(periodsResult.error.message)
   if (itemsResult.error) return alertFn(itemsResult.error.message)
+  if (paymentSettingsResult.error) return alertFn(paymentSettingsResult.error.message)
 
   setMembershipFeePeriods(periodsResult.data || [])
   setMembershipFeeItems(itemsResult.data || [])
+  setClubPaymentSettings?.(paymentSettingsResult.data || null)
 }
 
 export async function loadCashEntries({ setCashEntries, alertFn = alert }) {
