@@ -69,7 +69,9 @@ export async function sendMembershipFeeNotification({
     },
   })
 }
-export async function deleteMembershipFeeItem(itemId) {
+export async function deleteMembershipFeeItem(itemOrParams) {
+  const itemId = typeof itemOrParams === 'object' ? itemOrParams?.feeItemId : itemOrParams
+
   const { data: item, error: itemError } = await supabase
     .from('membership_fee_items')
     .select('id, status, cash_entry_id')

@@ -52,6 +52,42 @@ function getStatusBadgeStyle(status) {
   return { color: colors.red }
 }
 
+function escapePreviewText(value) {
+  return String(value || '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function buildFeeNotificationPreview(item, type = 'fee_reminder') {
+  const periodLabel = item.periodLabel || 'Mitgliedsbeitrag'
+  const amount = formatMoney(item.amount).replace('€', 'EUR')
+  const dueDate = item.due_date || item.period?.due_date || ''
+
+  if (type === 'fee_paid_confirmation') {
+    return {
+      subject: `Zahlungsbestätigung: ${periodLabel}`,
+      html: `
+        <p>Hallo ${escapePreviewText(item.memberName)},</p>
+        <p>dein Mitgliedsbeitrag für <strong>${escapePreviewText(periodLabel)}</strong> über <strong>${escapePreviewText(amount)}</strong> wurde als bezahlt markiert.</p>
+        <p>Vielen Dank.</p>
+      `,
+    }
+  }
+
+  return {
+    subject: `Erinnerung: ${periodLabel}`,
+    html: `
+      <p>Hallo ${escapePreviewText(item.memberName)},</p>
+      <p>für <strong>${escapePreviewText(periodLabel)}</strong> ist ein Mitgliedsbeitrag über <strong>${escapePreviewText(amount)}</strong> offen.</p>
+      ${dueDate ? `<p>Fällig am: <strong>${escapePreviewText(dueDate)}</strong></p>` : ''}
+      <p>Bitte um zeitnahe Erledigung.</p>
+    `,
+  }
+}
+
 export function MembershipFeesPage({
   canAccess,
   members,
@@ -86,6 +122,8 @@ export function MembershipFeesPage({
   setNotificationLoadingId,
 }) {
   const [actionFeedback, setActionFeedback] = useState(null)
+  const [previewItemId, setPreviewItemId] = useState(null)
+  const [previewType, setPreviewType] = useState('fee_reminder')
   const memberMap = useMemo(() => new Map(members.map((member) => [member.id, member])), [members])
   const periodMap = useMemo(() => new Map(membershipFeePeriods.map((period) => [period.id, period])), [membershipFeePeriods])
 
@@ -178,7 +216,11 @@ export function MembershipFeesPage({
   }, [membershipFeePeriods])
 
   const openReminderItems = selectedItems.filter(
-    (item) => ['open', 'reminded'].includes(item.status) && Number(item.amount || 0) > 0
+    (item) =>
+      ['open', 'reminded'].includes(item.status) &&
+      Number(item.amount || 0) > 0 &&
+      item.member?.status === 'aktiv' &&
+      item.member?.member_type !== 'ehrenmitglied'
   )
 
   async function handleCreateFees() {
@@ -194,6 +236,16 @@ export function MembershipFeesPage({
   }
 
   async function handleSendReminder(item, resend = false) {
+    if (item.member?.status !== 'aktiv') {
+      window.alert('Dieses Mitglied ist nicht aktiv und wird nicht angeschrieben.')
+      return
+    }
+
+    if (item.member?.member_type === 'ehrenmitglied' || Number(item.amount || 0) <= 0) {
+      window.alert('Für Ehrenmitglieder oder 0-Euro-Beiträge wird keine Zahlungsaufforderung versendet.')
+      return
+    }
+
     setNotificationLoadingId(item.id)
     try {
       const confirmed = resend || !item.reminder_sent_at || window.confirm(
@@ -214,6 +266,11 @@ export function MembershipFeesPage({
   }
 
   async function handleSendPaidConfirmation(item) {
+    if (item.member?.status !== 'aktiv') {
+      window.alert('Dieses Mitglied ist nicht aktiv und wird nicht angeschrieben.')
+      return
+    }
+
     setNotificationLoadingId(item.id)
     try {
       await sendMembershipFeeNotification({
@@ -264,6 +321,11 @@ export function MembershipFeesPage({
   }
 
   async function handleMarkPaid(item) {
+    if (!['open', 'reminded'].includes(item.status) || Number(item.amount || 0) <= 0) {
+      window.alert('Nur offene Beiträge mit Betrag können als bezahlt markiert werden.')
+      return
+    }
+
     setNotificationLoadingId(item.id)
     try {
       await markMembershipFeeItemPaid({
@@ -325,11 +387,12 @@ export function MembershipFeesPage({
     }
 
     const alreadyReminded = openReminderItems.filter((item) => item.reminder_sent_at).length
-    const confirmed = window.confirm(
+    const confirmationText = 'SAMMELVERSAND'
+    const confirmed = window.prompt(
       alreadyReminded > 0
-        ? `${openReminderItems.length} offene Beiträge gefunden, davon ${alreadyReminded} bereits erinnert. Erinnerungen jetzt trotzdem an alle senden?`
-        : `${openReminderItems.length} offene Beiträge gefunden. Erinnerungen jetzt senden?`
-    )
+        ? `${openReminderItems.length} offene Beiträge gefunden, davon ${alreadyReminded} bereits erinnert. Zum Senden an alle bitte ${confirmationText} eingeben.`
+        : `${openReminderItems.length} offene Beiträge gefunden. Zum Senden an alle bitte ${confirmationText} eingeben.`
+    ) === confirmationText
 
     if (!confirmed) return
 
@@ -403,7 +466,7 @@ export function MembershipFeesPage({
             <option value="ebanking">E-Banking</option>
           </select>
           <button onClick={handleSendAllReminders} style={secondaryButtonStyle}>
-            Erinnerung an alle offenen senden ({openReminderItems.length})
+            Sammelversand nach Bestätigung ({openReminderItems.length})
           </button>
         </div>
       </div>
@@ -507,12 +570,13 @@ export function MembershipFeesPage({
       {selectedItems.map((item) => {
         const notificationLabel = getNotificationLabel(item)
         const isLoading = notificationLoadingId === item.id
-        const showReminderButton = ['open', 'reminded'].includes(item.status)
-        const showPaidButton = item.status !== 'paid'
+        const canSendReminder = ['open', 'reminded'].includes(item.status) && Number(item.amount || 0) > 0 && item.member?.status === 'aktiv' && item.member?.member_type !== 'ehrenmitglied'
+        const canSendPaidConfirmation = item.status === 'paid' && item.member?.status === 'aktiv'
+        const showPaidButton = ['open', 'reminded'].includes(item.status) && Number(item.amount || 0) > 0
         const showReopenButton = item.status === 'paid'
-        const showPaymentConfirmationButton = item.status === 'paid'
         const feedback = actionFeedback?.itemId === item.id ? actionFeedback : null
         const canDeleteItem = item.status !== 'paid' && !item.cash_entry_id
+        const preview = previewItemId === item.id ? buildFeeNotificationPreview(item, previewType) : null
 
         return (
           <div key={item.id} style={{ ...cardStyle, borderTop: `6px solid ${item.status === 'paid' ? colors.blue : colors.red}` }}>
@@ -533,6 +597,12 @@ export function MembershipFeesPage({
             Erinnerung: {item.reminder_sent_at ? formatDateTime(item.reminder_sent_at) : 'nicht gesendet'}
             <br />
             Mail-Status: {notificationLabel}
+            {item.member?.status !== 'aktiv' && (
+              <>
+                <br />
+                Versand gesperrt: Mitglied ist nicht aktiv.
+              </>
+            )}
             {item.notification_error && (
               <>
                 <br />
@@ -560,7 +630,7 @@ export function MembershipFeesPage({
                 </button>
               )}
 
-              {showReminderButton && (
+              {canSendReminder && (
                 <button
                   onClick={() => handleSendReminder(item)}
                   style={secondaryButtonStyle}
@@ -570,7 +640,7 @@ export function MembershipFeesPage({
                 </button>
               )}
 
-              {showPaymentConfirmationButton && (
+              {canSendPaidConfirmation && (
                 <button
                   onClick={() => handleSendPaidConfirmation(item)}
                   style={secondaryButtonStyle}
@@ -581,9 +651,32 @@ export function MembershipFeesPage({
               )}
 
               <button
+                onClick={() => {
+                  setPreviewItemId(previewItemId === item.id && previewType === 'fee_reminder' ? null : item.id)
+                  setPreviewType('fee_reminder')
+                }}
+                style={secondaryButtonStyle}
+                disabled={item.member?.member_type === 'ehrenmitglied' || Number(item.amount || 0) <= 0}
+              >
+                Vorschau Erinnerung
+              </button>
+
+              {item.status === 'paid' && (
+                <button
+                  onClick={() => {
+                    setPreviewItemId(previewItemId === item.id && previewType === 'fee_paid_confirmation' ? null : item.id)
+                    setPreviewType('fee_paid_confirmation')
+                  }}
+                  style={secondaryButtonStyle}
+                >
+                  Vorschau Zahlungsbestätigung
+                </button>
+              )}
+
+              <button
                 onClick={() => handleSendTestReminder(item)}
                 style={secondaryButtonStyle}
-                disabled={isLoading}
+                disabled={isLoading || item.member?.member_type === 'ehrenmitglied' || Number(item.amount || 0) <= 0}
               >
                 {isLoading ? 'Testmail wird gesendet...' : 'Test-Erinnerung senden'}
               </button>
@@ -604,6 +697,18 @@ export function MembershipFeesPage({
                 Beitrag löschen
               </button>
             </div>
+
+            {preview && (
+              <div style={{ marginTop: 10, padding: 12, border: `1px solid ${colors.border}`, background: colors.offWhite }}>
+                <strong>Mail-Vorschau</strong>
+                <br />
+                Betreff: {preview.subject}
+                <div
+                  style={{ marginTop: 8 }}
+                  dangerouslySetInnerHTML={{ __html: preview.html }}
+                />
+              </div>
+            )}
           </div>
         )
       })}

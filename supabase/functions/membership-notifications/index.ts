@@ -138,6 +138,30 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: memberError.message }, 500)
     }
 
+    if (!isTest && member?.status !== 'aktiv') {
+      await adminClient
+        .from('membership_fee_items')
+        .update({
+          notification_status: 'error',
+          notification_error: 'Mitglied ist nicht aktiv.',
+        })
+        .eq('id', feeItemId)
+
+      return jsonResponse({ error: 'Mitglied ist nicht aktiv.' }, 400)
+    }
+
+    if (!isTest && type === 'fee_reminder' && (member?.member_type === 'ehrenmitglied' || Number(feeItem.amount || 0) <= 0)) {
+      await adminClient
+        .from('membership_fee_items')
+        .update({
+          notification_status: 'error',
+          notification_error: 'Für Ehrenmitglieder oder 0-Euro-Beiträge wird keine Zahlungsaufforderung versendet.',
+        })
+        .eq('id', feeItemId)
+
+      return jsonResponse({ error: 'Für Ehrenmitglieder oder 0-Euro-Beiträge wird keine Zahlungsaufforderung versendet.' }, 400)
+    }
+
     if (!isTest && !member?.email) {
       await adminClient
         .from('membership_fee_items')
