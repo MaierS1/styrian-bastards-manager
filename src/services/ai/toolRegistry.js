@@ -39,9 +39,24 @@ export const ToolRegistry = [
     rpcName: 'get_public_home_stats',
     enabled: true,
   },
+  {
+    id: 'get_fee_status',
+    description: 'Mock fuer kuenftige Mitgliedsbeitrags-Auskunft.',
+    requiredRole: 'Member',
+    repository: null,
+    rpcName: null,
+    enabled: true,
+  },
+  {
+    id: 'get_member_profile',
+    description: 'Mock fuer kuenftige Mitgliedsprofil-Auskunft.',
+    requiredRole: 'Member',
+    repository: null,
+    rpcName: null,
+    enabled: true,
+  },
 ]
 
 export function getEnabledTools() {
   return ToolRegistry.filter((tool) => tool.enabled)
 }
-

@@ -15,6 +15,12 @@ function resolveIntentId(intent) {
   return intent?.intent || intent?.id || 'UNKNOWN'
 }
 
+function resolveConfidence(options) {
+  return options.intent?.confidence
+    ?? options.selectedTool?.confidence
+    ?? 0
+}
+
 function resolveOptions(intentOrOptions, context, toolResult, personality) {
   const isOptionsObject = intentOrOptions
     && typeof intentOrOptions === 'object'
@@ -45,11 +51,39 @@ function getDataRows(toolResult) {
   return []
 }
 
+function getConversationRows(context, toolId) {
+  const contextWindow = context?.conversationState?.contextWindow || []
+  const matchingEntry = [...contextWindow]
+    .reverse()
+    .find((entry) => entry.toolResult?.tool === toolId && entry.toolResult?.success)
+
+  return getDataRows(matchingEntry?.toolResult)
+}
+
+function normalizeText(value) {
+  if (typeof value !== 'string') return ''
+
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function isLocationFollowUp(context) {
+  const tokens = normalizeText(context?.message).split(' ').filter(Boolean)
+
+  return tokens.includes('wo') || tokens.includes('anfahrt') || tokens.includes('ort')
+}
+
 function formatSuggestions(suggestions) {
   return formatList(suggestions, (suggestion) => suggestion, { limit: suggestions.length })
 }
 
-function composeEventsMessage(template, rows) {
+function composeEventsMessage(template, rows, context) {
   const nextEvent = rows[0]
   if (!nextEvent) return compactLines([template.intro, template.body, template.outro, formatSuggestions(template.followUpSuggestions)])
 
@@ -57,6 +91,15 @@ function composeEventsMessage(template, rows) {
   const date = formatDate(nextEvent.starts_at || nextEvent.event_date)
   const location = nextEvent.location ? `Ort: ${nextEvent.location}` : null
   const registration = nextEvent.registration_status === 'open' ? 'Anmeldung ist moeglich.' : null
+
+  if (isLocationFollowUp(context) && nextEvent.location) {
+    return compactLines([
+      `${title} findet in ${nextEvent.location} statt.`,
+      nextEvent.meeting_point ? `Treffpunkt: ${nextEvent.meeting_point}` : null,
+      'Moechtest du',
+      formatSuggestions(['Details', 'Anmeldung', 'Anfahrt']),
+    ])
+  }
 
   return compactLines([
     `${template.intro} ${title}${date ? ` am ${date}` : ''}.`,
@@ -124,12 +167,14 @@ function composeGeneralMessage(template, rows) {
   ])
 }
 
-function composeTemplateMessage(intentId, template, rows) {
-  if (intentId === 'EVENTS') return composeEventsMessage(template, rows)
-  if (intentId === 'SHOP') return composeShopMessage(template, rows)
-  if (intentId === 'SPONSORS') return composeSponsorsMessage(template, rows)
-  if (intentId === 'MEDIA') return composeMediaMessage(template, rows)
-  if (intentId === 'GENERAL') return composeGeneralMessage(template, rows)
+function composeTemplateMessage(intentId, template, rows, context, source) {
+  const effectiveRows = rows.length > 0 ? rows : getConversationRows(context, source)
+
+  if (intentId === 'EVENTS') return composeEventsMessage(template, effectiveRows, context)
+  if (intentId === 'SHOP') return composeShopMessage(template, effectiveRows)
+  if (intentId === 'SPONSORS') return composeSponsorsMessage(template, effectiveRows)
+  if (intentId === 'MEDIA') return composeMediaMessage(template, effectiveRows)
+  if (intentId === 'GENERAL') return composeGeneralMessage(template, effectiveRows)
 
   return compactLines([template.intro, template.body, template.outro])
 }
@@ -140,15 +185,19 @@ export function composeResponse(intentOrOptions, context, toolResult, personalit
   const template = getResponseTemplate(intentId)
   const rows = getDataRows(options.toolResult)
   const toolSucceeded = options.toolResult ? Boolean(options.toolResult.success) : true
+  const source = options.toolResult?.tool || 'template'
   const message = toolSucceeded
-    ? composeTemplateMessage(intentId, template, rows)
+    ? composeTemplateMessage(intentId, template, rows, options.context, source)
     : compactLines([template.intro, template.body])
 
   return {
     success: toolSucceeded,
     message,
+    confidence: resolveConfidence(options),
     followUps: template.followUpSuggestions,
-    source: options.toolResult?.tool || 'template',
+    suggestedActions: template.followUpSuggestions,
+    source,
+    sources: [source],
     metadata: {
       intent: intentId,
       title: template.title,

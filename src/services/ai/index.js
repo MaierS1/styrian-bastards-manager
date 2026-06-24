@@ -1,4 +1,13 @@
 export { handleChatRequest } from './aiGateway.js'
+export { processChatMessage } from './chatService.js'
+export {
+  createConversation,
+  updateConversation,
+  resetConversation,
+  getConversation,
+  trimConversation,
+} from './conversationManager.js'
+export { createConversationState } from './conversationState.js'
 export { ToolRegistry } from './toolRegistry.js'
 export { PromptBuilder } from './promptBuilder.js'
 export { ContextBuilder } from './contextBuilder.js'
