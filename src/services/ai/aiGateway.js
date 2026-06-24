@@ -4,13 +4,16 @@ import { PromptBuilder } from './promptBuilder.js'
 import { getEnabledTools } from './toolRegistry.js'
 import { executeTool } from './toolExecutor.js'
 import { detectIntent } from './intentRouter.js'
+import { selectTool } from './intentToolMapper.js'
 
 export function handleChatRequest(request = {}) {
   const context = ContextBuilder(request)
   const intent = detectIntent(request.message, context)
+  const selectedTool = selectTool(intent, context)
   const promptContext = {
     ...context,
     intent,
+    selectedTool,
   }
   const toolResults = []
   const prompt = PromptBuilder({
@@ -39,6 +42,7 @@ export function handleChatRequest(request = {}) {
       request,
       context,
       intent,
+      selectedTool,
       tools,
       toolExecutor: {
         ready: toolExecutor.ready,
