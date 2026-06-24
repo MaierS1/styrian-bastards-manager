@@ -1,5 +1,6 @@
 import { ToolRegistry } from './toolRegistry.js'
 import { formatToolResult } from './toolResultFormatter.js'
+import { executePublicTool } from './publicToolExecutor.js'
 import { roleAllowed, toolEnabled, toolExists } from './toolValidators.js'
 
 function buildExecutionResult({ toolId, success, data = null, metadata = {} }) {
@@ -17,7 +18,11 @@ function buildExecutionResult({ toolId, success, data = null, metadata = {} }) {
   }
 }
 
-export function executeTool(toolId, context = {}, parameters = {}) {
+function isPublicTool(toolId) {
+  return typeof toolId === 'string' && toolId.startsWith('get_public_')
+}
+
+export async function executeTool(toolId, context = {}, parameters = {}) {
   if (!toolExists(toolId)) {
     return buildExecutionResult({
       toolId,
@@ -53,6 +58,10 @@ export function executeTool(toolId, context = {}, parameters = {}) {
         userRole: context?.userRole || 'Visitor',
       },
     })
+  }
+
+  if (isPublicTool(toolId)) {
+    return executePublicTool(toolId)
   }
 
   return buildExecutionResult({
