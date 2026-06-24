@@ -1,5 +1,6 @@
-import { supabase } from '../../lib/supabase.js'
 import { formatToolResult } from './toolResultFormatter.js'
+
+let configuredRpcClient = null
 
 const PUBLIC_TOOL_RPC_PARAMETERS = {
   get_public_events: undefined,
@@ -33,6 +34,19 @@ function logDevelopmentError(toolId, error) {
   })
 }
 
+async function getDefaultRpcClient() {
+  const { supabase } = await import('../../lib/supabase.js')
+  return supabase
+}
+
+async function getRpcClient(rpcClient = null) {
+  return rpcClient || configuredRpcClient || getDefaultRpcClient()
+}
+
+export function setPublicToolRpcClient(rpcClient) {
+  configuredRpcClient = rpcClient
+}
+
 function formatPublicToolResult({ toolId, success, data = null, metadata = {}, reason = null }) {
   const formattedResult = formatToolResult({
     tool: toolId,
@@ -56,7 +70,7 @@ function formatPublicToolResult({ toolId, success, data = null, metadata = {}, r
   return formattedResult
 }
 
-export async function executePublicTool(toolId) {
+export async function executePublicTool(toolId, rpcClient = null) {
   const startedAt = performance.now()
 
   if (!Object.prototype.hasOwnProperty.call(PUBLIC_TOOL_RPC_PARAMETERS, toolId)) {
@@ -74,7 +88,8 @@ export async function executePublicTool(toolId) {
 
   try {
     const rpcParameters = PUBLIC_TOOL_RPC_PARAMETERS[toolId]
-    const { data, error } = await supabase.rpc(toolId, rpcParameters)
+    const client = await getRpcClient(rpcClient)
+    const { data, error } = await client.rpc(toolId, rpcParameters)
     const executionTime = Number((performance.now() - startedAt).toFixed(2))
 
     if (error) {

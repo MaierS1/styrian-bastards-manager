@@ -18,7 +18,7 @@ export { detectIntent } from './intentRouter.js'
 export { IntentDefinitions, getIntentDefinition, getUnknownIntent } from './intentDefinitions.js'
 export { matchIntent, matchIntents } from './intentMatchers.js'
 export { selectTool } from './intentToolMapper.js'
-export { executePublicTool } from './publicToolExecutor.js'
+export { executePublicTool, setPublicToolRpcClient } from './publicToolExecutor.js'
 export { composeResponse } from './responseComposer.js'
 export { ResponseTemplates, getResponseTemplate } from './responseTemplates.js'
 export {

@@ -389,6 +389,9 @@ verify_jwt = false
 [functions.member-document-link]
 verify_jwt = false
 
+[functions.ai-chat]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
