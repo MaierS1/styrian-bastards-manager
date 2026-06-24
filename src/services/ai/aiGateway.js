@@ -5,6 +5,7 @@ import { getEnabledTools } from './toolRegistry.js'
 import { executeTool } from './toolExecutor.js'
 import { detectIntent } from './intentRouter.js'
 import { selectTool } from './intentToolMapper.js'
+import { composeResponse } from './responseComposer.js'
 
 function getRecordCount(data) {
   if (Array.isArray(data)) return data.length
@@ -32,11 +33,6 @@ export async function handleChatRequest(request = {}) {
     selectedTool,
   }
   const toolResults = []
-  const prompt = PromptBuilder({
-    context: promptContext,
-    personality: Personality,
-    toolResults,
-  })
   const tools = getEnabledTools()
   const toolExecutor = {
     ready: true,
@@ -56,17 +52,33 @@ export async function handleChatRequest(request = {}) {
     toolResults.push(selectedToolResult)
   }
   const toolExecution = formatToolExecutionDebug(selectedToolResult)
+  const response = composeResponse({
+    intent,
+    context,
+    toolResult: selectedToolResult,
+    personality: Personality,
+  })
+  const prompt = PromptBuilder({
+    context: {
+      ...promptContext,
+      response,
+    },
+    personality: Personality,
+    toolResults,
+  })
 
   return {
     ok: true,
     provider: null,
-    message: 'AI Gateway foundation ready. No AI provider configured.',
+    message: response.message,
+    response,
     debug: {
       request,
       context,
       intent,
       selectedTool,
       toolExecution,
+      response,
       tools,
       toolExecutor: {
         ready: toolExecutor.ready,

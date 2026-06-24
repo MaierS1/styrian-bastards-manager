@@ -10,3 +10,14 @@ export { IntentDefinitions, getIntentDefinition, getUnknownIntent } from './inte
 export { matchIntent, matchIntents } from './intentMatchers.js'
 export { selectTool } from './intentToolMapper.js'
 export { executePublicTool } from './publicToolExecutor.js'
+export { composeResponse } from './responseComposer.js'
+export { ResponseTemplates, getResponseTemplate } from './responseTemplates.js'
+export {
+  compactLines,
+  formatAmount,
+  formatDate,
+  formatFallback,
+  formatLink,
+  formatList,
+  getRecordCount,
+} from './responseFormatter.js'
