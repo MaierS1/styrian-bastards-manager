@@ -54,7 +54,7 @@ export function MembersCsvImport({
               <br />
               Mitgliedsart: {member.member_type}
               <br />
-              Funktion: {getRoleLabel(member.role || 'mitglied')}
+              Funktion: {getRoleLabel(member.role || 'keine')}
               <br />
               Adresse: {member.street || '-'}, {member.postal_code || '-'} {member.city || '-'}
             </div>

@@ -18,10 +18,11 @@ import {
 import {
   canManageCashRole,
   canManageMembersRole,
-  canManagePurchaseMember,
   getAppRole as getMemberAppRole,
   getAppRoleLabel,
   getEventPermissions,
+  hasPermission,
+  isBoardFunction,
   isAdminRole,
 } from './utils/permissions'
 import { navigationItems } from './app/navigation'
@@ -394,8 +395,8 @@ export default function App() {
   const [memberEmail, setMemberEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [memberType, setMemberType] = useState('vollmitglied')
-  const [role, setRole] = useState('mitglied')
-  const [appRole, setAppRole] = useState('readonly')
+  const [role, setRole] = useState('keine')
+  const [appRole, setAppRole] = useState('mitglied')
   const [isTestMember, setIsTestMember] = useState(false)
   const [street, setStreet] = useState('')
   const [postalCode, setPostalCode] = useState('')
@@ -666,7 +667,7 @@ export default function App() {
     return loadAllService({
       loadMembersFn: () => loadMembersService({ setMembers }),
       loadFeesFn: () => loadFeesService({ year: 2026, setFees }),
-      loadMembershipFeeDataFn: currentMemberRef.current?.app_role === 'admin'
+      loadMembershipFeeDataFn: hasPermission(currentMemberRef.current, 'beitraege', 'view')
         ? () =>
             loadMembershipFeeDataService({
               setMembershipFeePeriods,
@@ -804,8 +805,8 @@ export default function App() {
     setMemberEmail(member.email || '')
     setPhone(member.phone || '')
     setMemberType(member.member_type || 'vollmitglied')
-    setRole(member.role || 'mitglied')
-    setAppRole(member.app_role || 'readonly')
+    setRole(member.role || 'keine')
+    setAppRole(member.app_role || 'mitglied')
     setIsTestMember(Boolean(member.is_test))
     setStreet(member.street || '')
     setPostalCode(member.postal_code || '')
@@ -979,6 +980,14 @@ export default function App() {
 
   function canDeleteEvents() {
     return getEventPermissions(getAppRole()).canDelete
+  }
+
+  function canViewModule(module) {
+    return hasPermission(currentMember, module, 'view')
+  }
+
+  function canEditModule(module) {
+    return hasPermission(currentMember, module, 'edit')
   }
 
   async function login() {
@@ -1157,7 +1166,7 @@ export default function App() {
   }
 
   async function createMembershipFeesForYear({ year, title, dueDate }) {
-    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+    if (!canEditModule('beitraege')) return alert('Keine Berechtigung für Beitragsverwaltung.')
 
     setMembershipFeeGenerationLoading(true)
     setMembershipFeeGenerationResult(null)
@@ -1204,7 +1213,7 @@ export default function App() {
     paymentMethod = 'bar',
     createCashEntry = true,
   }) {
-    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+    if (!canEditModule('beitraege')) return alert('Keine Berechtigung für Beitragsverwaltung.')
 
     setMembershipFeeActionLoadingId(feeItemId)
     try {
@@ -1227,7 +1236,7 @@ export default function App() {
   }
 
   async function reopenMembershipFeeItemAction({ feeItemId, cancelCashEntry = true }) {
-    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+    if (!canEditModule('beitraege')) return alert('Keine Berechtigung für Beitragsverwaltung.')
 
     setMembershipFeeActionLoadingId(feeItemId)
     try {
@@ -1249,7 +1258,7 @@ export default function App() {
   }
 
   async function sendMembershipFeeNotificationAction({ feeItemId, type }) {
-    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+    if (!canEditModule('beitraege')) return alert('Keine Berechtigung für Beitragsverwaltung.')
 
     setMembershipFeeActionLoadingId(feeItemId)
     try {
@@ -1285,7 +1294,7 @@ export default function App() {
   }
 
   async function deleteMembershipFeeItemAction({ feeItemId }) {
-    if (!isAdmin()) return alert('Keine Berechtigung für Beitragsverwaltung.')
+    if (!canEditModule('beitraege')) return alert('Keine Berechtigung für Beitragsverwaltung.')
 
     setMembershipFeeActionLoadingId(feeItemId)
     try {
@@ -1509,14 +1518,15 @@ export default function App() {
     if (normalized === 'kassier') return 'kassier'
     if (normalized.includes('schriftfuehrerstv') || normalized.includes('schriftfuehrerstellvertreter') || normalized.includes('schriftfuhrerstv')) return 'schriftfuehrer_stv'
     if (normalized.includes('schriftfuehrer') || normalized.includes('schriftfuhrer')) return 'schriftfuehrer'
-    if (normalized.includes('beirat')) return 'beirat'
-    if (normalized.includes('helfer')) return 'helfer'
+    if (normalized.includes('rechnungspruefer') || normalized.includes('rechnungsprufer')) return 'rechnungspruefer'
+    if (normalized.includes('vorstandsmitglied')) return 'vorstandsmitglied'
 
-    return 'mitglied'
+    return 'keine'
   }
 
   function getRoleLabel(value) {
     const labels = {
+      keine: 'Keine',
       mitglied: 'Mitglied',
       obmann: 'Obmann',
       obmann_stv: 'Obmann-Stellvertreter',
@@ -1524,11 +1534,11 @@ export default function App() {
       kassier_stv: 'Kassier-Stellvertreter',
       schriftfuehrer: 'Schriftführer',
       schriftfuehrer_stv: 'Schriftführer-Stellvertreter',
-      beirat: 'Beirat',
-      helfer: 'Helfer',
+      rechnungspruefer: 'Rechnungsprüfer',
+      vorstandsmitglied: 'Vorstandsmitglied',
     }
 
-    return labels[value] || 'Mitglied'
+    return labels[value] || 'Keine'
   }
 
   function getCsvValue(row, keys) {
@@ -2049,7 +2059,7 @@ export default function App() {
         memberTypeFilter === 'alle' || member.member_type === memberTypeFilter
 
       const matchesRole =
-        roleFilter === 'alle' || (member.role || 'mitglied') === roleFilter
+        roleFilter === 'alle' || (member.role || 'keine') === roleFilter
 
       const matchesFee =
         feeFilter === 'alle' ||
@@ -2295,14 +2305,27 @@ export default function App() {
       return
     }
 
+    const allowedRoles = [
+      'super_admin',
+      'administrator',
+      'vorstand',
+      'kassier',
+      'schriftfuehrer',
+      'rechnungspruefer',
+      'mitglied',
+      'admin',
+      'cashier',
+      'members',
+      'checkin',
+      'readonly',
+    ]
+
     const selectedRole = window.prompt(
-      `App-Recht für ${member.first_name || ''} ${member.last_name || ''}:\n\nadmin\ncashier\nmembers\ncheckin\nreadonly`,
-      member.app_role || 'readonly'
+      `App-Recht für ${member.first_name || ''} ${member.last_name || ''}:\n\n${allowedRoles.join('\n')}`,
+      member.app_role || 'mitglied'
     )
 
     if (!selectedRole) return
-
-    const allowedRoles = ['admin', 'cashier', 'members', 'checkin', 'readonly']
 
     if (!allowedRoles.includes(selectedRole)) {
       alert('Ungültige Rolle.')
@@ -2340,27 +2363,23 @@ export default function App() {
   }
 
   function canManageSponsors() {
-    return canManageMembers() || isAdmin()
+    return canEditModule('sponsoren')
   }
 
   function canManageMedia() {
-    return canManageMembers() || isAdmin()
+    return canEditModule('medien_presse')
   }
 
   function canManageMerch() {
-    return canManageMembers() || isAdmin()
-  }
-
-  function canManagePurchase() {
-    return canManagePurchaseMember(currentMember)
+    return canEditModule('shop')
   }
 
   function canAccessParkedModules() {
-    return isAdmin() || ['obmann', 'obmann_stv', 'schriftfuehrer', 'schriftfuehrer_stv', 'kassier', 'kassier_stv'].includes(currentMember?.role)
+    return isAdmin() || isBoardFunction(currentMember?.role)
   }
 
   function canManageVirtualBastardKnowledge() {
-    return isAdmin() || ['obmann', 'obmann_stv', 'schriftfuehrer', 'schriftfuehrer_stv', 'kassier', 'kassier_stv'].includes(currentMember?.role)
+    return canEditModule('homepage') || isBoardFunction(currentMember?.role)
   }
 
   function resetMerchItemForm() {
@@ -3802,7 +3821,7 @@ export default function App() {
   }
 
   async function importInventoryRows() {
-    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventar-Import.')
+    if (!canEditModule('inventar')) return alert('Keine Berechtigung für Inventar-Import.')
 
     if (inventoryCsvRows.length === 0) {
       alert('Bitte zuerst eine Inventar-CSV auswählen.')
@@ -3834,7 +3853,7 @@ export default function App() {
   }
 
   function editInventoryItem(item) {
-    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventarverwaltung.')
+    if (!canEditModule('inventar')) return alert('Keine Berechtigung für Inventarverwaltung.')
 
     setInventoryEditingId(item.id)
     setInventoryNumber(item.inventory_number || '')
@@ -3855,7 +3874,7 @@ export default function App() {
   }
 
   async function saveInventoryItem() {
-    if (!canManageMembers() && !isAdmin()) return alert('Keine Berechtigung für Inventarverwaltung.')
+    if (!canEditModule('inventar')) return alert('Keine Berechtigung für Inventarverwaltung.')
 
     if (!inventoryName.trim()) {
       alert('Bezeichnung ist Pflicht.')
@@ -3894,7 +3913,7 @@ export default function App() {
   }
 
   async function retireInventoryItem(item) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Inventar ausmustern.')
+    if (!hasPermission(currentMember, 'inventar', 'delete')) return alert('Keine Berechtigung zum Ausmustern von Inventar.')
 
     const reason = window.prompt(`Grund für Ausmustern von ${item.inventory_number} eingeben:`)
 
@@ -3931,7 +3950,7 @@ export default function App() {
   }
 
   async function deleteInventoryItem(item) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Inventar löschen.')
+    if (!hasPermission(currentMember, 'inventar', 'delete')) return alert('Keine Berechtigung zum Löschen von Inventar.')
 
     const confirmed = window.confirm(
       `Inventar-Eintrag wirklich endgültig löschen?\n\n${item.inventory_number || ''} · ${item.name || ''}\n\nEmpfohlen ist normalerweise â€žAusmusternâ€œ. Löschen entfernt den Eintrag dauerhaft.`
@@ -4919,8 +4938,8 @@ export default function App() {
     setMemberEmail('')
     setPhone('')
     setMemberType('vollmitglied')
-    setRole('mitglied')
-    setAppRole('readonly')
+    setRole('keine')
+    setAppRole('mitglied')
     setIsTestMember(false)
     setStreet('')
     setPostalCode('')
@@ -5283,7 +5302,7 @@ export default function App() {
   }
 
   async function uploadDocument() {
-    if (!canManageMembers() && !isAdmin()) {
+    if (!canEditModule('dokumente')) {
       alert('Keine Berechtigung für Dokumenten-Upload.')
       return
     }
@@ -5320,7 +5339,7 @@ export default function App() {
   }
 
   async function saveDocumentMemberAreaSettings(document, settings) {
-    if (!canManageMembers() && !isAdmin()) {
+    if (!canEditModule('dokumente')) {
       alert('Keine Berechtigung fuer Dokument-Einstellungen.')
       return
     }
@@ -5345,7 +5364,7 @@ export default function App() {
   }
 
   async function deleteDocument(document) {
-    if (!isAdmin()) return alert('Nur Admins dürfen Dokumente löschen.')
+    if (!hasPermission(currentMember, 'dokumente', 'delete')) return alert('Keine Berechtigung zum Löschen von Dokumenten.')
 
     const confirmed = window.confirm(
       `Dokument wirklich löschen?\n\n${document.title || ''}\n\nDas kann nicht rückgängig gemacht werden.`
@@ -5470,6 +5489,7 @@ export default function App() {
       <nav style={navStyle}>
         {navigationItems
           .filter(([pageKey]) => pageKey !== 'purchase')
+          .filter(([, , module]) => !module || canViewModule(module))
           .filter(([pageKey]) => pageKey !== 'parkedModules' || canAccessParkedModules())
           .filter(([pageKey]) => pageKey !== 'virtualBastardKnowledge' || canManageVirtualBastardKnowledge())
           .map(([pageKey, label]) => (
@@ -5511,7 +5531,7 @@ export default function App() {
 
       {activePage === 'fees' && (
         <MembershipFeesPage
-          canAccess={isAdmin()}
+          canAccess={canViewModule('beitraege')}
           members={members}
           membershipFeePeriods={membershipFeePeriods}
           membershipFeeItems={membershipFeeItems}
@@ -5852,7 +5872,7 @@ export default function App() {
 
       {activePage === 'documents' && (
         <DocumentsPage
-          canManageDocuments={() => canManageMembers() || isAdmin()}
+          canManageDocuments={() => canEditModule('dokumente')}
           uploadFormProps={{
             documentTitle,
             setDocumentTitle,
@@ -5879,7 +5899,7 @@ export default function App() {
           listProps={{
             documents,
             isAdmin,
-            canManageDocuments: () => canManageMembers() || isAdmin(),
+            canManageDocuments: () => canEditModule('dokumente'),
             openDocument,
             deleteDocument,
             saveDocumentMemberAreaSettings,
@@ -6365,7 +6385,7 @@ export default function App() {
             exportCheckinsPdf,
           }}
           backupProps={{
-            canRestore: isAdmin(),
+            canRestore: hasPermission(currentMember, 'backup', 'delete'),
             exportMembersCsv,
             exportCashCsv,
             exportTaxAdvisorCsv,
@@ -6392,13 +6412,13 @@ export default function App() {
             setRestoreData,
             setRestoreFileName,
           }}
-          userInvitesProps={isAdmin() ? {
+          userInvitesProps={hasPermission(currentMember, 'systemeinstellungen', 'edit') ? {
             members,
             getAppRoleLabel,
             inviteMemberUser,
             invitingMemberId,
           } : null}
-          changeRequestsProps={(canManageMembers() || isAdmin()) ? {
+          changeRequestsProps={canManageMembers() ? {
             members,
             getPendingMemberChangeRequests,
             approveMemberChangeRequest,

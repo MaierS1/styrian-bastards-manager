@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: callerError.message }, 500)
     }
 
-    if (callerMember?.app_role !== 'admin') {
+    if (!['admin', 'super_admin', 'administrator'].includes(callerMember?.app_role || '')) {
       return jsonResponse({ error: 'Nur Admins dürfen Benutzer einladen.' }, 403)
     }
 
@@ -70,7 +70,20 @@ Deno.serve(async (req) => {
     const appRole = String(body.app_role || 'readonly')
     const redirectTo = body.redirect_to ? String(body.redirect_to) : undefined
 
-    const allowedRoles = ['admin', 'cashier', 'members', 'checkin', 'readonly']
+    const allowedRoles = [
+      'super_admin',
+      'administrator',
+      'vorstand',
+      'kassier',
+      'schriftfuehrer',
+      'rechnungspruefer',
+      'mitglied',
+      'admin',
+      'cashier',
+      'members',
+      'checkin',
+      'readonly',
+    ]
 
     if (!memberId || !email) {
       return jsonResponse({ error: 'Mitglied und E-Mail sind Pflicht.' }, 400)

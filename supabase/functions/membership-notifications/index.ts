@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: callerError.message }, 500)
     }
 
-    if (callerMember?.app_role !== 'admin') {
+    if (!['admin', 'super_admin', 'administrator', 'kassier'].includes(callerMember?.app_role || '')) {
       return jsonResponse({ error: 'Nur Admins dürfen Beitragsmails versenden.' }, 403)
     }
 

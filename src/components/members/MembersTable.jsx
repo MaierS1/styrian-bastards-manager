@@ -45,9 +45,9 @@ export function MembersTable({
         <br />
         Mitgliedsart: {member.member_type}
         <br />
-        Vereinsfunktion: {getRoleLabel(member.role || 'mitglied')}
+        Vereinsfunktion: {getRoleLabel(member.role || 'keine')}
         <br />
-        App-Recht: {getAppRoleLabel(member.app_role || 'readonly')}
+        App-Recht: {getAppRoleLabel(member.app_role || 'mitglied')}
         {member.is_test && (
           <>
             <br />

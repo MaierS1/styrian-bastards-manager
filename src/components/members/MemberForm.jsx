@@ -5,6 +5,7 @@ import {
   inputStyle,
   sectionStyle,
 } from '../../styles/appStyles'
+import { APP_ROLE_OPTIONS, CLUB_FUNCTIONS, MEMBER_TYPES } from '../../utils/permissions'
 
 export function MemberForm({
   isAdmin,
@@ -40,40 +41,34 @@ export function MemberForm({
 }) {
   return (
     <section style={sectionStyle}>
-      <h2 style={headingStyle}>{editingId ? 'Mitglied bearbeiten' : 'Mitglied hinzufügen'}</h2>
+      <h2 style={headingStyle}>{editingId ? 'Mitglied bearbeiten' : 'Mitglied hinzufuegen'}</h2>
 
       <input placeholder="Vorname" value={firstName} onChange={(e) => setFirstName(e.target.value)} style={inputStyle} />
       <input placeholder="Nachname" value={lastName} onChange={(e) => setLastName(e.target.value)} style={inputStyle} />
       <input placeholder="E-Mail" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} style={inputStyle} />
       <input placeholder="Telefon" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
 
+      <label style={{ display: 'block', marginBottom: 4, fontWeight: 700 }}>Mitgliedsart</label>
       <select value={memberType} onChange={(e) => setMemberType(e.target.value)} style={inputStyle}>
-        <option value="vollmitglied">Vollmitglied</option>
-        <option value="ehrenmitglied">Ehrenmitglied</option>
-        <option value="foerdermitglied">Fördermitglied</option>
-        <option value="probejahr">Probejahr</option>
+        {MEMBER_TYPES.map(([value, label]) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
       </select>
 
+      <label style={{ display: 'block', marginBottom: 4, fontWeight: 700 }}>Vereinsfunktion</label>
       <select value={role} onChange={(e) => setRole(e.target.value)} style={inputStyle}>
-        <option value="mitglied">Mitglied</option>
-        <option value="obmann">Obmann</option>
-        <option value="obmann_stv">Obmann-Stellvertreter</option>
-        <option value="kassier">Kassier</option>
-        <option value="kassier_stv">Kassier-Stellvertreter</option>
-        <option value="schriftfuehrer">Schriftführer</option>
-        <option value="schriftfuehrer_stv">Schriftführer-Stellvertreter</option>
-        <option value="beirat">Beirat</option>
-        <option value="helfer">Helfer</option>
+        {CLUB_FUNCTIONS.map(([value, label]) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
       </select>
 
       {isAdmin() && (
         <>
+          <label style={{ display: 'block', marginBottom: 4, fontWeight: 700 }}>App-Recht</label>
           <select value={appRole} onChange={(e) => setAppRole(e.target.value)} style={inputStyle}>
-            <option value="readonly">App-Recht: Nur Lesen</option>
-            <option value="checkin">App-Recht: Check-in</option>
-            <option value="cashier">App-Recht: Kassa</option>
-            <option value="members">App-Recht: Mitgliederverwaltung</option>
-            <option value="admin">App-Recht: Admin</option>
+            {APP_ROLE_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>App-Recht: {label}</option>
+            ))}
           </select>
 
           <label style={{ display: 'block', marginBottom: 12, fontWeight: 800, color: colors.black }}>
@@ -88,13 +83,13 @@ export function MemberForm({
         </>
       )}
 
-      <input placeholder="Straße" value={street} onChange={(e) => setStreet(e.target.value)} style={inputStyle} />
+      <input placeholder="Strasse" value={street} onChange={(e) => setStreet(e.target.value)} style={inputStyle} />
       <input placeholder="PLZ" value={postalCode} onChange={(e) => setPostalCode(e.target.value)} style={inputStyle} />
       <input placeholder="Ort" value={city} onChange={(e) => setCity(e.target.value)} style={inputStyle} />
       <input type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} style={inputStyle} />
 
       <select value={clothingSize} onChange={(e) => setClothingSize(e.target.value)} style={inputStyle}>
-        <option value="">Kleidergröße wählen</option>
+        <option value="">Kleidergroesse waehlen</option>
         <option>XXS</option>
         <option>XS</option>
         <option>S</option>
@@ -108,7 +103,7 @@ export function MemberForm({
       </select>
 
       <button onClick={saveMember} style={buttonStyle}>
-        {editingId ? 'Änderungen speichern' : 'Mitglied speichern'}
+        {editingId ? 'Aenderungen speichern' : 'Mitglied speichern'}
       </button>
 
       {editingId && (

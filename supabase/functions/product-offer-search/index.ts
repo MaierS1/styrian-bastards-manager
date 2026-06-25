@@ -8,13 +8,17 @@ const corsHeaders = {
 
 const purchaseRoles = new Set([
   'admin',
+  'super_admin',
+  'administrator',
+  'vorstand',
   'cashier',
+  'kassier',
+  'schriftfuehrer',
   'obmann',
   'obmann_stv',
-  'schriftfuehrer',
   'schriftfuehrer_stv',
-  'kassier',
   'kassier_stv',
+  'vorstandsmitglied',
 ])
 
 const allowedSupplierNames = new Set(['METRO', 'Transgourmet'])

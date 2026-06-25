@@ -5,6 +5,7 @@ import {
   mutedTextStyle,
   sectionStyle,
 } from '../../styles/appStyles'
+import { CLUB_FUNCTIONS, MEMBER_TYPES } from '../../utils/permissions'
 import { MembersTable } from './MembersTable'
 
 export function MembersOverview({
@@ -28,7 +29,7 @@ export function MembersOverview({
 }) {
   return (
     <section style={sectionStyle}>
-      <h2 style={headingStyle}>Mitglieder & Beiträge 2026</h2>
+      <h2 style={headingStyle}>Mitglieder & Beitraege 2026</h2>
 
       <h3 style={headingStyle}>Mitglieder Suche & Filter</h3>
 
@@ -39,6 +40,7 @@ export function MembersOverview({
         style={inputStyle}
       />
 
+      <label style={{ display: 'block', marginBottom: 4, fontWeight: 700 }}>Mitgliedsstatus</label>
       <select value={memberStatusFilter} onChange={(e) => setMemberStatusFilter(e.target.value)} style={inputStyle}>
         <option value="alle">Alle Status</option>
         <option value="aktiv">Aktiv</option>
@@ -46,34 +48,31 @@ export function MembersOverview({
         <option value="ausgetreten">Ausgetreten</option>
       </select>
 
+      <label style={{ display: 'block', marginBottom: 4, fontWeight: 700 }}>Mitgliedsart</label>
       <select value={memberTypeFilter} onChange={(e) => setMemberTypeFilter(e.target.value)} style={inputStyle}>
         <option value="alle">Alle Arten</option>
-        <option value="vollmitglied">Vollmitglied</option>
-        <option value="ehrenmitglied">Ehrenmitglied</option>
-        <option value="foerdermitglied">Fördermitglied</option>
-        <option value="probejahr">Probejahr</option>
+        {MEMBER_TYPES.map(([value, label]) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
       </select>
 
+      <label style={{ display: 'block', marginBottom: 4, fontWeight: 700 }}>Vereinsfunktion</label>
       <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} style={inputStyle}>
         <option value="alle">Alle Funktionen</option>
-        <option value="mitglied">Mitglied</option>
-        <option value="obmann">Obmann</option>
-        <option value="obmann_stv">Obmann-Stellvertreter</option>
-        <option value="kassier">Kassier</option>
-        <option value="kassier_stv">Kassier-Stellvertreter</option>
-        <option value="schriftfuehrer">Schriftführer</option>
-        <option value="schriftfuehrer_stv">Schriftführer-Stellvertreter</option>
-        <option value="beirat">Beirat</option>
-        <option value="helfer">Helfer</option>
+        {CLUB_FUNCTIONS.map(([value, label]) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
       </select>
 
+      <label style={{ display: 'block', marginBottom: 4, fontWeight: 700 }}>Beitragsstatus</label>
       <select value={feeFilter} onChange={(e) => setFeeFilter(e.target.value)} style={inputStyle}>
-        <option value="alle">Alle Beiträge</option>
+        <option value="alle">Alle Beitraege</option>
         <option value="offen">Beitrag offen</option>
         <option value="bezahlt">Beitrag bezahlt</option>
         <option value="gratis">Kein Beitrag</option>
       </select>
 
+      <label style={{ display: 'block', marginBottom: 4, fontWeight: 700 }}>Teststatus</label>
       <select value={memberTestFilter} onChange={(e) => setMemberTestFilter(e.target.value)} style={inputStyle}>
         <option value="alle">Alle Mitglieder</option>
         <option value="echt">Nur echte Mitglieder</option>
@@ -81,7 +80,7 @@ export function MembersOverview({
       </select>
 
       <button onClick={resetMemberFilters} style={buttonStyle}>
-        Filter zurücksetzen
+        Filter zuruecksetzen
       </button>
 
       <p>

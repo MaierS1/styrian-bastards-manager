@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: callerError.message }, 500)
       }
 
-      if (!callerMember || !['admin', 'checkin'].includes(callerMember.app_role)) {
+      if (!callerMember || !['admin', 'super_admin', 'administrator', 'vorstand'].includes(callerMember.app_role)) {
         return jsonResponse({ error: 'Keine Berechtigung für Event-Benachrichtigungen.' }, 403)
       }
     }
