@@ -13,24 +13,6 @@ begin
 end;
 $$;
 
-create or replace function public.is_board_member()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.members
-    where auth_user_id = auth.uid()
-      and (
-        app_role = 'admin'
-        or role in ('obmann', 'obmann_stv', 'schriftfuehrer', 'schriftfuehrer_stv', 'kassier', 'kassier_stv', 'beirat')
-      )
-  );
-$$;
-
 create table if not exists public.members (
   id uuid primary key default gen_random_uuid(),
   member_number text,
@@ -58,6 +40,24 @@ create index if not exists members_auth_user_id_idx on public.members (auth_user
 create index if not exists members_status_idx on public.members (status);
 create index if not exists members_app_role_idx on public.members (app_role);
 create index if not exists members_member_number_idx on public.members (member_number);
+
+create or replace function public.is_board_member()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.members
+    where auth_user_id = auth.uid()
+      and (
+        app_role = 'admin'
+        or role in ('obmann', 'obmann_stv', 'schriftfuehrer', 'schriftfuehrer_stv', 'kassier', 'kassier_stv', 'beirat')
+      )
+  );
+$$;
 
 drop trigger if exists set_members_updated_at on public.members;
 create trigger set_members_updated_at
