@@ -24,6 +24,7 @@ create table if not exists public.members (
   role text not null default 'mitglied',
   app_role text not null default 'readonly',
   status text not null default 'aktiv',
+  joined_at date default current_date,
   is_test boolean not null default false,
   street text,
   postal_code text,
