@@ -146,7 +146,7 @@ export async function saveMembershipFee({
     type: 'einnahme',
     category: 'mitgliedsbeitrag',
     amount: Math.abs(Number(fee.amount || 0)),
-    description: `Mitgliedsbeitrag 2026 - ${
+    description: `Mitgliedsbeitrag ${fee.year || today.slice(0, 4)} - ${
       member ? `${member.first_name} ${member.last_name}` : 'Mitglied'
     }`,
     is_test: Boolean(member?.is_test),

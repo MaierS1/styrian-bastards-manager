@@ -43,7 +43,7 @@ export async function loadMembers({ setMembers, alertFn = alert }) {
   setMembers(data || [])
 }
 
-export async function loadFees({ year = 2026, setFees, alertFn = alert }) {
+export async function loadFees({ year, setFees, alertFn = alert }) {
   const { data, error } = await fetchMembershipFees(year)
 
   if (error) return alertFn(error.message)

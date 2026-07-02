@@ -10,9 +10,11 @@ export function MemberFeeActions({
   markFeePaid,
   markFeeOpen,
 }) {
+  const isLegacyFee = fee && fee.source !== 'membership_fee_items'
+
   return (
     <>
-      {fee && !fee.paid && (
+      {isLegacyFee && !fee.paid && (
         <>
           <button onClick={() => createMembershipFeeInvoice(member, fee)} style={secondaryButtonStyle}>
             Mitgliedsbeitrag Rechnung erstellen
@@ -28,7 +30,7 @@ export function MemberFeeActions({
         </>
       )}
 
-      {fee && fee.paid && (
+      {isLegacyFee && fee.paid && (
         <button onClick={() => markFeeOpen(fee)} style={buttonStyle}>
           Beitrag wieder offen setzen
         </button>

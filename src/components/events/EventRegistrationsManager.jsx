@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { buttonStyle, cardStyle, headingStyle, inputStyle, mutedTextStyle, secondaryButtonStyle } from '../../styles/appStyles'
 import {
   createEventRegistration,
@@ -57,18 +57,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
 
   const stats = useMemo(() => buildStats(registrations), [registrations])
 
-  useEffect(() => {
-    setForm(emptyForm)
-    setSendConfirmationOnCreate(false)
-    setEditingById({})
-    if (event?.id) {
-      loadRegistrations()
-    } else {
-      setRegistrations([])
-    }
-  }, [event?.id])
-
-  async function loadRegistrations() {
+  const loadRegistrations = useCallback(async () => {
     if (!event?.id) return
 
     setLoading(true)
@@ -81,7 +70,18 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     }
 
     setRegistrations(data || [])
-  }
+  }, [event?.id])
+
+  useEffect(() => {
+    setForm(emptyForm)
+    setSendConfirmationOnCreate(false)
+    setEditingById({})
+    if (event?.id) {
+      loadRegistrations()
+    } else {
+      setRegistrations([])
+    }
+  }, [event?.id, loadRegistrations])
 
   function updateFormValue(field, value) {
     setForm((current) => ({ ...current, [field]: value }))

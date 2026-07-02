@@ -29,7 +29,7 @@ export async function saveMemberRecord({
 
     await supabase.from('membership_fees').insert({
       member_id: data.id,
-      year: 2026,
+      year: new Date().getFullYear(),
       amount: getAmountByType(memberType),
       paid: false,
       payment_method: 'bar',

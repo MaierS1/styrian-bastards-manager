@@ -37,7 +37,6 @@ import {
   getCashEntrySignedAmount as buildCashEntrySignedAmount,
   getCommercialDashboardData as buildCommercialDashboardData,
   getDashboardAlerts as buildDashboardAlerts,
-  getDashboardCockpitTasks as buildDashboardCockpitTasks,
   getFinanceDashboardData as buildFinanceDashboardData,
   getFinanceHealthStatus as buildFinanceHealthStatus,
   getUpcomingBirthdays as buildUpcomingBirthdays,
@@ -666,7 +665,7 @@ export default function App() {
   const loadAll = useCallback(() => {
     return loadAllService({
       loadMembersFn: () => loadMembersService({ setMembers }),
-      loadFeesFn: () => loadFeesService({ year: 2026, setFees }),
+      loadFeesFn: () => loadFeesService({ setFees }),
       loadMembershipFeeDataFn: hasPermission(currentMemberRef.current, 'beitraege', 'view')
         ? () =>
             loadMembershipFeeDataService({
@@ -1023,7 +1022,6 @@ export default function App() {
 
   async function loadFees() {
     return loadFeesService({
-      year: 2026,
       setFees,
     })
   }
@@ -1162,7 +1160,105 @@ export default function App() {
   }
 
   function getFee(memberId) {
-    return fees.find((fee) => fee.member_id === memberId)
+    const currentPeriod = getCurrentMembershipFeePeriod()
+    const currentItem = currentPeriod
+      ? membershipFeeItems.find((item) => item.member_id === memberId && item.period_id === currentPeriod.id)
+      : null
+
+    if (currentItem) return buildFeeFromMembershipFeeItem(currentItem, currentPeriod)
+
+    const latestItem = membershipFeeItems
+      .filter((item) => item.member_id === memberId)
+      .sort((a, b) => {
+        const periodA = membershipFeePeriods.find((period) => period.id === a.period_id)
+        const periodB = membershipFeePeriods.find((period) => period.id === b.period_id)
+        const yearDiff = Number(periodB?.year || 0) - Number(periodA?.year || 0)
+        if (yearDiff !== 0) return yearDiff
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0)
+      })[0]
+
+    if (latestItem) {
+      const period = membershipFeePeriods.find((candidate) => candidate.id === latestItem.period_id) || null
+      return buildFeeFromMembershipFeeItem(latestItem, period)
+    }
+
+    const currentYear = Number(currentPeriod?.year || new Date().getFullYear())
+    return (
+      fees.find((fee) => fee.member_id === memberId && Number(fee.year) === currentYear) ||
+      fees.find((fee) => fee.member_id === memberId) ||
+      null
+    )
+  }
+
+  function getCurrentMembershipFeePeriod() {
+    const periods = [...membershipFeePeriods]
+      .filter((period) => period?.id)
+      .sort((a, b) => {
+        const yearDiff = Number(b.year || 0) - Number(a.year || 0)
+        if (yearDiff !== 0) return yearDiff
+
+        const statusDiff = Number(b.status === 'open') - Number(a.status === 'open')
+        if (statusDiff !== 0) return statusDiff
+
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0)
+      })
+
+    return periods[0] || null
+  }
+
+  function getMembershipFeePeriodLabel(period) {
+    if (!period) return `Mitgliedsbeitrag ${new Date().getFullYear()}`
+    if (period.title) return period.title
+    return `Mitgliedsbeitrag ${period.year}`
+  }
+
+  function getMembershipFeeItemCashEntry(item, period) {
+    const directEntry = cashEntries.find((entry) => (
+      !entry.is_cancelled &&
+      (
+        (item.cash_entry_id && entry.id === item.cash_entry_id) ||
+        entry.membership_fee_item_id === item.id
+      )
+    ))
+
+    if (directEntry) return directEntry
+
+    return cashEntries.find((entry) => {
+      if (entry.is_cancelled || entry.category !== 'mitgliedsbeitrag') return false
+      if (!item.member_id || entry.member_id !== item.member_id) return false
+      if (entry.membership_fee_id || entry.membership_fee_item_id) return false
+      if (Math.abs(Number(entry.amount || 0)) !== Math.abs(Number(item.amount || 0))) return false
+
+      const entryYear = Number(entry.entry_year || String(entry.entry_date || '').slice(0, 4))
+      return !period?.year || entryYear === Number(period.year)
+    })
+  }
+
+  function buildFeeFromMembershipFeeItem(item, period) {
+    const cashEntry = getMembershipFeeItemCashEntry(item, period)
+    const paid = item.status === 'paid' || Boolean(cashEntry)
+
+    return {
+      id: item.id,
+      member_id: item.member_id,
+      year: period?.year || null,
+      period_id: item.period_id,
+      period,
+      label: getMembershipFeePeriodLabel(period),
+      amount: item.amount,
+      paid,
+      paid_at: item.paid_at || cashEntry?.entry_date || null,
+      payment_method: cashEntry?.payment_method || item.payment_method || '',
+      cash_entry_id: item.cash_entry_id || cashEntry?.id || null,
+      status: paid ? 'paid' : item.status,
+      source: 'membership_fee_items',
+    }
+  }
+
+  function getCurrentMembershipFees() {
+    return members
+      .map((member) => getFee(member.id))
+      .filter(Boolean)
   }
 
   async function createMembershipFeesForYear({ year, title, dueDate }) {
@@ -1385,7 +1481,7 @@ export default function App() {
     return buildDashboardAlerts({
       members,
       documents,
-      fees,
+      fees: getCurrentMembershipFees(),
       cashEntries,
       selectedCashYear,
       hasOpeningForYear,
@@ -1453,26 +1549,6 @@ export default function App() {
     */
   function getUpcomingBirthdays() {
     return buildUpcomingBirthdays(members, { limit: 5 })
-  }
-
-  function getDashboardCockpitTasks() {
-    return buildDashboardCockpitTasks({
-      members,
-      fees,
-      invoices,
-      events,
-      mediaItems,
-      sponsors,
-      sponsorContracts,
-      merchItems,
-      merchVariants,
-      getMemberById,
-      getFee,
-      getCashBalance,
-      getUpcomingEvents,
-      isInvoiceOverdue,
-      commercialData: getCommercialDashboardData(),
-    })
   }
 
   function getAlertStyle(type) {
@@ -1723,7 +1799,7 @@ export default function App() {
 
       const feeRows = (data || []).map((member) => ({
         member_id: member.id,
-        year: 2026,
+        year: Number(getCurrentMembershipFeePeriod()?.year || new Date().getFullYear()),
         amount: getAmountByType(member.member_type),
         paid: false,
         payment_method: 'bar',
@@ -1845,19 +1921,17 @@ export default function App() {
   }
 
   function getOpenFeesCount() {
-    return fees.filter((fee) => {
-      const member = getMemberById(fee.member_id)
-      return !member?.is_test && !fee.paid && Number(fee.amount) > 0
+    return members.filter((member) => {
+      const fee = getFee(member.id)
+      return !member?.is_test && fee && !fee.paid && Number(fee.amount || 0) > 0
     }).length
   }
 
   function getOpenFeesTotal() {
-    return fees
-      .filter((fee) => {
-        const member = getMemberById(fee.member_id)
-        return !member?.is_test && !fee.paid
-      })
-      .reduce((sum, fee) => sum + Number(fee.amount || 0), 0)
+    return members
+      .map((member) => ({ member, fee: getFee(member.id) }))
+      .filter(({ member, fee }) => !member?.is_test && fee && !fee.paid && Number(fee.amount || 0) > 0)
+      .reduce((sum, { fee }) => sum + Number(fee.amount || 0), 0)
   }
 
   function getActiveMembersCount() {
@@ -2019,10 +2093,10 @@ export default function App() {
   }
 
   function getFeeStats() {
-    const realFees = fees.filter((fee) => {
-      const member = getMemberById(fee.member_id)
-      return !member?.is_test
-    })
+    const realFees = members
+      .filter((member) => !member.is_test)
+      .map((member) => getFee(member.id))
+      .filter(Boolean)
 
     const paid = realFees.filter((fee) => fee.paid).length
     const open = realFees.filter((fee) => !fee.paid && Number(fee.amount || 0) > 0).length
@@ -4223,7 +4297,7 @@ export default function App() {
   function getFinanceDashboardData() {
     return buildFinanceDashboardData({
       cashEntriesForSelectedYear: getCashEntriesForSelectedYear(),
-      fees,
+      fees: getCurrentMembershipFees(),
       members,
       events,
       getMemberById,

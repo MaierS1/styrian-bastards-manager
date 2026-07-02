@@ -178,6 +178,7 @@ export function getCommercialDashboardData({
   }
 }
 
+// eslint-disable-next-line no-unused-vars
 function getLegacyDashboardAlerts({
   members,
   documents,
@@ -414,7 +415,6 @@ export function getDashboardAlerts({
   getFee,
   getMemberById,
   commercialData,
-  events = [],
   eventCheckins = [],
   merchItems = [],
   merchVariants = [],

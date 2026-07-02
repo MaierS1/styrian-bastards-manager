@@ -1,10 +1,13 @@
 import { supabase } from '../../lib/supabase'
 
 export async function fetchMembershipFees(year) {
-  return supabase
+  let query = supabase
     .from('membership_fees')
     .select('*')
-    .eq('year', year)
+
+  if (year) query = query.eq('year', year)
+
+  return query.order('year', { ascending: false })
 }
 
 export async function fetchMembershipFeePeriods() {

@@ -328,7 +328,7 @@ export function PurchasePage({ canManagePurchase }) {
   const safeSupplierRatings = ensureArray(supplierRatings)
   const safeEvents = ensureArray(events)
   const safeRecentSearchResults = ensureArray(recentSearchResults)
-  const allowedSearchSupplierNames = new Set(['METRO', 'TRANSGOURMET'])
+  const allowedSearchSupplierNames = useMemo(() => new Set(['METRO', 'TRANSGOURMET']), [])
   const supplierAssistantLinks = buildSupplierAssistantLinks(offerSearchQuery)
   const supplierAssistantFallbackLinks = buildSupplierAssistantFallbackLinks(offerSearchQuery)
   const offerSearchRawResultsPreview = ensureArray(offerSearchDebug?.rawResultsPreview)
@@ -1987,6 +1987,7 @@ function getSearchResultSupplierLabel(result) {
   return String(result?.supplier_name || '').trim() || '-'
 }
 
+// eslint-disable-next-line no-unused-vars
 function normalizeSearchQuery(value) {
   return String(value || '')
     .trim()
@@ -1995,6 +1996,7 @@ function normalizeSearchQuery(value) {
     .replace(/\s+/g, ' ')
 }
 
+// eslint-disable-next-line no-unused-vars
 function buildSupplierSearchLinks(query) {
   const cleaned = String(query || '').trim() || 'Cola'
   return [

@@ -1,11 +1,11 @@
 export function MemberFeeDetails({ fee }) {
   return (
     <>
-      <strong>Mitgliedsbeitrag 2026</strong>
+      <strong>{fee?.label || `Mitgliedsbeitrag ${fee?.year || new Date().getFullYear()}`}</strong>
       <br />
       Betrag: {fee ? `${Number(fee.amount).toFixed(2)} €` : 'kein Beitrag angelegt'}
       <br />
-      Status: {fee ? (fee.paid ? 'bezahlt' : 'offen') : '-'}
+      Status: {fee ? (fee.paid ? 'bezahlt' : fee.status || 'offen') : '-'}
       <br />
       Zahlungsdatum: {fee?.paid_at || '-'}
       <br />

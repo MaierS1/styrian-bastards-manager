@@ -29,7 +29,7 @@ export function MembersOverview({
 }) {
   return (
     <section style={sectionStyle}>
-      <h2 style={headingStyle}>Mitglieder & Beitraege 2026</h2>
+      <h2 style={headingStyle}>Mitglieder & Beitraege</h2>
 
       <h3 style={headingStyle}>Mitglieder Suche & Filter</h3>
 
