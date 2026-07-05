@@ -18,6 +18,35 @@ const NOTIFICATION_SELECT = `
   updated_at
 `
 
+const NOTIFICATION_PREFERENCE_SELECT = `
+  id,
+  auth_user_id,
+  member_id,
+  notification_type,
+  category,
+  channel,
+  enabled,
+  required,
+  opted_in_at,
+  opted_out_at,
+  created_at,
+  updated_at
+`
+
+function sanitizeNotificationPreference(preference) {
+  return {
+    auth_user_id: preference.auth_user_id || null,
+    member_id: preference.member_id || null,
+    notification_type: preference.notification_type,
+    category: preference.category,
+    channel: preference.channel,
+    enabled: Boolean(preference.enabled),
+    required: Boolean(preference.required),
+    opted_in_at: preference.opted_in_at || null,
+    opted_out_at: preference.opted_out_at || null,
+  }
+}
+
 export async function fetchInAppNotifications({ limit = 20, includeArchived = false } = {}) {
   let query = supabase
     .from('in_app_notifications')
@@ -31,6 +60,88 @@ export async function fetchInAppNotifications({ limit = 20, includeArchived = fa
   }
 
   return query
+}
+
+export async function fetchNotificationPreferences({ authUserId, memberId } = {}) {
+  let query = supabase
+    .from('notification_preferences')
+    .select(NOTIFICATION_PREFERENCE_SELECT)
+    .order('category', { ascending: true })
+    .order('notification_type', { ascending: true })
+    .order('channel', { ascending: true })
+
+  if (authUserId && memberId) {
+    query = query.or(`auth_user_id.eq.${authUserId},member_id.eq.${memberId}`)
+  } else if (authUserId) {
+    query = query.eq('auth_user_id', authUserId)
+  } else if (memberId) {
+    query = query.eq('member_id', memberId)
+  } else {
+    return { data: [], error: null }
+  }
+
+  return query
+}
+
+export async function upsertNotificationPreference(preference) {
+  const payload = sanitizeNotificationPreference(preference)
+
+  if (preference.id) {
+    return supabase
+      .from('notification_preferences')
+      .update(payload)
+      .eq('id', preference.id)
+      .select(NOTIFICATION_PREFERENCE_SELECT)
+      .single()
+  }
+
+  let existingQuery = supabase
+    .from('notification_preferences')
+    .select('id')
+    .eq('notification_type', payload.notification_type)
+    .eq('channel', payload.channel)
+    .limit(1)
+
+  if (payload.member_id) {
+    existingQuery = existingQuery.eq('member_id', payload.member_id)
+  } else if (payload.auth_user_id) {
+    existingQuery = existingQuery.eq('auth_user_id', payload.auth_user_id)
+  }
+
+  const existingResult = await existingQuery.maybeSingle()
+
+  if (existingResult.error) return existingResult
+
+  if (existingResult.data?.id) {
+    return supabase
+      .from('notification_preferences')
+      .update(payload)
+      .eq('id', existingResult.data.id)
+      .select(NOTIFICATION_PREFERENCE_SELECT)
+      .single()
+  }
+
+  return supabase
+    .from('notification_preferences')
+    .insert(payload)
+    .select(NOTIFICATION_PREFERENCE_SELECT)
+    .single()
+}
+
+export async function saveNotificationPreferences(preferences) {
+  const savedPreferences = []
+
+  for (const preference of preferences) {
+    const result = await upsertNotificationPreference(preference)
+
+    if (result.error) {
+      return { data: savedPreferences, error: result.error }
+    }
+
+    if (result.data) savedPreferences.push(result.data)
+  }
+
+  return { data: savedPreferences, error: null }
 }
 
 export async function fetchUnreadNotificationCount() {
