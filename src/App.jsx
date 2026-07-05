@@ -218,6 +218,7 @@ import { InvoicesPage } from './components/invoices/InvoicesPage'
 import { DashboardPage } from './components/dashboard/DashboardPage'
 import { PortalPage } from './components/portal/PortalPage'
 import { MobileScannerPage } from './components/scanner/MobileScannerPage'
+import { NotificationCenter } from './components/communication/NotificationCenter'
 import {
   approveMemberChangeRequestRecord,
   rejectMemberChangeRequestRecord,
@@ -5549,16 +5550,31 @@ export default function App() {
         </div>
       )}
 
-      <p style={{ color: isOnline ? '#4ade80' : '#f87171' }}>
-        Verbindung:{' '}
-        <strong>
-          {isOnline ? 'Online' : 'Offline'}
-        </strong>
-      </p>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+          marginBottom: 12,
+        }}
+      >
+        <p style={{ color: isOnline ? '#4ade80' : '#f87171', margin: 0 }}>
+          Verbindung:{' '}
+          <strong>
+            {isOnline ? 'Online' : 'Offline'}
+          </strong>
+        </p>
 
-      <button onClick={logout} style={secondaryButtonStyle}>
-        Logout
-      </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <NotificationCenter user={user} currentMember={currentMember} />
+
+          <button onClick={logout} style={{ ...secondaryButtonStyle, margin: 0 }}>
+            Logout
+          </button>
+        </div>
+      </div>
 
       <nav style={navStyle}>
         {navigationItems
