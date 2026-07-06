@@ -6,7 +6,6 @@ import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from
 import { NavigationRoute, registerRoute } from 'workbox-routing'
 
 const isDev = import.meta.env.DEV
-const appShellHandler = createHandlerBoundToURL('/index.html')
 
 function logDev(message, details) {
   if (!isDev) return
@@ -25,6 +24,7 @@ cleanupOutdatedCaches()
 self.skipWaiting()
 clientsClaim()
 
+const appShellHandler = createHandlerBoundToURL('/index.html')
 registerRoute(new NavigationRoute(appShellHandler))
 
 self.addEventListener('install', () => {
