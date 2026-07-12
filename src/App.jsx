@@ -220,7 +220,6 @@ import { InvoicesPage } from './components/invoices/InvoicesPage'
 import { DashboardPage } from './components/dashboard/DashboardPage'
 import { PortalPage } from './components/portal/PortalPage'
 import { MobileScannerPage } from './components/scanner/MobileScannerPage'
-import { NotificationCenter } from './components/communication/NotificationCenter'
 import {
   approveMemberChangeRequestRecord,
   rejectMemberChangeRequestRecord,
@@ -410,6 +409,7 @@ export default function App() {
   const [csvImporting, setCsvImporting] = useState(false)
   const [csvFileName, setCsvFileName] = useState('')
   const [memberFormMessage, setMemberFormMessage] = useState(null)
+  const [memberSaving, setMemberSaving] = useState(false)
 
   const [cashType, setCashType] = useState('einnahme')
   const [cashCategory, setCashCategory] = useState('sonstiges')
@@ -5031,7 +5031,12 @@ export default function App() {
   async function saveMember() {
     setMemberFormMessage(null)
 
-    if (!canManageMembers()) return alert('Keine Berechtigung für Mitgliederverwaltung.')
+    if (memberSaving) return
+
+    if (!canManageMembers()) {
+      setMemberFormMessage({ type: 'error', text: 'Keine Berechtigung für Mitgliederverwaltung.' })
+      return
+    }
 
     if (!firstName || !lastName) {
       setMemberFormMessage({ type: 'error', text: 'Vorname und Nachname sind Pflicht.' })
@@ -5057,23 +5062,34 @@ export default function App() {
       payload.app_role = ALLOWED_APP_ROLES.includes(appRole) ? appRole : DEFAULT_APP_ROLE
     }
 
-    const { error } = await saveMemberRecord({
-      editingId,
-      payload,
-      members,
-      createAuditLog,
-      loadAll,
-      getAmountByType,
-      memberType,
-      resetForm,
-    })
+    setMemberSaving(true)
 
-    if (error) {
-      setMemberFormMessage({ type: 'error', text: `Mitglied konnte nicht gespeichert werden: ${error.message}` })
-      return
+    try {
+      const { error } = await saveMemberRecord({
+        editingId,
+        payload,
+        members,
+        createAuditLog,
+        loadAll,
+        getAmountByType,
+        memberType,
+        resetForm,
+      })
+
+      if (error) {
+        setMemberFormMessage({ type: 'error', text: `Mitglied konnte nicht gespeichert werden: ${error.message}` })
+        return
+      }
+
+      setMemberFormMessage({ type: 'success', text: editingId ? 'Mitglied wurde gespeichert.' : 'Mitglied wurde angelegt.' })
+    } catch (error) {
+      setMemberFormMessage({
+        type: 'error',
+        text: `Mitglied konnte nicht gespeichert werden: ${error?.message || 'Unbekannter Fehler'}`,
+      })
+    } finally {
+      setMemberSaving(false)
     }
-
-    setMemberFormMessage({ type: 'success', text: editingId ? 'Mitglied wurde gespeichert.' : 'Mitglied wurde angelegt.' })
   }
 
   async function changeMemberStatus(id, status) {
@@ -5553,31 +5569,16 @@ export default function App() {
         </div>
       )}
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap',
-          marginBottom: 12,
-        }}
-      >
-        <p style={{ color: isOnline ? '#4ade80' : '#f87171', margin: 0 }}>
-          Verbindung:{' '}
-          <strong>
-            {isOnline ? 'Online' : 'Offline'}
-          </strong>
-        </p>
+      <p style={{ color: isOnline ? '#4ade80' : '#f87171' }}>
+        Verbindung:{' '}
+        <strong>
+          {isOnline ? 'Online' : 'Offline'}
+        </strong>
+      </p>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <NotificationCenter user={user} currentMember={currentMember} />
-
-          <button onClick={logout} style={{ ...secondaryButtonStyle, margin: 0 }}>
-            Logout
-          </button>
-        </div>
-      </div>
+      <button onClick={logout} style={secondaryButtonStyle}>
+        Logout
+      </button>
 
       <nav style={navStyle}>
         {navigationItems
@@ -6573,6 +6574,7 @@ export default function App() {
             clothingSize,
             setClothingSize,
             memberFormMessage,
+            memberSaving,
             saveMember,
             resetForm,
           }}
