@@ -27,13 +27,15 @@ export async function saveMemberRecord({
     if (error) return { error }
     await createAuditLog('insert', 'members', data.id, null, data)
 
-    await supabase.from('membership_fees').insert({
+    const { error: feeError } = await supabase.from('membership_fees').insert({
       member_id: data.id,
       year: new Date().getFullYear(),
       amount: getAmountByType(memberType),
       paid: false,
       payment_method: 'bar',
     })
+
+    if (feeError) return { error: feeError }
   }
 
   resetForm()
