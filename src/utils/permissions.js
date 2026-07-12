@@ -10,6 +10,10 @@ export const APP_ROLES = [
 
 export const LEGACY_APP_ROLES = ['admin', 'members', 'cashier', 'checkin', 'readonly']
 
+export const DEFAULT_APP_ROLE = 'mitglied'
+
+export const ALLOWED_APP_ROLES = [...APP_ROLES, ...LEGACY_APP_ROLES]
+
 export const PERMISSION_ACTIONS = ['view', 'create', 'edit', 'delete']
 
 export const MODULES = [

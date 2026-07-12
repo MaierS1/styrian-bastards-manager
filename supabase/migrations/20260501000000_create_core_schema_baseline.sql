@@ -22,7 +22,7 @@ create table if not exists public.members (
   phone text,
   member_type text not null default 'vollmitglied',
   role text not null default 'mitglied',
-  app_role text not null default 'readonly',
+  app_role text not null default 'mitglied',
   status text not null default 'aktiv',
   joined_at date default current_date,
   is_test boolean not null default false,
@@ -41,6 +41,26 @@ create index if not exists members_auth_user_id_idx on public.members (auth_user
 create index if not exists members_status_idx on public.members (status);
 create index if not exists members_app_role_idx on public.members (app_role);
 create index if not exists members_member_number_idx on public.members (member_number);
+
+alter table public.members
+  drop constraint if exists members_app_role_check;
+
+alter table public.members
+  add constraint members_app_role_check
+  check (app_role in (
+    'super_admin',
+    'administrator',
+    'vorstand',
+    'kassier',
+    'schriftfuehrer',
+    'rechnungspruefer',
+    'mitglied',
+    'admin',
+    'members',
+    'cashier',
+    'checkin',
+    'readonly'
+  ));
 
 create or replace function public.is_board_member()
 returns boolean
