@@ -18,12 +18,14 @@ import {
 import {
   canManageCashRole,
   canManageMembersRole,
+  DEFAULT_APP_ROLE,
   getAppRole as getMemberAppRole,
   getAppRoleLabel,
   getEventPermissions,
   hasPermission,
   isBoardFunction,
   isAdminRole,
+  ALLOWED_APP_ROLES,
 } from './utils/permissions'
 import { navigationItems } from './app/navigation'
 import { formatCustomerAddressFromFields as buildFormatCustomerAddressFromFields } from './utils/formatters'
@@ -395,7 +397,7 @@ export default function App() {
   const [phone, setPhone] = useState('')
   const [memberType, setMemberType] = useState('vollmitglied')
   const [role, setRole] = useState('keine')
-  const [appRole, setAppRole] = useState('mitglied')
+  const [appRole, setAppRole] = useState(DEFAULT_APP_ROLE)
   const [isTestMember, setIsTestMember] = useState(false)
   const [street, setStreet] = useState('')
   const [postalCode, setPostalCode] = useState('')
@@ -406,6 +408,7 @@ export default function App() {
   const [csvRows, setCsvRows] = useState([])
   const [csvImporting, setCsvImporting] = useState(false)
   const [csvFileName, setCsvFileName] = useState('')
+  const [memberFormMessage, setMemberFormMessage] = useState(null)
 
   const [cashType, setCashType] = useState('einnahme')
   const [cashCategory, setCashCategory] = useState('sonstiges')
@@ -805,7 +808,8 @@ export default function App() {
     setPhone(member.phone || '')
     setMemberType(member.member_type || 'vollmitglied')
     setRole(member.role || 'keine')
-    setAppRole(member.app_role || 'mitglied')
+    setAppRole(member.app_role || DEFAULT_APP_ROLE)
+    setMemberFormMessage(null)
     setIsTestMember(Boolean(member.is_test))
     setStreet(member.street || '')
     setPostalCode(member.postal_code || '')
@@ -1718,7 +1722,6 @@ export default function App() {
       email,
       phone,
       member_type: memberType,
-      app_role: appRole,
       is_test: isTestMember,
       street,
       postal_code: postalCode,
@@ -2379,24 +2382,11 @@ export default function App() {
       return
     }
 
-    const allowedRoles = [
-      'super_admin',
-      'administrator',
-      'vorstand',
-      'kassier',
-      'schriftfuehrer',
-      'rechnungspruefer',
-      'mitglied',
-      'admin',
-      'cashier',
-      'members',
-      'checkin',
-      'readonly',
-    ]
+    const allowedRoles = ALLOWED_APP_ROLES
 
     const selectedRole = window.prompt(
       `App-Recht für ${member.first_name || ''} ${member.last_name || ''}:\n\n${allowedRoles.join('\n')}`,
-      member.app_role || 'mitglied'
+      member.app_role || DEFAULT_APP_ROLE
     )
 
     if (!selectedRole) return
@@ -5013,8 +5003,9 @@ export default function App() {
     setPhone('')
     setMemberType('vollmitglied')
     setRole('keine')
-    setAppRole('mitglied')
+    setAppRole(DEFAULT_APP_ROLE)
     setIsTestMember(false)
+    setMemberFormMessage(null)
     setStreet('')
     setPostalCode('')
     setCity('')
@@ -5037,10 +5028,12 @@ export default function App() {
   }
 
   async function saveMember() {
+    setMemberFormMessage(null)
+
     if (!canManageMembers()) return alert('Keine Berechtigung für Mitgliederverwaltung.')
 
     if (!firstName || !lastName) {
-      alert('Vorname und Nachname sind Pflicht.')
+      setMemberFormMessage({ type: 'error', text: 'Vorname und Nachname sind Pflicht.' })
       return
     }
 
@@ -5051,7 +5044,6 @@ export default function App() {
       phone,
       member_type: memberType,
       role,
-      app_role: appRole,
       street,
       postal_code: postalCode,
       city,
@@ -5060,7 +5052,11 @@ export default function App() {
       status: 'aktiv',
     }
 
-    await saveMemberRecord({
+    if (editingId) {
+      payload.app_role = ALLOWED_APP_ROLES.includes(appRole) ? appRole : DEFAULT_APP_ROLE
+    }
+
+    const { error } = await saveMemberRecord({
       editingId,
       payload,
       members,
@@ -5070,6 +5066,13 @@ export default function App() {
       memberType,
       resetForm,
     })
+
+    if (error) {
+      setMemberFormMessage({ type: 'error', text: `Mitglied konnte nicht gespeichert werden: ${error.message}` })
+      return
+    }
+
+    setMemberFormMessage({ type: 'success', text: editingId ? 'Mitglied wurde gespeichert.' : 'Mitglied wurde angelegt.' })
   }
 
   async function changeMemberStatus(id, status) {
@@ -6553,6 +6556,7 @@ export default function App() {
             setBirthdate,
             clothingSize,
             setClothingSize,
+            memberFormMessage,
             saveMember,
             resetForm,
           }}

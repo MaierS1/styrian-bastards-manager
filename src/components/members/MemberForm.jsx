@@ -36,6 +36,7 @@ export function MemberForm({
   setBirthdate,
   clothingSize,
   setClothingSize,
+  memberFormMessage,
   saveMember,
   resetForm,
 }) {
@@ -62,7 +63,7 @@ export function MemberForm({
         ))}
       </select>
 
-      {isAdmin() && (
+      {isAdmin() && editingId && (
         <>
           <label style={{ display: 'block', marginBottom: 4, fontWeight: 700 }}>App-Recht</label>
           <select value={appRole} onChange={(e) => setAppRole(e.target.value)} style={inputStyle}>
@@ -70,17 +71,19 @@ export function MemberForm({
               <option key={value} value={value}>App-Recht: {label}</option>
             ))}
           </select>
-
-          <label style={{ display: 'block', marginBottom: 12, fontWeight: 800, color: colors.black }}>
-            <input
-              type="checkbox"
-              checked={isTestMember}
-              onChange={(e) => setIsTestMember(e.target.checked)}
-              style={{ marginRight: 8 }}
-            />
-            Testmitglied
-          </label>
         </>
+      )}
+
+      {isAdmin() && (
+        <label style={{ display: 'block', marginBottom: 12, fontWeight: 800, color: colors.black }}>
+          <input
+            type="checkbox"
+            checked={isTestMember}
+            onChange={(e) => setIsTestMember(e.target.checked)}
+            style={{ marginRight: 8 }}
+          />
+          Testmitglied
+        </label>
       )}
 
       <input placeholder="Strasse" value={street} onChange={(e) => setStreet(e.target.value)} style={inputStyle} />
@@ -105,6 +108,24 @@ export function MemberForm({
       <button onClick={saveMember} style={buttonStyle}>
         {editingId ? 'Aenderungen speichern' : 'Mitglied speichern'}
       </button>
+
+      {memberFormMessage && (
+        <div
+          role="alert"
+          style={{
+            marginTop: 8,
+            marginBottom: 12,
+            padding: 12,
+            border: `2px solid ${memberFormMessage.type === 'error' ? colors.red : colors.successText}`,
+            borderRadius: 10,
+            background: memberFormMessage.type === 'error' ? colors.dangerBg : colors.successBg,
+            color: memberFormMessage.type === 'error' ? colors.dangerText : colors.successText,
+            fontWeight: 700,
+          }}
+        >
+          {memberFormMessage.text}
+        </div>
+      )}
 
       {editingId && (
         <button onClick={resetForm} style={buttonStyle}>

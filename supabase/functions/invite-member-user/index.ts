@@ -6,6 +6,23 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
+const allowedAppRoles = [
+  'super_admin',
+  'administrator',
+  'vorstand',
+  'kassier',
+  'schriftfuehrer',
+  'rechnungspruefer',
+  'mitglied',
+  'admin',
+  'cashier',
+  'members',
+  'checkin',
+  'readonly',
+] as const
+
+type AllowedAppRole = typeof allowedAppRoles[number]
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -67,29 +84,14 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const memberId = String(body.member_id || '')
     const email = String(body.email || '').trim().toLowerCase()
-    const appRole = String(body.app_role || 'readonly')
+    const appRole = String(body.app_role || 'mitglied') as AllowedAppRole
     const redirectTo = body.redirect_to ? String(body.redirect_to) : undefined
-
-    const allowedRoles = [
-      'super_admin',
-      'administrator',
-      'vorstand',
-      'kassier',
-      'schriftfuehrer',
-      'rechnungspruefer',
-      'mitglied',
-      'admin',
-      'cashier',
-      'members',
-      'checkin',
-      'readonly',
-    ]
 
     if (!memberId || !email) {
       return jsonResponse({ error: 'Mitglied und E-Mail sind Pflicht.' }, 400)
     }
 
-    if (!allowedRoles.includes(appRole)) {
+    if (!allowedAppRoles.includes(appRole)) {
       return jsonResponse({ error: 'Ungültige App-Rolle.' }, 400)
     }
 
