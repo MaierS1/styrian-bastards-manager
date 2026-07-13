@@ -197,6 +197,7 @@ import {
   saveMemberRecord,
 } from './services/repositories/membersRepository'
 import {
+  addMissingMembershipFeeItemsForPeriod as addMissingMembershipFeeItemsForPeriodRecord,
   createMembershipFeePeriodAndItems,
   deleteMembershipFeeItem as deleteMembershipFeeItemRecord,
   markMembershipFeeItemPaid as markMembershipFeeItemPaidRecord,
@@ -1290,6 +1291,32 @@ export default function App() {
       return { ok: true, data: result }
     } finally {
       setMembershipFeeGenerationLoading(false)
+    }
+  }
+
+  async function addMissingMembershipFeeItemsForPeriodAction({ periodId, year, title, dueDate }) {
+    if (!canEditModule('beitraege')) return alert('Keine Berechtigung für Beitragsverwaltung.')
+
+    const loadingId = `period:${periodId}`
+    setMembershipFeeActionLoadingId(loadingId)
+
+    try {
+      const { data, error } = await addMissingMembershipFeeItemsForPeriodRecord({
+        year,
+        title,
+        dueDate,
+      })
+
+      if (error) {
+        alert(error.message)
+        return { error }
+      }
+
+      const result = Array.isArray(data) ? data[0] : data
+      await loadAll()
+      return { ok: true, data: result }
+    } finally {
+      setMembershipFeeActionLoadingId(null)
     }
   }
 
@@ -5626,6 +5653,7 @@ export default function App() {
       {activePage === 'fees' && (
         <MembershipFeesPage
           canAccess={canViewModule('beitraege')}
+          canManage={canEditModule('beitraege')}
           members={members}
           membershipFeePeriods={membershipFeePeriods}
           membershipFeeItems={membershipFeeItems}
@@ -5651,6 +5679,7 @@ export default function App() {
           generationResult={membershipFeeGenerationResult}
           generationLoading={membershipFeeGenerationLoading}
           createMembershipFeesForYear={createMembershipFeesForYear}
+          addMissingMembershipFeeItemsForPeriod={addMissingMembershipFeeItemsForPeriodAction}
           sendMembershipFeeNotification={sendMembershipFeeNotificationAction}
           markMembershipFeeItemPaid={markMembershipFeeItemPaidAction}
           reopenMembershipFeeItem={reopenMembershipFeeItemAction}

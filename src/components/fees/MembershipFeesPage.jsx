@@ -150,6 +150,7 @@ function buildFeeNotificationPreview(item, settings, type = 'fee_reminder') {
 
 export function MembershipFeesPage({
   canAccess,
+  canManage,
   members,
   membershipFeePeriods,
   membershipFeeItems,
@@ -175,6 +176,7 @@ export function MembershipFeesPage({
   generationResult,
   generationLoading,
   createMembershipFeesForYear,
+  addMissingMembershipFeeItemsForPeriod,
   sendMembershipFeeNotification,
   markMembershipFeeItemPaid,
   reopenMembershipFeeItem,
@@ -183,6 +185,7 @@ export function MembershipFeesPage({
   setNotificationLoadingId,
 }) {
   const [actionFeedback, setActionFeedback] = useState(null)
+  const [periodFeedback, setPeriodFeedback] = useState(null)
   const [previewItemId, setPreviewItemId] = useState(null)
   const [previewType, setPreviewType] = useState('fee_reminder')
   const memberMap = useMemo(() => new Map(members.map((member) => [member.id, member])), [members])
@@ -298,6 +301,37 @@ export function MembershipFeesPage({
       item.member?.member_type !== 'ehrenmitglied'
   )
 
+  function getMissingMemberNamesForPeriod(period) {
+    const existingMemberIds = new Set(
+      membershipFeeItems
+        .filter((item) => item.period_id === period.id && item.member_id)
+        .map((item) => item.member_id)
+    )
+
+    return members
+      .filter((member) => member.status === 'aktiv' && !member.is_test && !existingMemberIds.has(member.id))
+      .map((member) => `${member.first_name || ''} ${member.last_name || ''}`.trim() || 'Mitglied')
+      .sort((a, b) => a.localeCompare(b, 'de-AT'))
+  }
+
+  function formatMissingMembersResult(result, missingMemberNames) {
+    const createdCount = Number(result?.created_count || 0)
+    const skippedCount = Number(result?.skipped_count || 0)
+
+    if (createdCount === 0) {
+      return skippedCount > 0
+        ? `Keine fehlenden Mitglieder gefunden. ${skippedCount} bestehende Beiträge übersprungen.`
+        : 'Keine fehlenden Mitglieder gefunden.'
+    }
+
+    const memberText = createdCount === 1 ? '1 neues Mitglied ergänzt' : `${createdCount} neue Mitglieder ergänzt`
+    const skippedText = skippedCount === 1 ? '1 bestehender Beitrag übersprungen' : `${skippedCount} bestehende Beiträge übersprungen`
+    const shownNames = missingMemberNames.slice(0, createdCount)
+    const namesText = shownNames.length > 0 ? ` Neue Beitragspositionen: ${shownNames.join(', ')}.` : ''
+
+    return `${memberText}. ${skippedText}.${namesText}`
+  }
+
   async function handleCreateFees() {
     const result = await createMembershipFeesForYear({
       year: createYear,
@@ -308,6 +342,41 @@ export function MembershipFeesPage({
     if (result?.ok) {
       return
     }
+  }
+
+  async function handleAddMissingMembers(period) {
+    const confirmed = window.confirm(
+      'Es werden nur Mitglieder ergänzt, für die in dieser Beitragsperiode noch kein Beitrag existiert. Bestehende Beiträge und Erinnerungen bleiben unverändert.'
+    )
+
+    if (!confirmed) return
+
+    const missingMemberNames = getMissingMemberNamesForPeriod(period)
+    setActionFeedback(null)
+    setPeriodFeedback(null)
+
+    const result = await addMissingMembershipFeeItemsForPeriod({
+      periodId: period.id,
+      year: period.year,
+      title: period.title,
+      dueDate: period.due_date,
+    })
+
+    if (result?.ok) {
+      setYearFilter(String(period.year))
+      setPeriodFeedback({
+        periodId: period.id,
+        type: 'success',
+        message: formatMissingMembersResult(result.data, missingMemberNames),
+      })
+      return
+    }
+
+    setPeriodFeedback({
+      periodId: period.id,
+      type: 'error',
+      message: result?.error?.message || 'Fehlende Mitglieder konnten nicht ergänzt werden.',
+    })
   }
 
   async function handleSendReminder(item, resend = false) {
@@ -569,7 +638,7 @@ export function MembershipFeesPage({
         <table style={{ width: '100%', minWidth: 780, borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {['Jahr', 'Titel', 'Fällig am', 'Status', 'Beiträge', 'Offen', 'Bezahlt'].map((header) => (
+              {['Jahr', 'Titel', 'Fällig am', 'Status', 'Beiträge', 'Offen', 'Bezahlt', 'Aktion'].map((header) => (
                 <th key={header} style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #d1d5db' }}>
                   {header}
                 </th>
@@ -586,11 +655,27 @@ export function MembershipFeesPage({
                 <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{period.itemCount}</td>
                 <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{formatMoney(period.openAmount)}</td>
                 <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>{formatMoney(period.paidAmount)}</td>
+                <td style={{ padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleAddMissingMembers(period)}
+                    style={secondaryButtonStyle}
+                    disabled={!canManage || notificationLoadingId === `period:${period.id}` || generationLoading}
+                    title={!canManage ? 'Keine Bearbeitungsrechte für Beiträge.' : undefined}
+                  >
+                    {notificationLoadingId === `period:${period.id}` ? 'Mitglieder werden ergänzt...' : 'Fehlende Mitglieder ergänzen'}
+                  </button>
+                  {periodFeedback?.periodId === period.id && (
+                    <p style={{ margin: '8px 0 0', color: periodFeedback.type === 'success' ? colors.successText : colors.dangerText, fontWeight: 800 }}>
+                      {periodFeedback.message}
+                    </p>
+                  )}
+                </td>
               </tr>
             ))}
             {periodSummaries.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ padding: 12 }}>
+                <td colSpan={8} style={{ padding: 12 }}>
                   Noch keine Beitragsperiode vorhanden.
                 </td>
               </tr>

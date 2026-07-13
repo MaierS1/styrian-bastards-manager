@@ -37,6 +37,14 @@ export async function createMembershipFeePeriodAndItems({
   })
 }
 
+export async function addMissingMembershipFeeItemsForPeriod({
+  year,
+  title,
+  dueDate,
+}) {
+  return createMembershipFeePeriodAndItems({ year, title, dueDate })
+}
+
 export async function markMembershipFeeItemPaid({
   feeItemId,
   paidAt,
