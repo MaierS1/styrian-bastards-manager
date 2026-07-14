@@ -151,6 +151,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       const { error } = await sendEventRegistrationNotification({
         type,
         registrationId: registration.id,
+        eventId: event.id,
       })
 
       if (error) {
@@ -200,6 +201,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       const { error } = await sendEventRegistrationNotification({
         type: 'event_reminder',
         registrationId: registration.id,
+        eventId: event.id,
       })
 
       if (error) {
@@ -284,6 +286,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       const { error: notificationError } = await sendEventRegistrationNotification({
         type: notificationType,
         registrationId: data.id,
+        eventId: event.id,
       })
 
       if (notificationError) {
@@ -311,7 +314,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     if (!resolvedStatus) return
 
     setSaving(true)
-    const { error } = await updateEventRegistration(registrationId, {
+    const { error } = await updateEventRegistration(registrationId, event.id, {
       ...buildPayload({ ...values, status: resolvedStatus }),
     })
     setSaving(false)
@@ -323,7 +326,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
   }
 
   async function handleCancel(registration) {
-    const { error } = await updateEventRegistration(registration.id, { status: 'cancelled' })
+    const { error } = await updateEventRegistration(registration.id, event.id, { status: 'cancelled' })
     if (error) return alert(error.message)
 
     await reloadAfterChange()
@@ -335,7 +338,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       : { checkin_status: checkinStatus, checked_in_at: null }
 
     setUpdatingCheckinId(registration.id)
-    const { error } = await updateEventRegistration(registration.id, payload)
+    const { error } = await updateEventRegistration(registration.id, event.id, payload)
     setUpdatingCheckinId(null)
 
     if (error) return alert(error.message)
@@ -346,7 +349,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
   async function handleDelete(registration) {
     if (!window.confirm(`Team/Anmeldung endgültig löschen?\n\n${registration.team_name || registration.full_name}`)) return
 
-    const { error } = await deleteEventRegistration(registration.id)
+    const { error } = await deleteEventRegistration(registration.id, event.id)
     if (error) return alert(error.message)
 
     await reloadAfterChange()
