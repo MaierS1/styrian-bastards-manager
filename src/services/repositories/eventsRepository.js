@@ -47,6 +47,19 @@ export async function updateEventRegistration(registrationId, eventId, payload) 
     .single()
 }
 
+export async function moveEventRegistration(registrationId, sourceEventId, targetEventId, payload = {}) {
+  return supabase
+    .from('event_registrations')
+    .update({
+      ...payload,
+      event_id: targetEventId,
+    })
+    .eq('id', registrationId)
+    .eq('event_id', sourceEventId)
+    .select()
+    .single()
+}
+
 export async function deleteEventRegistration(registrationId, eventId) {
   let query = supabase
     .from('event_registrations')
