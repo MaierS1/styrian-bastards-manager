@@ -39,6 +39,7 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const type = String(body.type || '').trim()
     const registrationId = String(body.registration_id || '').trim()
+    const eventId = String(body.event_id || '').trim()
     const source = String(body.source || '').trim()
     const isPublicRegistrationNotification = source === 'public_registration'
 
@@ -105,6 +106,10 @@ Deno.serve(async (req) => {
 
     if (!registration) {
       return jsonResponse({ error: 'Anmeldung nicht gefunden.' }, 404)
+    }
+
+    if (eventId && registration.event_id !== eventId) {
+      return jsonResponse({ error: 'Anmeldung gehoert nicht zum angegebenen Event.' }, 409)
     }
 
     if (isPublicRegistrationNotification) {

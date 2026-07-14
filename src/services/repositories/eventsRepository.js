@@ -32,27 +32,40 @@ export async function createEventRegistration(payload) {
     .single()
 }
 
-export async function updateEventRegistration(registrationId, payload) {
-  return supabase
+export async function updateEventRegistration(registrationId, eventId, payload) {
+  let query = supabase
     .from('event_registrations')
     .update(payload)
     .eq('id', registrationId)
+
+  if (eventId) {
+    query = query.eq('event_id', eventId)
+  }
+
+  return query
     .select()
     .single()
 }
 
-export async function deleteEventRegistration(registrationId) {
-  return supabase
+export async function deleteEventRegistration(registrationId, eventId) {
+  let query = supabase
     .from('event_registrations')
     .delete()
     .eq('id', registrationId)
+
+  if (eventId) {
+    query = query.eq('event_id', eventId)
+  }
+
+  return query
 }
 
-export async function sendEventRegistrationNotification({ type, registrationId }) {
+export async function sendEventRegistrationNotification({ type, registrationId, eventId }) {
   return supabase.functions.invoke('event-notifications', {
     body: {
       type,
       registration_id: registrationId,
+      event_id: eventId || null,
     },
   })
 }
@@ -165,6 +178,7 @@ export async function deleteEventRecord({
 }) {
   const hasCashEntries = cashEntries.some((entry) => entry.event_id === event.id)
   const hasCheckins = eventCheckins.some((checkin) => checkin.event_name === event.name)
+  const registrationCount = Number(event.registered_count || 0) + Number(event.waitlist_count || 0) + Number(event.cancelled_count || 0)
 
   const warning = [
     `Event wirklich löschen?`,
@@ -173,6 +187,7 @@ export async function deleteEventRecord({
     ``,
     hasCashEntries ? 'Achtung: Es gibt Kassa-Einträge zu diesem Event. Diese bleiben bestehen, verlieren aber die Event-Zuordnung.' : '',
     hasCheckins ? 'Achtung: Es gibt Check-ins zu diesem Event. Diese bleiben in der Datenbank, sind aber nicht mehr in der Eventliste sichtbar.' : '',
+    registrationCount > 0 ? 'Achtung: Es gibt Anmeldungen zu diesem Event. Dieses Event kann erst gelöscht werden, wenn diese Anmeldungen entfernt wurden.' : '',
     ``,
     'Das kann nicht rückgängig gemacht werden.',
   ]
