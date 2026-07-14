@@ -214,6 +214,7 @@ export function EventsPage({
 
         <EventRegistrationsManager
           event={registrationEvent}
+          events={events}
           onRegistrationsChanged={loadEvents}
         />
 

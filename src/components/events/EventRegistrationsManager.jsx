@@ -4,6 +4,7 @@ import {
   createEventRegistration,
   deleteEventRegistration,
   fetchEventRegistrations,
+  moveEventRegistration,
   sendEventRegistrationNotification,
   updateEventRegistration,
 } from '../../services/repositories/eventsRepository'
@@ -43,19 +44,26 @@ const checkinStatusLabels = {
   no_show: 'Nicht erschienen',
 }
 
-export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
+export function EventRegistrationsManager({ event, events = [], onRegistrationsChanged }) {
   const [registrations, setRegistrations] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [sendConfirmationOnCreate, setSendConfirmationOnCreate] = useState(false)
   const [editingById, setEditingById] = useState({})
+  const [assignmentById, setAssignmentById] = useState({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [sendingId, setSendingId] = useState(null)
   const [sendingBulk, setSendingBulk] = useState(false)
   const [updatingCheckinId, setUpdatingCheckinId] = useState(null)
+  const [movingId, setMovingId] = useState(null)
   const [emailPreview, setEmailPreview] = useState(null)
 
   const stats = useMemo(() => buildStats(registrations), [registrations])
+  const availableTargetEvents = useMemo(() => {
+    return (events || [])
+      .filter((candidate) => candidate.id && candidate.id !== event?.id)
+      .filter((candidate) => !isClosedForAssignment(candidate))
+  }, [event?.id, events])
 
   const loadRegistrations = useCallback(async () => {
     if (!event?.id) return
@@ -76,6 +84,7 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     setForm(emptyForm)
     setSendConfirmationOnCreate(false)
     setEditingById({})
+    setAssignmentById({})
     if (event?.id) {
       loadRegistrations()
     } else {
@@ -101,6 +110,33 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     setEditingById((current) => ({
       ...current,
       [registration.id]: toEditableRegistration(registration),
+    }))
+  }
+
+  function beginAssign(registration) {
+    setAssignmentById((current) => ({
+      ...current,
+      [registration.id]: {
+        targetEventId: '',
+      },
+    }))
+  }
+
+  function cancelAssign(registrationId) {
+    setAssignmentById((current) => {
+      const next = { ...current }
+      delete next[registrationId]
+      return next
+    })
+  }
+
+  function updateAssignmentValue(registrationId, value) {
+    setAssignmentById((current) => ({
+      ...current,
+      [registrationId]: {
+        ...current[registrationId],
+        targetEventId: value,
+      },
     }))
   }
 
@@ -355,6 +391,84 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
     await reloadAfterChange()
   }
 
+  async function handleAssign(registration) {
+    const assignment = assignmentById[registration.id]
+    const targetEventId = assignment?.targetEventId || ''
+
+    if (!targetEventId) return alert('Bitte ein Ziel-Event auswählen.')
+    if (targetEventId === event.id) return alert('Das Team ist bereits diesem Event zugeordnet.')
+
+    const targetEvent = events.find((candidate) => candidate.id === targetEventId)
+    if (!targetEvent) return alert('Das gewählte Ziel-Event wurde nicht gefunden.')
+    if (isClosedForAssignment(targetEvent)) return alert('Das gewählte Ziel-Event kann nicht als Ziel verwendet werden.')
+
+    const currentRegistration = registrations.find((candidate) => candidate.id === registration.id && candidate.event_id === event.id)
+    if (!currentRegistration) {
+      alert('Das Team gehört nicht mehr zum aktuell geöffneten Event. Bitte die Liste neu laden.')
+      await reloadAfterChange()
+      return
+    }
+
+    let nextStatus = registration.status
+
+    if (registration.status === 'registered' && targetEvent.max_participants) {
+      const { data: targetRegistrations, error } = await fetchEventRegistrations(targetEvent.id)
+      if (error) return alert(error.message || 'Ziel-Event konnte nicht geprüft werden.')
+
+      const registeredCount = (targetRegistrations || []).filter((candidate) => candidate.status === 'registered').length
+
+      if (registeredCount + 1 > targetEvent.max_participants) {
+        if (targetEvent.allow_waitlist === false) {
+          alert('Das Ziel-Event ist voll und erlaubt keine Warteliste.')
+          return
+        }
+
+        const useWaitlist = window.confirm(
+          `Das Ziel-Event ist voll (${registeredCount}/${targetEvent.max_participants}). Team auf die Warteliste setzen?`
+        )
+
+        if (!useWaitlist) return
+        nextStatus = 'waitlist'
+      }
+    }
+
+    const teamLabel = getRegistrationLabel(registration)
+    const sourceEventTitle = getEventTitle(event)
+    const targetEventTitle = getEventTitle(targetEvent)
+    const confirmed = window.confirm(
+      `Team „${teamLabel}“ wirklich von „${sourceEventTitle}“ zu „${targetEventTitle}“ verschieben?`
+    )
+
+    if (!confirmed) return
+
+    setMovingId(registration.id)
+    const { data, error } = await moveEventRegistration(registration.id, event.id, targetEvent.id, {
+      status: nextStatus,
+      checkin_status: 'not_checked_in',
+      checked_in_at: null,
+    })
+    setMovingId(null)
+
+    if (error) {
+      const message = error.code === 'PGRST116'
+        ? 'Das Team gehört nicht mehr zum aktuell geöffneten Event. Bitte die Liste neu laden.'
+        : 'Das Team konnte nicht verschoben werden.'
+      alert(error.message ? `${message}\n\n${error.message}` : message)
+      await reloadAfterChange()
+      return
+    }
+
+    if (!data) {
+      alert('Das Team konnte nicht verschoben werden.')
+      await reloadAfterChange()
+      return
+    }
+
+    cancelAssign(registration.id)
+    await reloadAfterChange()
+    alert(`Team wurde erfolgreich dem Event „${targetEventTitle}“ zugewiesen.`)
+  }
+
   async function reloadAfterChange() {
     await loadRegistrations()
     await onRegistrationsChanged?.()
@@ -579,7 +693,8 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
       <div style={listStyle}>
         {registrations.map((registration) => {
           const editValues = editingById[registration.id]
-          const isBusy = sendingId === registration.id || updatingCheckinId === registration.id
+          const assignmentValues = assignmentById[registration.id]
+          const isBusy = sendingId === registration.id || updatingCheckinId === registration.id || movingId === registration.id
 
           return (
             <div key={registration.id} style={cardStyle}>
@@ -671,6 +786,9 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
                     <button type="button" onClick={() => beginEdit(registration)} style={buttonStyle}>
                       Bearbeiten
                     </button>
+                    <button type="button" onClick={() => beginAssign(registration)} disabled={isBusy || availableTargetEvents.length === 0} style={secondaryButtonStyle}>
+                      Event zuweisen
+                    </button>
                     <button type="button" onClick={() => sendConfirmation(registration)} disabled={isBusy} style={secondaryButtonStyle}>
                       {registration.confirmation_sent_at ? 'Bestätigung erneut senden' : 'Bestätigung senden'}
                     </button>
@@ -706,6 +824,36 @@ export function EventRegistrationsManager({ event, onRegistrationsChanged }) {
                       Löschen
                     </button>
                   </div>
+                  {assignmentValues ? (
+                    <div style={assignmentBoxStyle}>
+                      <strong>Team:</strong> {getRegistrationLabel(registration)}
+                      <br />
+                      <strong>Aktuelles Event:</strong> {getEventTitle(event)}
+                      <div style={assignmentFormStyle}>
+                        <label style={assignmentLabelStyle}>
+                          Neues Event:
+                          <select
+                            value={assignmentValues.targetEventId}
+                            onChange={(e) => updateAssignmentValue(registration.id, e.target.value)}
+                            style={inputStyle}
+                          >
+                            <option value="">Event auswählen</option>
+                            {availableTargetEvents.map((candidate) => (
+                              <option key={candidate.id} value={candidate.id}>
+                                {formatEventOption(candidate)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button type="button" onClick={() => handleAssign(registration)} disabled={isBusy} style={buttonStyle}>
+                          {movingId === registration.id ? 'Wird zugewiesen...' : 'Zuweisen'}
+                        </button>
+                        <button type="button" onClick={() => cancelAssign(registration.id)} disabled={isBusy} style={secondaryButtonStyle}>
+                          Abbrechen
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                 </>
               )}
             </div>
@@ -812,6 +960,34 @@ function getEventTitle(event) {
   return event?.public_title || event?.title || event?.name || 'Event'
 }
 
+function getRegistrationLabel(registration) {
+  return registration?.team_name || registration?.full_name || 'Team'
+}
+
+function isClosedForAssignment(event) {
+  return ['abgesagt', 'archiviert', 'cancelled', 'archived'].includes(String(event?.status || '').toLowerCase())
+}
+
+function formatEventOption(event) {
+  const title = getEventTitle(event)
+  const date = formatEventDateOnly(event)
+  return date ? `${title} - ${date}` : title
+}
+
+function formatEventDateOnly(event) {
+  const value = event?.starts_at || event?.event_date
+  if (!value) return ''
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value)
+
+  return new Intl.DateTimeFormat('de-AT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date)
+}
+
 function formatCsvValue(value) {
   const normalized = value == null ? '' : String(value)
   return `"${normalized.replaceAll('"', '""')}"`
@@ -910,6 +1086,30 @@ const actionRowStyle = {
   gap: 8,
   flexWrap: 'wrap',
   marginTop: 12,
+}
+
+const assignmentBoxStyle = {
+  marginTop: 12,
+  padding: 12,
+  border: '1px solid #cbd5e1',
+  borderRadius: 8,
+  background: '#f8fafc',
+}
+
+const assignmentFormStyle = {
+  display: 'flex',
+  gap: 8,
+  flexWrap: 'wrap',
+  alignItems: 'end',
+  marginTop: 10,
+}
+
+const assignmentLabelStyle = {
+  display: 'grid',
+  gap: 4,
+  minWidth: 260,
+  color: '#374151',
+  fontWeight: 700,
 }
 
 const statusBadgeStyle = {
