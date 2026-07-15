@@ -24,6 +24,27 @@ export async function fetchEventRegistrations(eventId) {
     .order('created_at', { ascending: true })
 }
 
+export async function fetchAllEventRegistrations() {
+  const withEvents = await supabase
+    .from('event_registrations')
+    .select(`
+      *,
+      events:event_id (
+        id,
+        name,
+        event_date
+      )
+    `)
+    .order('created_at', { ascending: false })
+
+  if (!withEvents.error) return withEvents
+
+  return supabase
+    .from('event_registrations')
+    .select('*')
+    .order('created_at', { ascending: false })
+}
+
 export async function createEventRegistration(payload) {
   return supabase
     .from('event_registrations')
