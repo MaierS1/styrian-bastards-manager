@@ -54,6 +54,7 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
   const [assignmentById, setAssignmentById] = useState({})
   const [loading, setLoading] = useState(false)
   const [loadingAll, setLoadingAll] = useState(false)
+  const [allRegistrationsError, setAllRegistrationsError] = useState('')
   const [globalEventFilter, setGlobalEventFilter] = useState('all')
   const [globalSearch, setGlobalSearch] = useState('')
   const [saving, setSaving] = useState(false)
@@ -105,11 +106,13 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
 
   const loadAllRegistrations = useCallback(async () => {
     setLoadingAll(true)
+    setAllRegistrationsError('')
     const { data, error } = await fetchAllEventRegistrations()
     setLoadingAll(false)
 
     if (error) {
-      alert(error.message)
+      setAllRegistrationsError(error.message || 'Alle Teams konnten nicht geladen werden.')
+      setAllRegistrations([])
       return
     }
 
@@ -660,7 +663,10 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
       </div>
 
       {loadingAll ? <p style={mutedTextStyle}>Alle Teams werden geladen...</p> : null}
-      {!loadingAll && filteredAllRegistrations.length === 0 ? <p style={mutedTextStyle}>Keine Teams gefunden.</p> : null}
+      {!loadingAll && allRegistrationsError ? (
+        <p style={errorTextStyle}>Alle Teams konnten nicht geladen werden: {allRegistrationsError}</p>
+      ) : null}
+      {!loadingAll && !allRegistrationsError && filteredAllRegistrations.length === 0 ? <p style={mutedTextStyle}>Keine Teams gefunden.</p> : null}
 
       <div style={listStyle}>
         {filteredAllRegistrations.map((registration) => {
@@ -1334,4 +1340,10 @@ const previewTextStyle = {
   whiteSpace: 'pre-wrap',
   margin: '10px 0 0',
   fontFamily: 'inherit',
+}
+
+const errorTextStyle = {
+  color: '#b91c1c',
+  fontWeight: 700,
+  margin: '8px 0 12px',
 }
