@@ -3,6 +3,7 @@ import { buttonStyle, cardStyle, headingStyle, inputStyle, mutedTextStyle, secon
 import {
   createEventRegistration,
   deleteEventRegistration,
+  fetchAllEventRegistrations,
   fetchEventRegistrations,
   moveEventRegistration,
   sendEventRegistrationNotification,
@@ -46,11 +47,15 @@ const checkinStatusLabels = {
 
 export function EventRegistrationsManager({ event, events = [], onRegistrationsChanged }) {
   const [registrations, setRegistrations] = useState([])
+  const [allRegistrations, setAllRegistrations] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [sendConfirmationOnCreate, setSendConfirmationOnCreate] = useState(false)
   const [editingById, setEditingById] = useState({})
   const [assignmentById, setAssignmentById] = useState({})
   const [loading, setLoading] = useState(false)
+  const [loadingAll, setLoadingAll] = useState(false)
+  const [globalEventFilter, setGlobalEventFilter] = useState('all')
+  const [globalSearch, setGlobalSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [sendingId, setSendingId] = useState(null)
   const [sendingBulk, setSendingBulk] = useState(false)
@@ -64,6 +69,24 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
       .filter((candidate) => candidate.id && candidate.id !== event?.id)
       .filter((candidate) => !isClosedForAssignment(candidate))
   }, [event?.id, events])
+  const hasMissingEventRegistrations = useMemo(() => {
+    return allRegistrations.some((registration) => !getRegistrationEvent(registration, events))
+  }, [allRegistrations, events])
+  const filteredAllRegistrations = useMemo(() => {
+    const normalizedSearch = globalSearch.trim().toLowerCase()
+
+    return allRegistrations.filter((registration) => {
+      const sourceEvent = getRegistrationEvent(registration, events)
+      const matchesEvent = globalEventFilter === 'all'
+        || (globalEventFilter === 'missing' ? !sourceEvent : registration.event_id === globalEventFilter)
+      const matchesSearch = !normalizedSearch
+        || String(registration.team_name || '').toLowerCase().includes(normalizedSearch)
+        || String(registration.full_name || '').toLowerCase().includes(normalizedSearch)
+        || String(registration.email || '').toLowerCase().includes(normalizedSearch)
+
+      return matchesEvent && matchesSearch
+    })
+  }, [allRegistrations, events, globalEventFilter, globalSearch])
 
   const loadRegistrations = useCallback(async () => {
     if (!event?.id) return
@@ -80,6 +103,19 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
     setRegistrations(data || [])
   }, [event?.id])
 
+  const loadAllRegistrations = useCallback(async () => {
+    setLoadingAll(true)
+    const { data, error } = await fetchAllEventRegistrations()
+    setLoadingAll(false)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setAllRegistrations(data || [])
+  }, [])
+
   useEffect(() => {
     setForm(emptyForm)
     setSendConfirmationOnCreate(false)
@@ -91,6 +127,10 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
       setRegistrations([])
     }
   }, [event?.id, loadRegistrations])
+
+  useEffect(() => {
+    loadAllRegistrations()
+  }, [loadAllRegistrations])
 
   function updateFormValue(field, value) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -391,27 +431,38 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
     await reloadAfterChange()
   }
 
-  async function handleAssign(registration) {
+  function getAvailableTargetEventsForRegistration(registration) {
+    return (events || [])
+      .filter((candidate) => candidate.id && candidate.id !== registration?.event_id)
+      .filter((candidate) => !isClosedForAssignment(candidate))
+  }
+
+  async function handleAssign(registration, sourceEvent = getRegistrationEvent(registration, events)) {
     const assignment = assignmentById[registration.id]
     const targetEventId = assignment?.targetEventId || ''
+    const sourceEventId = registration.event_id
 
     if (!targetEventId) return alert('Bitte ein Ziel-Event auswählen.')
-    if (targetEventId === event.id) return alert('Das Team ist bereits diesem Event zugeordnet.')
+    if (!sourceEventId) return alert('Die bisherige Event-Zuordnung fehlt. Das Team kann nicht sicher verschoben werden.')
+    if (targetEventId === sourceEventId) return alert('Das Team ist bereits diesem Event zugeordnet.')
 
     const targetEvent = events.find((candidate) => candidate.id === targetEventId)
     if (!targetEvent) return alert('Das gewählte Ziel-Event wurde nicht gefunden.')
     if (isClosedForAssignment(targetEvent)) return alert('Das gewählte Ziel-Event kann nicht als Ziel verwendet werden.')
 
-    const currentRegistration = registrations.find((candidate) => candidate.id === registration.id && candidate.event_id === event.id)
+    const { data: currentRegistrations, error: sourceError } = await fetchEventRegistrations(sourceEventId)
+    if (sourceError) return alert(sourceError.message || 'Bisheriges Event konnte nicht geprüft werden.')
+
+    const currentRegistration = (currentRegistrations || []).find((candidate) => candidate.id === registration.id && candidate.event_id === sourceEventId)
     if (!currentRegistration) {
-      alert('Das Team gehört nicht mehr zum aktuell geöffneten Event. Bitte die Liste neu laden.')
+      alert('Das Team gehört nicht mehr zum bisherigen Event. Bitte die Liste neu laden.')
       await reloadAfterChange()
       return
     }
 
-    let nextStatus = registration.status
+    let nextStatus = currentRegistration.status
 
-    if (registration.status === 'registered' && targetEvent.max_participants) {
+    if (currentRegistration.status === 'registered' && targetEvent.max_participants) {
       const { data: targetRegistrations, error } = await fetchEventRegistrations(targetEvent.id)
       if (error) return alert(error.message || 'Ziel-Event konnte nicht geprüft werden.')
 
@@ -432,8 +483,8 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
       }
     }
 
-    const teamLabel = getRegistrationLabel(registration)
-    const sourceEventTitle = getEventTitle(event)
+    const teamLabel = getRegistrationLabel(currentRegistration)
+    const sourceEventTitle = sourceEvent ? getEventTitle(sourceEvent) : 'bisheriges Event'
     const targetEventTitle = getEventTitle(targetEvent)
     const confirmed = window.confirm(
       `Team „${teamLabel}“ wirklich von „${sourceEventTitle}“ zu „${targetEventTitle}“ verschieben?`
@@ -442,7 +493,7 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
     if (!confirmed) return
 
     setMovingId(registration.id)
-    const { data, error } = await moveEventRegistration(registration.id, event.id, targetEvent.id, {
+    const { data, error } = await moveEventRegistration(registration.id, sourceEventId, targetEvent.id, {
       status: nextStatus,
       checkin_status: 'not_checked_in',
       checked_in_at: null,
@@ -470,7 +521,10 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
   }
 
   async function reloadAfterChange() {
-    await loadRegistrations()
+    await Promise.all([
+      event?.id ? loadRegistrations() : Promise.resolve(),
+      loadAllRegistrations(),
+    ])
     await onRegistrationsChanged?.()
   }
 
@@ -572,17 +626,126 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
     printWindow.print()
   }
 
+  const globalRegistrationsSection = (
+    <section style={sectionBoxStyle}>
+      <h3 style={headingStyle}>Alle Teams / Anmeldungen</h3>
+
+      <div style={filterGridStyle}>
+        <label style={assignmentLabelStyle}>
+          Event:
+          <select
+            value={globalEventFilter}
+            onChange={(eventObject) => setGlobalEventFilter(eventObject.target.value)}
+            style={inputStyle}
+          >
+            <option value="all">Alle Events</option>
+            {events.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {formatEventOption(candidate)}
+              </option>
+            ))}
+            {hasMissingEventRegistrations ? <option value="missing">Event nicht gefunden</option> : null}
+          </select>
+        </label>
+
+        <label style={assignmentLabelStyle}>
+          Suche:
+          <input
+            value={globalSearch}
+            onChange={(eventObject) => setGlobalSearch(eventObject.target.value)}
+            placeholder="Team oder Name suchen"
+            style={inputStyle}
+          />
+        </label>
+      </div>
+
+      {loadingAll ? <p style={mutedTextStyle}>Alle Teams werden geladen...</p> : null}
+      {!loadingAll && filteredAllRegistrations.length === 0 ? <p style={mutedTextStyle}>Keine Teams gefunden.</p> : null}
+
+      <div style={listStyle}>
+        {filteredAllRegistrations.map((registration) => {
+          const sourceEvent = getRegistrationEvent(registration, events)
+          const targetEvents = getAvailableTargetEventsForRegistration(registration)
+          const assignmentValues = assignmentById[registration.id]
+          const isBusy = movingId === registration.id
+
+          return (
+            <div key={registration.id} style={cardStyle}>
+              <strong>Team:</strong> {registration.team_name || '-'}
+              <br />
+              <strong>Kontakt:</strong> {registration.full_name || '-'}
+              <br />
+              E-Mail: {registration.email || '-'}
+              <br />
+              <strong>Aktuelles Event:</strong> {getEventAssignmentLabel(registration, events)}
+              <br />
+              <strong>Status:</strong> {statusLabels[registration.status] || registration.status || '-'}
+              <br />
+              Erstellt: {formatDateTime(registration.created_at)}
+
+              <div style={actionRowStyle}>
+                {targetEvents.length > 0 && registration.event_id ? (
+                  <button type="button" onClick={() => beginAssign(registration)} disabled={isBusy} style={secondaryButtonStyle}>
+                    Event zuweisen
+                  </button>
+                ) : (
+                  <span style={mutedTextStyle}>Kein weiteres Event für die Zuweisung vorhanden.</span>
+                )}
+              </div>
+
+              {assignmentValues ? (
+                <div style={assignmentBoxStyle}>
+                  <strong>Team:</strong> {getRegistrationLabel(registration)}
+                  <br />
+                  <strong>Aktuelles Event:</strong> {getEventAssignmentLabel(registration, events)}
+                  <div style={assignmentFormStyle}>
+                    <label style={assignmentLabelStyle}>
+                      Neues Event:
+                      <select
+                        value={assignmentValues.targetEventId}
+                        onChange={(eventObject) => updateAssignmentValue(registration.id, eventObject.target.value)}
+                        style={inputStyle}
+                      >
+                        <option value="">Event auswählen</option>
+                        {targetEvents.map((candidate) => (
+                          <option key={candidate.id} value={candidate.id}>
+                            {formatEventOption(candidate)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" onClick={() => handleAssign(registration, sourceEvent)} disabled={isBusy} style={buttonStyle}>
+                      {movingId === registration.id ? 'Wird zugewiesen...' : 'Zuweisen'}
+                    </button>
+                    <button type="button" onClick={() => cancelAssign(registration.id)} disabled={isBusy} style={secondaryButtonStyle}>
+                      Abbrechen
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+
   if (!event?.id) {
     return (
-      <section style={sectionBoxStyle}>
+      <>
+        {globalRegistrationsSection}
+        <section style={sectionBoxStyle}>
         <h3 style={headingStyle}>Teams verwalten</h3>
         <p style={mutedTextStyle}>Bitte zuerst ein Event auswählen.</p>
-      </section>
+        </section>
+      </>
     )
   }
 
   return (
-    <section style={sectionBoxStyle}>
+    <>
+      {globalRegistrationsSection}
+      <section style={sectionBoxStyle}>
       <h3 style={headingStyle}>Teams verwalten</h3>
 
       <div style={statsGridStyle}>
@@ -786,9 +949,13 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
                     <button type="button" onClick={() => beginEdit(registration)} style={buttonStyle}>
                       Bearbeiten
                     </button>
-                    <button type="button" onClick={() => beginAssign(registration)} disabled={isBusy || availableTargetEvents.length === 0} style={secondaryButtonStyle}>
-                      Event zuweisen
-                    </button>
+                    {availableTargetEvents.length > 0 ? (
+                      <button type="button" onClick={() => beginAssign(registration)} disabled={isBusy} style={secondaryButtonStyle}>
+                        Event zuweisen
+                      </button>
+                    ) : (
+                      <span style={mutedTextStyle}>Kein weiteres Event für die Zuweisung vorhanden.</span>
+                    )}
                     <button type="button" onClick={() => sendConfirmation(registration)} disabled={isBusy} style={secondaryButtonStyle}>
                       {registration.confirmation_sent_at ? 'Bestätigung erneut senden' : 'Bestätigung senden'}
                     </button>
@@ -860,7 +1027,8 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
           )
         })}
       </div>
-    </section>
+      </section>
+    </>
   )
 }
 
@@ -964,6 +1132,20 @@ function getRegistrationLabel(registration) {
   return registration?.team_name || registration?.full_name || 'Team'
 }
 
+function getRegistrationEvent(registration, events) {
+  if (registration?.events?.id) return registration.events
+  return (events || []).find((event) => event.id === registration?.event_id) || null
+}
+
+function getEventAssignmentLabel(registration, events) {
+  if (!registration?.event_id) return 'Noch keinem Event zugeordnet'
+
+  const assignedEvent = getRegistrationEvent(registration, events)
+  if (!assignedEvent) return 'Event nicht gefunden'
+
+  return formatEventOption(assignedEvent)
+}
+
 function isClosedForAssignment(event) {
   return ['abgesagt', 'archiviert', 'cancelled', 'archived'].includes(String(event?.status || '').toLowerCase())
 }
@@ -1039,6 +1221,13 @@ const statsGridStyle = {
   gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
   gap: 10,
   marginBottom: 14,
+}
+
+const filterGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+  gap: 10,
+  marginBottom: 16,
 }
 
 const statCardStyle = {
