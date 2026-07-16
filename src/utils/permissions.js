@@ -41,7 +41,7 @@ export const MEMBER_TYPES = [
 ]
 
 export const CLUB_FUNCTIONS = [
-  ['keine', 'Keine'],
+  ['mitglied', 'Keine'],
   ['obmann', 'Obmann'],
   ['obmann_stv', 'Obmann-Stv.'],
   ['kassier', 'Kassier'],

@@ -4,6 +4,7 @@ import { PortalChangeRequestForm } from './PortalChangeRequestForm'
 import { PortalChangeRequestsList } from './PortalChangeRequestsList'
 import { PortalQrCard } from './PortalQrCard'
 import { PortalUpcomingEvents } from './PortalUpcomingEvents'
+import { PortalNotificationPreferences } from './PortalNotificationPreferences'
 
 export function PortalPage({
   currentMember,
@@ -60,6 +61,8 @@ export function PortalPage({
           />
 
           <PortalChangeRequestsList getMyMemberChangeRequests={getMyMemberChangeRequests} />
+
+          <PortalNotificationPreferences currentMember={currentMember} />
 
           <PortalQrCard
             currentMember={currentMember}

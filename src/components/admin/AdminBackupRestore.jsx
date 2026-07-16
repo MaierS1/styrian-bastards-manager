@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { buttonStyle, cardStyle, colors, headingStyle, inputStyle, mutedTextStyle, secondaryButtonStyle, sectionStyle } from '../../styles/appStyles'
-import { checkBackupSystemStatus } from '../../services/backup/backupRestoreService'
+import { checkBackupSystemStatus, loadBackupHistory } from '../../services/backup/backupRestoreService'
 
 const lastBackupStorageKey = 'styrianBastardsLastBackup'
 const backupHistoryStorageKey = 'styrianBastardsBackupHistory'
@@ -52,40 +52,36 @@ export function AdminBackupRestore({
     refreshBackupHistory()
   }, [])
 
-  function refreshBackupHistory() {
+  async function refreshBackupHistory() {
     try {
-      const storedLastBackup = localStorage.getItem(lastBackupStorageKey)
-      const storedHistory = localStorage.getItem(backupHistoryStorageKey)
+      const history = normalizeBackupHistory(await loadBackupHistory(maxBackupHistoryEntries))
 
-      setLastBackupInfo(storedLastBackup ? JSON.parse(storedLastBackup) : null)
-      setBackupHistory(storedHistory ? normalizeBackupHistory(JSON.parse(storedHistory)) : [])
+      setBackupHistory(history)
+      setLastBackupInfo(history[0] || null)
     } catch {
-      setLastBackupInfo(null)
-      setBackupHistory([])
-    }
-  }
+      try {
+        const storedLastBackup = localStorage.getItem(lastBackupStorageKey)
+        const storedHistory = localStorage.getItem(backupHistoryStorageKey)
 
-  function persistBackupHistory(nextHistory) {
-    const normalizedHistory = normalizeBackupHistory(nextHistory)
-    setBackupHistory(normalizedHistory)
-
-    try {
-      localStorage.setItem(backupHistoryStorageKey, JSON.stringify(normalizedHistory))
-    } catch {
-      // History is local convenience metadata; failure must not block backups.
+        setLastBackupInfo(storedLastBackup ? JSON.parse(storedLastBackup) : null)
+        setBackupHistory(storedHistory ? normalizeBackupHistory(JSON.parse(storedHistory)) : [])
+      } catch {
+        setLastBackupInfo(null)
+        setBackupHistory([])
+      }
     }
   }
 
   function addBackupHistoryEntry(entry) {
-    persistBackupHistory([entry, ...backupHistory].slice(0, maxBackupHistoryEntries))
+    setBackupHistory(normalizeBackupHistory([entry, ...backupHistory].slice(0, maxBackupHistoryEntries)))
   }
 
   function removeBackupHistoryEntry(entryId) {
-    persistBackupHistory(backupHistory.filter((entry) => entry.id !== entryId))
+    setBackupHistory(backupHistory.filter((entry) => entry.id !== entryId))
   }
 
   function clearBackupHistory() {
-    persistBackupHistory([])
+    setBackupHistory([])
   }
 
   async function refreshSystemStatus() {
@@ -156,6 +152,7 @@ export function AdminBackupRestore({
           ...result,
           status: 'success',
         }))
+        await refreshBackupHistory()
       }
     } catch (error) {
       const message = error?.message || 'Backup konnte nicht erstellt werden.'
@@ -398,7 +395,7 @@ export function AdminBackupRestore({
                     background: getHistoryStatusBackground(entry.status),
                     color: getHistoryStatusColor(entry.status),
                   }}>
-                    {entry.status === 'success' ? 'success' : 'failed'}
+                    {entry.status}
                   </span>
                 </div>
                 <div style={historyMetaGridStyle}>
@@ -408,6 +405,7 @@ export function AdminBackupRestore({
                   <span>Datensätze: <strong>{entry.total_records ?? '-'}</strong></span>
                   <span>Assets: <strong>{entry.asset_count ?? '-'}</strong></span>
                   <span>Größe: <strong>{formatFileSize(entry.file_size)}</strong></span>
+                  <span>Storage: <strong>{entry.storage_path || '-'}</strong></span>
                 </div>
                 {entry.error_message && (
                   <p style={{ ...statusTextStyle, color: colors.dangerText }}>
@@ -592,8 +590,9 @@ function normalizeBackupHistory(history) {
       asset_count: Number.isFinite(entry.asset_count) ? entry.asset_count : null,
       file_name: entry.file_name || entry.filename || null,
       file_size: Number.isFinite(entry.file_size) ? entry.file_size : null,
+      storage_path: entry.storage_path || null,
       includes_asset_manifest: entry.includes_asset_manifest === true,
-      status: entry.status === 'failed' ? 'failed' : 'success',
+      status: normalizeHistoryStatus(entry.status),
       ...(entry.error_message ? { error_message: entry.error_message } : {}),
     }))
 }
@@ -609,10 +608,17 @@ function createBackupHistoryEntry(result) {
     asset_count: result.asset_count ?? null,
     file_name: result.file_name || result.filename || null,
     file_size: result.file_size ?? null,
+    storage_path: result.storage_path || null,
     includes_asset_manifest: result.includes_asset_manifest === true,
-    status: result.status === 'failed' ? 'failed' : 'success',
+    status: normalizeHistoryStatus(result.status),
     ...(result.error_message ? { error_message: result.error_message } : {}),
   }
+}
+
+function normalizeHistoryStatus(status) {
+  if (status === 'failed') return 'failed'
+  if (status === 'running') return 'running'
+  return 'success'
 }
 
 function createBackupHistoryId() {
@@ -628,10 +634,12 @@ function formatFileSize(size) {
 }
 
 function getHistoryStatusColor(status) {
+  if (status === 'running') return '#92400e'
   return status === 'failed' ? colors.dangerText : colors.successText
 }
 
 function getHistoryStatusBackground(status) {
+  if (status === 'running') return '#fffbeb'
   return status === 'failed' ? colors.dangerBg : colors.successBg
 }
 
