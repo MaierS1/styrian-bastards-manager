@@ -1,9 +1,11 @@
 import { supabase } from '../../lib/supabase'
 
+export const MEDIA_CHANNELS = ['homepage', 'facebook', 'instagram', 'members']
+
 export async function fetchMediaItems() {
   return supabase
     .from('media_items')
-    .select('*')
+    .select('*, media_post_channels(*)')
     .order('publication_date', { ascending: false })
     .order('created_at', { ascending: false })
 }
@@ -16,15 +18,38 @@ export async function fetchPublicMediaItems({ limit = 50 } = {}) {
   })
 }
 
+export async function saveMediaItemChannels(mediaItemId, channels = []) {
+  const requestedChannels = new Map(
+    channels
+      .filter((item) => MEDIA_CHANNELS.includes(item?.channel))
+      .map((item) => [item.channel, Boolean(item.enabled)]),
+  )
+
+  const rows = MEDIA_CHANNELS.map((channel) => ({
+    media_item_id: mediaItemId,
+    channel,
+    enabled: requestedChannels.get(channel) || false,
+    status: requestedChannels.get(channel) ? 'pending' : 'not_requested',
+  }))
+
+  return supabase
+    .from('media_post_channels')
+    .upsert(rows, { onConflict: 'media_item_id,channel' })
+    .select()
+}
+
 export async function saveMediaItemRecord({
   mediaEditingId,
   payload,
+  channels,
   mediaItems,
   createAuditLog,
   loadMediaItems,
   resetMediaForm,
   alertFn = alert,
 }) {
+  let savedMediaItemId = mediaEditingId
+
   if (mediaEditingId) {
     const oldMediaItem = mediaItems.find((item) => item.id === mediaEditingId)
 
@@ -36,7 +61,6 @@ export async function saveMediaItemRecord({
     if (error) return { error }
 
     await createAuditLog('update', 'media_items', mediaEditingId, oldMediaItem, payload)
-    alertFn('Medienbeitrag wurde aktualisiert.')
   } else {
     const { data, error } = await supabase
       .from('media_items')
@@ -46,10 +70,25 @@ export async function saveMediaItemRecord({
 
     if (error) return { error }
 
-    await createAuditLog('insert', 'media_items', data?.id, null, data)
-    alertFn('Medienbeitrag wurde angelegt.')
+    savedMediaItemId = data?.id
+    await createAuditLog('insert', 'media_items', savedMediaItemId, null, data)
   }
 
+  if (savedMediaItemId && Array.isArray(channels)) {
+    const { data: savedChannels, error: channelError } = await saveMediaItemChannels(savedMediaItemId, channels)
+
+    if (channelError) return { error: channelError }
+
+    await createAuditLog(
+      'update',
+      'media_post_channels',
+      savedMediaItemId,
+      null,
+      savedChannels,
+    )
+  }
+
+  alertFn(mediaEditingId ? 'Medienbeitrag wurde aktualisiert.' : 'Medienbeitrag wurde angelegt.')
   resetMediaForm()
   await loadMediaItems()
   return { ok: true }
