@@ -6,6 +6,7 @@ const OPTIONAL_BACKUP_TABLES = [
   'sponsors',
   'sponsor_contracts',
   'media_items',
+  'media_post_channels',
   'merch_items',
   'merch_variants',
   'merch_sales',

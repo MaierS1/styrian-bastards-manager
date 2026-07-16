@@ -59,6 +59,10 @@ export function MediaPage({
   setMediaContent,
   mediaContentHtml,
   setMediaContentHtml,
+  mediaSocialText,
+  setMediaSocialText,
+  mediaHashtags,
+  setMediaHashtags,
   mediaExternalUrl,
   setMediaExternalUrl,
   mediaAudioUrl,
@@ -71,10 +75,14 @@ export function MediaPage({
   setMediaPublicationDate,
   mediaPublishedAt,
   setMediaPublishedAt,
+  mediaScheduledAt,
+  setMediaScheduledAt,
   mediaStatus,
   setMediaStatus,
   mediaIsPublic,
   setMediaIsPublic,
+  mediaChannelSettings,
+  setMediaChannelEnabled,
   mediaMembersOnly,
   setMediaMembersOnly,
   mediaInternalOnly,
@@ -94,11 +102,13 @@ export function MediaPage({
 }) {
   return (
     <section style={sectionStyle}>
-      <h2 style={headingStyle}>Medien / Presse</h2>
+      <h2 style={headingStyle}>Media Center</h2>
 
       {canManageMedia() && (
         <>
           <h3 style={headingStyle}>{mediaEditingId ? 'Medienbeitrag bearbeiten' : 'Medienbeitrag anlegen'}</h3>
+
+          <h4 style={subHeadingStyle}>Inhalt</h4>
 
           <input
             placeholder="Titel"
@@ -155,6 +165,22 @@ export function MediaPage({
             />
           </div>
 
+          <textarea
+            placeholder="Social Text"
+            value={mediaSocialText}
+            onChange={(event) => setMediaSocialText(event.target.value)}
+            style={textareaStyle}
+          />
+
+          <input
+            placeholder="Hashtags, mit Komma getrennt"
+            value={mediaHashtags}
+            onChange={(event) => setMediaHashtags(event.target.value)}
+            style={inputStyle}
+          />
+
+          <h4 style={subHeadingStyle}>Medien</h4>
+
           <input
             placeholder="Externer Link"
             value={mediaExternalUrl}
@@ -183,6 +209,8 @@ export function MediaPage({
             style={inputStyle}
           />
 
+          <h4 style={subHeadingStyle}>Sichtbarkeit</h4>
+
           <input
             type="date"
             value={mediaPublicationDate}
@@ -197,35 +225,71 @@ export function MediaPage({
             style={inputStyle}
           />
 
+          <input
+            type="datetime-local"
+            value={mediaScheduledAt}
+            onChange={(event) => setMediaScheduledAt(event.target.value)}
+            style={inputStyle}
+          />
+
           <select value={mediaStatus} onChange={(event) => setMediaStatus(event.target.value)} style={inputStyle}>
             {mediaStatuses.map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
 
+          <h4 style={subHeadingStyle}>Veröffentlichungen</h4>
+
           <label style={checkboxLabelStyle}>
             <input
               type="checkbox"
               checked={mediaIsPublic}
-              onChange={(event) => setMediaIsPublic(event.target.checked)}
+              onChange={(event) => {
+                setMediaIsPublic(event.target.checked)
+                setMediaChannelEnabled('homepage', event.target.checked)
+              }}
             />
-            Öffentlich anzeigen
+            Homepage
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={Boolean(mediaChannelSettings?.facebook?.enabled)}
+              onChange={(event) => setMediaChannelEnabled('facebook', event.target.checked)}
+            />
+            Facebook
+          </label>
+
+          <label style={checkboxLabelStyle}>
+            <input
+              type="checkbox"
+              checked={Boolean(mediaChannelSettings?.instagram?.enabled)}
+              onChange={(event) => setMediaChannelEnabled('instagram', event.target.checked)}
+            />
+            Instagram
           </label>
 
           <label style={checkboxLabelStyle}>
             <input
               type="checkbox"
               checked={mediaMembersOnly}
-              onChange={(event) => setMediaMembersOnly(event.target.checked)}
+              onChange={(event) => {
+                setMediaMembersOnly(event.target.checked)
+                setMediaChannelEnabled('member_area', event.target.checked || mediaInternalOnly)
+              }}
             />
-            Nur fuer Mitglieder
+            Mitgliederbereich
           </label>
 
           <label style={checkboxLabelStyle}>
             <input
               type="checkbox"
               checked={mediaInternalOnly}
-              onChange={(event) => setMediaInternalOnly(event.target.checked)}
+              onChange={(event) => {
+                setMediaInternalOnly(event.target.checked)
+                setMediaChannelEnabled('member_area', event.target.checked || mediaMembersOnly)
+              }}
             />
             Interne News
           </label>
@@ -317,6 +381,10 @@ function MediaItemCard({
       <br />
       Öffentlich: {item.is_public ? 'Ja' : 'Nein'} - Mitglieder-only: {item.members_only ? 'Ja' : 'Nein'} - Intern: {item.internal_only ? 'Ja' : 'Nein'} - Featured: {item.is_featured ? 'Ja' : 'Nein'} - Sortierung: {item.public_sort_order ?? 0}
       <br />
+      Geplant: {formatDateTime(item.scheduled_at)} - Hashtags: {formatHashtags(item.hashtags)}
+      <br />
+      Kanäle: {formatChannelStatus(item.channels, 'homepage')} - {formatChannelStatus(item.channels, 'facebook')} - {formatChannelStatus(item.channels, 'instagram')} - {formatChannelStatus(item.channels, 'member_area')}
+      <br />
       Externer Link: {item.external_url || '-'}
       <br />
       Audio-Link: {item.audio_url || '-'}
@@ -328,6 +396,8 @@ function MediaItemCard({
       Inhalt: {item.content || '-'}
       <br />
       Formatierter Inhalt: {item.content_html ? 'Vorhanden' : '-'}
+      <br />
+      Social Text: {item.social_text || '-'}
       <br />
       Interne Notizen: {item.internal_notes || '-'}
 
@@ -361,6 +431,46 @@ function getStatusLabel(status) {
 function formatDateTime(value) {
   if (!value) return '-'
   return String(value).replace('T', ' ').slice(0, 16)
+}
+
+function formatHashtags(value) {
+  if (!Array.isArray(value) || value.length === 0) return '-'
+  return value.join(', ')
+}
+
+function formatChannelStatus(channels, channel) {
+  const labels = {
+    homepage: 'Homepage',
+    facebook: 'Facebook',
+    instagram: 'Instagram',
+    member_area: 'Mitgliederbereich',
+  }
+  const row = Array.isArray(channels) ? channels.find((item) => item.channel === channel) : null
+  const enabled = Boolean(row?.enabled)
+
+  if (channel === 'facebook' || channel === 'instagram') {
+    return enabled
+      ? `${labels[channel]}: Konfiguriert - Meta-Verbindung folgt`
+      : `${labels[channel]}: Nicht ausgewählt`
+  }
+
+  const statusLabels = {
+    not_requested: enabled ? 'Noch nicht geplant' : 'Nicht ausgewählt',
+    configured: 'Konfiguriert',
+    scheduled: 'Geplant',
+    publishing: 'Wird veröffentlicht',
+    published: 'Veröffentlicht',
+    failed: 'Fehler',
+    archived: 'Archiviert',
+  }
+  const status = statusLabels[row?.status] || row?.status || 'Entwurf'
+
+  return `${labels[channel]}: ${status}`
+}
+
+const subHeadingStyle = {
+  margin: '18px 0 8px',
+  color: colors.text,
 }
 
 const richTextFieldStyle = {
