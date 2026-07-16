@@ -5653,6 +5653,10 @@ export default function App() {
   const filteredMembers = getFilteredMembers()
   const filteredCashEntries = getFilteredCashEntries()
   const pressePathMatch = window.location.pathname.match(/^\/presse(?:\/([^/]+))?\/?$/)
+  const buildCommit = String(import.meta.env.VITE_APP_BUILD_COMMIT || '').slice(0, 7)
+  const buildBranch = String(import.meta.env.VITE_APP_BUILD_BRANCH || '')
+  const buildMode = String(import.meta.env.VITE_APP_BUILD_MODE || import.meta.env.MODE || '')
+  const showStagingBuildBadge = buildMode === 'staging' || buildBranch === 'staging'
 
   if (pressePathMatch) {
     return <PublicPressPage detailIdentifier={pressePathMatch[1] || ''} />
@@ -5728,6 +5732,12 @@ export default function App() {
           </>
         )}
       </p>
+
+      {showStagingBuildBadge && (
+        <p style={{ color: colors.white, fontSize: 13, marginTop: -4, opacity: 0.78 }}>
+          Staging · {buildCommit || 'unknown'}
+        </p>
+      )}
 
       {!currentMember && (
         <div style={{ ...cardStyle, background: '#fef2f2', color: '#991b1b', borderColor: '#b91c1c' }}>
