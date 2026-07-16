@@ -460,7 +460,7 @@ export default function App() {
   const [memberEmail, setMemberEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [memberType, setMemberType] = useState('vollmitglied')
-  const [role, setRole] = useState('keine')
+  const [role, setRole] = useState('mitglied')
   const [appRole, setAppRole] = useState(DEFAULT_APP_ROLE)
   const [isTestMember, setIsTestMember] = useState(false)
   const [street, setStreet] = useState('')
@@ -876,7 +876,7 @@ export default function App() {
     setMemberEmail(member.email || '')
     setPhone(member.phone || '')
     setMemberType(member.member_type || 'vollmitglied')
-    setRole(member.role || 'keine')
+    setRole(member.role || 'mitglied')
     setAppRole(member.app_role || DEFAULT_APP_ROLE)
     setMemberFormMessage(null)
     setIsTestMember(Boolean(member.is_test))
@@ -1696,7 +1696,7 @@ export default function App() {
     if (normalized.includes('rechnungspruefer') || normalized.includes('rechnungsprufer')) return 'rechnungspruefer'
     if (normalized.includes('vorstandsmitglied')) return 'vorstandsmitglied'
 
-    return 'keine'
+    return 'mitglied'
   }
 
   function getRoleLabel(value) {
@@ -1823,7 +1823,7 @@ export default function App() {
       city,
       birthdate: birthdate || null,
       clothing_size: clothingSize,
-      role,
+      role: role === 'keine' ? 'mitglied' : role,
       status: 'aktiv',
     }
   }
@@ -5171,7 +5171,7 @@ export default function App() {
     setMemberEmail('')
     setPhone('')
     setMemberType('vollmitglied')
-    setRole('keine')
+    setRole('mitglied')
     setAppRole(DEFAULT_APP_ROLE)
     setIsTestMember(false)
     setMemberFormMessage(null)

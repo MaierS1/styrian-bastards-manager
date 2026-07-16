@@ -46,6 +46,7 @@ create table if not exists public.notification_jobs (
   ),
   constraint notification_jobs_error_not_blank check (error is null or length(trim(error)) > 0)
 );
+
 create table if not exists public.notification_templates (
   id uuid primary key default gen_random_uuid(),
   key text not null,
@@ -74,6 +75,7 @@ create table if not exists public.notification_templates (
   ),
   constraint notification_templates_title_not_blank check (length(trim(title_template)) > 0)
 );
+
 create table if not exists public.notification_preferences (
   id uuid primary key default gen_random_uuid(),
   auth_user_id uuid references auth.users(id) on delete cascade,
@@ -98,6 +100,7 @@ create table if not exists public.notification_preferences (
     opted_out_at is null or opted_in_at is null or opted_out_at >= opted_in_at
   )
 );
+
 create table if not exists public.in_app_notifications (
   id uuid primary key default gen_random_uuid(),
   job_id uuid references public.notification_jobs(id) on delete set null,
@@ -122,6 +125,7 @@ create table if not exists public.in_app_notifications (
   ),
   constraint in_app_notifications_title_not_blank check (length(trim(title)) > 0)
 );
+
 create table if not exists public.push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   auth_user_id uuid not null references auth.users(id) on delete cascade,
@@ -151,6 +155,7 @@ create table if not exists public.push_subscriptions (
   constraint push_subscriptions_opt_dates_check check (opted_out_at is null or opted_out_at >= opted_in_at),
   constraint push_subscriptions_last_error_not_blank check (last_error is null or length(trim(last_error)) > 0)
 );
+
 create table if not exists public.notification_logs (
   id uuid primary key default gen_random_uuid(),
   job_id uuid references public.notification_jobs(id) on delete cascade,
@@ -175,34 +180,48 @@ create table if not exists public.notification_logs (
   constraint notification_logs_error_code_not_blank check (error_code is null or length(trim(error_code)) > 0),
   constraint notification_logs_error_message_not_blank check (error_message is null or length(trim(error_message)) > 0)
 );
+
 create index if not exists notification_jobs_status_scheduled_at_idx
   on public.notification_jobs (status, scheduled_at);
+
 create index if not exists notification_jobs_created_at_idx
   on public.notification_jobs (created_at desc);
+
 create index if not exists notification_logs_job_id_idx
   on public.notification_logs (job_id);
+
 create index if not exists notification_logs_member_created_at_idx
   on public.notification_logs (member_id, created_at desc);
+
 create index if not exists notification_logs_channel_status_idx
   on public.notification_logs (channel, status);
+
 create unique index if not exists notification_templates_key_uidx
   on public.notification_templates (key);
+
 create unique index if not exists notification_preferences_member_type_channel_uidx
   on public.notification_preferences (member_id, notification_type, channel)
   where member_id is not null;
+
 create unique index if not exists notification_preferences_auth_type_channel_uidx
   on public.notification_preferences (auth_user_id, notification_type, channel)
   where auth_user_id is not null;
+
 create index if not exists in_app_notifications_member_read_created_idx
   on public.in_app_notifications (member_id, read_at, created_at desc);
+
 create index if not exists in_app_notifications_auth_read_created_idx
   on public.in_app_notifications (auth_user_id, read_at, created_at desc);
+
 create index if not exists push_subscriptions_auth_active_idx
   on public.push_subscriptions (auth_user_id, is_active);
+
 create index if not exists push_subscriptions_member_active_idx
   on public.push_subscriptions (member_id, is_active);
+
 create unique index if not exists push_subscriptions_endpoint_uidx
   on public.push_subscriptions (endpoint);
+
 do $$
 begin
   if not exists (
@@ -261,30 +280,35 @@ begin
   end if;
 end;
 $$;
+
 alter table public.notification_jobs enable row level security;
 alter table public.notification_logs enable row level security;
 alter table public.notification_preferences enable row level security;
 alter table public.notification_templates enable row level security;
 alter table public.in_app_notifications enable row level security;
 alter table public.push_subscriptions enable row level security;
+
 revoke all on table public.notification_jobs from public;
 revoke all on table public.notification_logs from public;
 revoke all on table public.notification_preferences from public;
 revoke all on table public.notification_templates from public;
 revoke all on table public.in_app_notifications from public;
 revoke all on table public.push_subscriptions from public;
+
 revoke all on table public.notification_jobs from anon;
 revoke all on table public.notification_logs from anon;
 revoke all on table public.notification_preferences from anon;
 revoke all on table public.notification_templates from anon;
 revoke all on table public.in_app_notifications from anon;
 revoke all on table public.push_subscriptions from anon;
+
 grant select, insert, update, delete on table public.notification_jobs to authenticated;
 grant select, insert, update, delete on table public.notification_logs to authenticated;
 grant select, insert, update, delete on table public.notification_preferences to authenticated;
 grant select, insert, update, delete on table public.notification_templates to authenticated;
 grant select, insert, update, delete on table public.in_app_notifications to authenticated;
 grant select, insert, update, delete on table public.push_subscriptions to authenticated;
+
 insert into public.permissions (key, module, action, label)
 select 'kommunikation.' || action, 'kommunikation', action, label
 from (
@@ -298,6 +322,7 @@ on conflict (key) do update set
   module = excluded.module,
   action = excluded.action,
   label = excluded.label;
+
 insert into public.role_permissions (role_key, permission_key)
 select role_key, 'kommunikation.' || action
 from (
@@ -321,37 +346,44 @@ from (
     ('kassier', 'edit')
 ) as communication_role_permissions(role_key, action)
 on conflict do nothing;
+
 create policy "communication viewers can read notification jobs"
   on public.notification_jobs
   for select
   to authenticated
   using (public.has_app_permission('kommunikation', 'view'));
+
 create policy "communication creators can create notification jobs"
   on public.notification_jobs
   for insert
   to authenticated
   with check (public.has_app_permission('kommunikation', 'create'));
+
 create policy "communication editors can update notification jobs"
   on public.notification_jobs
   for update
   to authenticated
   using (public.has_app_permission('kommunikation', 'edit'))
   with check (public.has_app_permission('kommunikation', 'edit'));
+
 create policy "communication deleters can delete notification jobs"
   on public.notification_jobs
   for delete
   to authenticated
   using (public.has_app_permission('kommunikation', 'delete'));
+
 create policy "communication viewers can read notification logs"
   on public.notification_logs
   for select
   to authenticated
   using (public.has_app_permission('kommunikation', 'view'));
+
 create policy "communication deleters can delete notification logs"
   on public.notification_logs
   for delete
   to authenticated
   using (public.has_app_permission('kommunikation', 'delete'));
+
 create policy "members can read own notification preferences"
   on public.notification_preferences
   for select
@@ -365,6 +397,7 @@ create policy "members can read own notification preferences"
         and members.auth_user_id = auth.uid()
     )
   );
+
 create policy "members can create own notification preferences"
   on public.notification_preferences
   for insert
@@ -378,6 +411,7 @@ create policy "members can create own notification preferences"
         and members.auth_user_id = auth.uid()
     )
   );
+
 create policy "members can update own notification preferences"
   on public.notification_preferences
   for update
@@ -400,32 +434,38 @@ create policy "members can update own notification preferences"
         and members.auth_user_id = auth.uid()
     )
   );
+
 create policy "communication deleters can delete notification preferences"
   on public.notification_preferences
   for delete
   to authenticated
   using (public.has_app_permission('kommunikation', 'delete'));
+
 create policy "communication viewers can read notification templates"
   on public.notification_templates
   for select
   to authenticated
   using (public.has_app_permission('kommunikation', 'view'));
+
 create policy "communication creators can create notification templates"
   on public.notification_templates
   for insert
   to authenticated
   with check (public.has_app_permission('kommunikation', 'create'));
+
 create policy "communication editors can update notification templates"
   on public.notification_templates
   for update
   to authenticated
   using (public.has_app_permission('kommunikation', 'edit'))
   with check (public.has_app_permission('kommunikation', 'edit'));
+
 create policy "communication deleters can delete notification templates"
   on public.notification_templates
   for delete
   to authenticated
   using (public.has_app_permission('kommunikation', 'delete'));
+
 create policy "members can read own in app notifications"
   on public.in_app_notifications
   for select
@@ -439,6 +479,7 @@ create policy "members can read own in app notifications"
         and members.auth_user_id = auth.uid()
     )
   );
+
 create policy "members can update own in app notifications"
   on public.in_app_notifications
   for update
@@ -461,11 +502,13 @@ create policy "members can update own in app notifications"
         and members.auth_user_id = auth.uid()
     )
   );
+
 create policy "communication deleters can delete in app notifications"
   on public.in_app_notifications
   for delete
   to authenticated
   using (public.has_app_permission('kommunikation', 'delete'));
+
 create policy "members can read own push subscriptions"
   on public.push_subscriptions
   for select
@@ -479,6 +522,7 @@ create policy "members can read own push subscriptions"
         and members.auth_user_id = auth.uid()
     )
   );
+
 create policy "members can create own push subscriptions"
   on public.push_subscriptions
   for insert
@@ -495,6 +539,7 @@ create policy "members can create own push subscriptions"
       )
     )
   );
+
 create policy "members can update own push subscriptions"
   on public.push_subscriptions
   for update
@@ -520,6 +565,7 @@ create policy "members can update own push subscriptions"
       )
     )
   );
+
 create policy "communication deleters can delete push subscriptions"
   on public.push_subscriptions
   for delete

@@ -1,8 +1,18 @@
 import { supabase } from '../../lib/supabase'
-import { exportFullBackupJson as exportFullBackupJsonService } from '../export/csvExports'
+import {
+  downloadTextFile,
+  exportFullBackupJson as exportFullBackupJsonService,
+} from '../export/csvExports'
 import packageJson from '../../../package.json'
 
+const BACKUP_BUCKET = 'backups'
+
 const OPTIONAL_BACKUP_TABLES = [
+  'audit_logs',
+  'inventory_items',
+  'invoices',
+  'invoice_items',
+  'invoice_customers',
   'sponsors',
   'sponsor_contracts',
   'media_items',
@@ -19,6 +29,7 @@ const OPTIONAL_BACKUP_TABLES = [
 ]
 
 const KNOWN_STORAGE_BUCKETS = [
+  { id: BACKUP_BUCKET, name: BACKUP_BUCKET, public: false },
   { id: 'documents', name: 'documents', public: false },
   { id: 'invoice-archive', name: 'invoice-archive', public: false },
   { id: 'public-assets', name: 'public-assets', public: true },
@@ -35,6 +46,198 @@ const ASSET_LINK_FIELDS = [
   { table: 'events', bucket: 'public-assets', fields: ['public_image_path', 'public_image_url', 'event_image_url'] },
   { table: 'media_items', bucket: 'public-assets', fields: ['image_path', 'audio_url'] },
 ]
+
+async function getCurrentUserId() {
+  const { data, error } = await supabase.auth.getUser()
+
+  if (error) throw error
+  if (!data?.user?.id) throw new Error('Kein angemeldeter Benutzer fuer Backup/Restore gefunden.')
+
+  return data.user.id
+}
+
+async function insertBackupLog({ backupJobId = null, restoreJobId = null, level = 'info', message, details = {} }) {
+  try {
+    const createdBy = await getCurrentUserId()
+    await supabase.from('backup_logs').insert({
+      backup_job_id: backupJobId,
+      restore_job_id: restoreJobId,
+      level,
+      message,
+      details,
+      created_by: createdBy,
+    })
+  } catch {
+    // Logging must not hide the original backup/restore result.
+  }
+}
+
+async function createBackupJob({ jobType, result, metadata = {} }) {
+  const createdBy = await getCurrentUserId()
+  const { data, error } = await supabase
+    .from('backup_jobs')
+    .insert({
+      job_type: jobType,
+      status: 'running',
+      file_name: result.filename,
+      backup_version: result.backup_version,
+      asset_manifest_version: result.asset_manifest_version,
+      tables_count: result.tables_count,
+      total_records: result.total_records,
+      asset_count: result.asset_count,
+      file_size: result.file_size,
+      includes_asset_manifest: result.includes_asset_manifest === true,
+      metadata,
+      created_by: createdBy,
+    })
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+async function updateBackupJob(jobId, patch) {
+  const { data, error } = await supabase
+    .from('backup_jobs')
+    .update(patch)
+    .eq('id', jobId)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+async function createRestoreJob({ preRestoreBackupJobId, fileName, preview, metadata = {} }) {
+  const createdBy = await getCurrentUserId()
+  const { data, error } = await supabase
+    .from('restore_jobs')
+    .insert({
+      status: 'running',
+      pre_restore_backup_job_id: preRestoreBackupJobId,
+      file_name: fileName,
+      restore_mode: 'additive_only',
+      preview,
+      metadata,
+      created_by: createdBy,
+    })
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+async function updateRestoreJob(jobId, patch) {
+  const { data, error } = await supabase
+    .from('restore_jobs')
+    .update(patch)
+    .eq('id', jobId)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+function createBackupStoragePath({ userId, jobType, jobId, filename }) {
+  const safeFilename = String(filename || 'backup.json').replace(/[^a-zA-Z0-9._-]/g, '-')
+  return `${userId}/${jobType}/${jobId}-${safeFilename}`
+}
+
+async function uploadBackupFile({ path, content }) {
+  const { error } = await supabase.storage
+    .from(BACKUP_BUCKET)
+    .upload(path, new Blob([content], { type: 'application/json' }), {
+      contentType: 'application/json',
+      upsert: false,
+    })
+
+  if (error) throw error
+}
+
+async function createStoredBackup({
+  jobType = 'manual',
+  downloadLocal = true,
+  metadata = {},
+  ...backupData
+}) {
+  let capturedFile = null
+  const result = await exportFullBackupJsonService({
+    ...backupData,
+    appName: packageJson.name || 'styrian-bastards-manager',
+    appVersion: packageJson.version,
+    downloadTextFile: (filename, content, mimeType) => {
+      capturedFile = { filename, content, mimeType }
+      if (downloadLocal) downloadTextFile(filename, content, mimeType)
+    },
+  })
+
+  if (!capturedFile?.content) {
+    throw new Error('Backup-Datei konnte nicht erzeugt werden.')
+  }
+
+  const userId = await getCurrentUserId()
+  const job = await createBackupJob({ jobType, result, metadata })
+  const storagePath = createBackupStoragePath({
+    userId,
+    jobType,
+    jobId: job.id,
+    filename: capturedFile.filename,
+  })
+
+  try {
+    await uploadBackupFile({ path: storagePath, content: capturedFile.content })
+    const completedJob = await updateBackupJob(job.id, {
+      status: 'success',
+      storage_bucket: BACKUP_BUCKET,
+      storage_path: storagePath,
+      completed_at: new Date().toISOString(),
+    })
+
+    await insertBackupLog({
+      backupJobId: job.id,
+      message: jobType === 'pre_restore'
+        ? 'Pre-restore Backup erfolgreich erstellt.'
+        : 'Manuelles Backup erfolgreich erstellt.',
+      details: { storage_path: storagePath, file_name: capturedFile.filename },
+    })
+
+    return {
+      ...result,
+      job_id: completedJob.id,
+      status: completedJob.status,
+      storage_bucket: completedJob.storage_bucket,
+      storage_path: completedJob.storage_path,
+      stored_at: completedJob.completed_at,
+    }
+  } catch (error) {
+    await updateBackupJob(job.id, {
+      status: 'failed',
+      error_message: error?.message || 'Backup konnte nicht gespeichert werden.',
+      completed_at: new Date().toISOString(),
+    }).catch(() => null)
+    await insertBackupLog({
+      backupJobId: job.id,
+      level: 'error',
+      message: 'Backup fehlgeschlagen.',
+      details: { error: error?.message || String(error) },
+    })
+    throw error
+  }
+}
+
+export async function loadBackupHistory(limit = 20) {
+  const { data, error } = await supabase
+    .from('backup_jobs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return data || []
+}
 
 async function fetchOptionalBackupTable(table) {
   try {
@@ -391,6 +594,9 @@ export async function exportFullBackupJson({
   invoices,
   invoiceItems,
   invoiceCustomers,
+  jobType = 'manual',
+  downloadLocal = true,
+  metadata = {},
 }) {
   const optionalResults = await Promise.all(OPTIONAL_BACKUP_TABLES.map(fetchOptionalBackupTable))
   const optionalTables = {}
@@ -429,7 +635,10 @@ export async function exportFullBackupJson({
     skippedBuckets,
   } = await buildStorageAssetManifest(tableData)
 
-  return exportFullBackupJsonService({
+  return createStoredBackup({
+    jobType,
+    downloadLocal,
+    metadata,
     selectedCashYear,
     members,
     fees,
@@ -712,6 +921,8 @@ export async function restoreFullBackup({
   sponsors,
   sponsorContracts,
   mediaItems,
+  preRestoreBackupData,
+  restoreFileName,
   setRestoreData,
   setRestoreFileName,
   setRestoreImporting,
@@ -740,6 +951,21 @@ export async function restoreFullBackup({
     sponsors,
     sponsorsPlan.importedIds
   )
+  const restorePreview = {
+    sponsors: sponsorsPlan.summary,
+    sponsor_contracts: sponsorContractsPlan.summary,
+    media_items: mediaItemsPlan.summary,
+    conflicts: [
+      ...sponsorsPlan.conflicts.map((item) => ({ table: 'sponsors', ...item })),
+      ...sponsorContractsPlan.conflicts.map((item) => ({ table: 'sponsor_contracts', ...item })),
+      ...mediaItemsPlan.conflicts.map((item) => ({ table: 'media_items', ...item })),
+    ],
+    skipped: [
+      ...sponsorsPlan.skipped.map((item) => ({ table: 'sponsors', ...item })),
+      ...sponsorContractsPlan.skipped.map((item) => ({ table: 'sponsor_contracts', ...item })),
+      ...mediaItemsPlan.skipped.map((item) => ({ table: 'media_items', ...item })),
+    ],
+  }
   const confirmed = confirmFn(
       `Backup wiederherstellen?\n\n` +
       `Mitglieder: ${getRestoreCount(restoreData, 'members')}\n` +
@@ -760,7 +986,59 @@ export async function restoreFullBackup({
 
   setRestoreImporting(true)
 
+  let restoreJob = null
+
   try {
+    let preRestoreBackup
+
+    try {
+      preRestoreBackup = await exportFullBackupJson({
+        selectedCashYear: new Date().getFullYear(),
+        members,
+        fees,
+        membershipFeePeriods,
+        membershipFeeItems,
+        cashEntries,
+        events,
+        eventCheckins,
+        documents,
+        auditLogs: [],
+        inventoryItems: [],
+        invoices: [],
+        invoiceItems: [],
+        invoiceCustomers: [],
+        ...(preRestoreBackupData || {}),
+        jobType: 'pre_restore',
+        downloadLocal: false,
+        metadata: {
+          restore_file_name: restoreFileName || restoreData?.filename || null,
+          reason: 'automatic_pre_restore_backup',
+        },
+      })
+    } catch (error) {
+      alertFn(
+        `Restore wurde nicht gestartet, weil das automatische Pre-Restore-Backup fehlgeschlagen ist.\n\n` +
+        (error?.message || 'Unbekannter Fehler')
+      )
+      return
+    }
+
+    restoreJob = await createRestoreJob({
+      preRestoreBackupJobId: preRestoreBackup.job_id,
+      fileName: restoreFileName || restoreData?.filename || null,
+      preview: restorePreview,
+      metadata: {
+        backup_version: restoreData?.backup_version || null,
+        exported_at: restoreData?.exported_at || null,
+      },
+    })
+
+    await insertBackupLog({
+      restoreJobId: restoreJob.id,
+      message: 'Restore gestartet.',
+      details: { pre_restore_backup_job_id: preRestoreBackup.job_id },
+    })
+
     const restoreSteps = [
       {
         table: 'members',
@@ -820,6 +1098,7 @@ export async function restoreFullBackup({
     ]
 
     const importedSummary = []
+    let hasRestoreErrors = false
     const skippedSummary = [
       ...sponsorsPlan.skipped.map((item) => `sponsors ${item.id}: ${item.reason}`),
       ...sponsorsPlan.conflicts.map((item) => `sponsors ${item.id}: ${item.reason}`),
@@ -843,12 +1122,34 @@ export async function restoreFullBackup({
       const { error } = await supabase.from(step.table).insert(rowsToInsert)
 
       if (error) {
+        hasRestoreErrors = true
         importedSummary.push(`${step.table}: Fehler (${error.message})`)
+        await insertBackupLog({
+          restoreJobId: restoreJob.id,
+          level: 'error',
+          message: `Restore-Insert fehlgeschlagen: ${step.table}`,
+          details: { table: step.table, error: error.message },
+        })
         continue
       }
 
       importedSummary.push(`${step.table}: ${rowsToInsert.length}`)
     }
+
+    await updateRestoreJob(restoreJob.id, {
+      status: hasRestoreErrors ? 'failed' : 'success',
+      imported_summary: importedSummary,
+      skipped_summary: skippedSummary,
+      error_message: hasRestoreErrors ? 'Mindestens ein Restore-Schritt ist fehlgeschlagen.' : null,
+      completed_at: new Date().toISOString(),
+    })
+
+    await insertBackupLog({
+      restoreJobId: restoreJob.id,
+      level: hasRestoreErrors ? 'warning' : 'info',
+      message: hasRestoreErrors ? 'Restore mit Fehlern abgeschlossen.' : 'Restore erfolgreich abgeschlossen.',
+      details: { imported_summary: importedSummary, skipped_summary: skippedSummary },
+    })
 
     setRestoreData(null)
     setRestoreFileName('')
@@ -859,6 +1160,22 @@ export async function restoreFullBackup({
       `Importiert:\n${importedSummary.join('\n')}` +
       (skippedSummary.length > 0 ? `\n\nÜbersprungen/Konflikte:\n${skippedSummary.join('\n')}` : '')
     )
+  } catch (error) {
+    if (restoreJob?.id) {
+      await updateRestoreJob(restoreJob.id, {
+        status: 'failed',
+        error_message: error?.message || 'Restore fehlgeschlagen.',
+        completed_at: new Date().toISOString(),
+      }).catch(() => null)
+      await insertBackupLog({
+        restoreJobId: restoreJob.id,
+        level: 'error',
+        message: 'Restore fehlgeschlagen.',
+        details: { error: error?.message || String(error) },
+      })
+    }
+
+    alertFn(`Restore fehlgeschlagen: ${error?.message || 'Unbekannter Fehler'}`)
   } finally {
     setRestoreImporting(false)
   }

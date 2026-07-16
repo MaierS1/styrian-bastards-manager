@@ -18,6 +18,7 @@ create table if not exists public.backup_jobs (
   created_at timestamptz not null default now(),
   completed_at timestamptz
 );
+
 create table if not exists public.restore_jobs (
   id uuid primary key default gen_random_uuid(),
   status text not null default 'running' check (status in ('running', 'success', 'failed', 'aborted')),
@@ -34,6 +35,7 @@ create table if not exists public.restore_jobs (
   created_at timestamptz not null default now(),
   completed_at timestamptz
 );
+
 create table if not exists public.backup_logs (
   id uuid primary key default gen_random_uuid(),
   backup_job_id uuid references public.backup_jobs(id) on delete cascade,
@@ -45,83 +47,136 @@ create table if not exists public.backup_logs (
   created_at timestamptz not null default now(),
   constraint backup_logs_has_job check (backup_job_id is not null or restore_job_id is not null)
 );
+
 create index if not exists backup_jobs_created_at_idx on public.backup_jobs (created_at desc);
 create index if not exists backup_jobs_job_type_idx on public.backup_jobs (job_type);
 create index if not exists restore_jobs_created_at_idx on public.restore_jobs (created_at desc);
 create index if not exists backup_logs_backup_job_id_idx on public.backup_logs (backup_job_id);
 create index if not exists backup_logs_restore_job_id_idx on public.backup_logs (restore_job_id);
+
+create or replace function public.can_manage_backups(p_action text default 'view')
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_allowed boolean := false;
+begin
+  if to_regprocedure('public.has_app_permission(text,text)') is not null then
+    execute 'select public.has_app_permission($1, $2)'
+      into v_allowed
+      using 'backup', p_action;
+
+    if coalesce(v_allowed, false) then
+      return true;
+    end if;
+  end if;
+
+  if to_regprocedure('public.is_admin_user()') is not null then
+    execute 'select public.is_admin_user()'
+      into v_allowed;
+
+    if coalesce(v_allowed, false) then
+      return true;
+    end if;
+  end if;
+
+  return exists (
+    select 1
+    from public.members
+    where auth_user_id = auth.uid()
+      and app_role in ('admin', 'super_admin', 'administrator')
+  );
+end;
+$$;
+
+revoke all on function public.can_manage_backups(text) from public;
+revoke all on function public.can_manage_backups(text) from anon;
+grant execute on function public.can_manage_backups(text) to authenticated;
+
 alter table public.backup_jobs enable row level security;
 alter table public.restore_jobs enable row level security;
 alter table public.backup_logs enable row level security;
+
 drop policy if exists "backup users can read backup jobs" on public.backup_jobs;
 create policy "backup users can read backup jobs"
   on public.backup_jobs for select
   to authenticated
-  using (public.has_app_permission('backup', 'view'));
+  using (public.can_manage_backups('view'));
+
 drop policy if exists "backup users can create backup jobs" on public.backup_jobs;
 create policy "backup users can create backup jobs"
   on public.backup_jobs for insert
   to authenticated
   with check (
-    public.has_app_permission('backup', 'create')
+    public.can_manage_backups('create')
     and created_by = auth.uid()
   );
+
 drop policy if exists "backup users can update own backup jobs" on public.backup_jobs;
 create policy "backup users can update own backup jobs"
   on public.backup_jobs for update
   to authenticated
   using (
-    public.has_app_permission('backup', 'create')
+    public.can_manage_backups('create')
     and created_by = auth.uid()
   )
   with check (
-    public.has_app_permission('backup', 'create')
+    public.can_manage_backups('create')
     and created_by = auth.uid()
   );
+
 drop policy if exists "backup users can read restore jobs" on public.restore_jobs;
 create policy "backup users can read restore jobs"
   on public.restore_jobs for select
   to authenticated
-  using (public.has_app_permission('backup', 'view'));
+  using (public.can_manage_backups('view'));
+
 drop policy if exists "backup users can create restore jobs" on public.restore_jobs;
 create policy "backup users can create restore jobs"
   on public.restore_jobs for insert
   to authenticated
   with check (
-    public.has_app_permission('backup', 'delete')
+    public.can_manage_backups('delete')
     and created_by = auth.uid()
     and restore_mode = 'additive_only'
     and pre_restore_backup_job_id is not null
   );
+
 drop policy if exists "backup users can update own restore jobs" on public.restore_jobs;
 create policy "backup users can update own restore jobs"
   on public.restore_jobs for update
   to authenticated
   using (
-    public.has_app_permission('backup', 'delete')
+    public.can_manage_backups('delete')
     and created_by = auth.uid()
   )
   with check (
-    public.has_app_permission('backup', 'delete')
+    public.can_manage_backups('delete')
     and created_by = auth.uid()
     and restore_mode = 'additive_only'
   );
+
 drop policy if exists "backup users can read backup logs" on public.backup_logs;
 create policy "backup users can read backup logs"
   on public.backup_logs for select
   to authenticated
-  using (public.has_app_permission('backup', 'view'));
+  using (public.can_manage_backups('view'));
+
 drop policy if exists "backup users can create backup logs" on public.backup_logs;
 create policy "backup users can create backup logs"
   on public.backup_logs for insert
   to authenticated
   with check (
     (
-      public.has_app_permission('backup', 'create')
-      or public.has_app_permission('backup', 'delete')
+      public.can_manage_backups('create')
+      or public.can_manage_backups('delete')
     )
     and created_by = auth.uid()
   );
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'backups',
@@ -134,6 +189,7 @@ on conflict (id) do update
 set public = false,
     file_size_limit = excluded.file_size_limit,
     allowed_mime_types = excluded.allowed_mime_types;
+
 drop policy if exists "backup users can read backup files" on storage.objects;
 create policy "backup users can read backup files"
   on storage.objects
@@ -141,8 +197,9 @@ create policy "backup users can read backup files"
   to authenticated
   using (
     bucket_id = 'backups'
-    and public.has_app_permission('backup', 'view')
+    and public.can_manage_backups('view')
   );
+
 drop policy if exists "backup users can upload backup files" on storage.objects;
 create policy "backup users can upload backup files"
   on storage.objects
@@ -150,12 +207,13 @@ create policy "backup users can upload backup files"
   to authenticated
   with check (
     bucket_id = 'backups'
-    and public.has_app_permission('backup', 'create')
+    and public.can_manage_backups('create')
     and (
       name like auth.uid()::text || '/manual/%'
       or name like auth.uid()::text || '/pre_restore/%'
     )
   );
+
 drop policy if exists "backup users can update own backup files" on storage.objects;
 create policy "backup users can update own backup files"
   on storage.objects
@@ -163,7 +221,7 @@ create policy "backup users can update own backup files"
   to authenticated
   using (
     bucket_id = 'backups'
-    and public.has_app_permission('backup', 'create')
+    and public.can_manage_backups('create')
     and (
       name like auth.uid()::text || '/manual/%'
       or name like auth.uid()::text || '/pre_restore/%'
@@ -171,12 +229,13 @@ create policy "backup users can update own backup files"
   )
   with check (
     bucket_id = 'backups'
-    and public.has_app_permission('backup', 'create')
+    and public.can_manage_backups('create')
     and (
       name like auth.uid()::text || '/manual/%'
       or name like auth.uid()::text || '/pre_restore/%'
     )
   );
+
 drop policy if exists "backup admins can delete backup files" on storage.objects;
 create policy "backup admins can delete backup files"
   on storage.objects
@@ -184,5 +243,5 @@ create policy "backup admins can delete backup files"
   to authenticated
   using (
     bucket_id = 'backups'
-    and public.has_app_permission('backup', 'delete')
+    and public.can_manage_backups('delete')
   );

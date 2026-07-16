@@ -24,31 +24,34 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_APP_BUILD_MODE': JSON.stringify(mode),
     },
     plugins: [
-    react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      workbox: {
-        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-      },
-      manifest: {
-        name: 'Styrian Bastards Vereinsmanager',
-        short_name: 'SB Manager',
-        description: 'Vereinsmanager für Styrian Bastards',
-        theme_color: '#0b0b0b',
-        background_color: '#0b0b0b',
-        display: 'standalone',
-        orientation: 'portrait',
-        start_url: '/',
-        icons: [
-          {
-            src: '/icons.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'any maskable',
-          },
-        ],
-      },
-    }),
+      react(),
+      VitePWA({
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw.js',
+        registerType: 'autoUpdate',
+        injectManifest: {
+          maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        },
+        manifest: {
+          name: 'Styrian Bastards Vereinsmanager',
+          short_name: 'SB Manager',
+          description: 'Vereinsmanager für Styrian Bastards',
+          theme_color: '#0b0b0b',
+          background_color: '#0b0b0b',
+          display: 'standalone',
+          orientation: 'portrait',
+          start_url: '/',
+          icons: [
+            {
+              src: '/icons.svg',
+              sizes: '512x512',
+              type: 'image/svg+xml',
+              purpose: 'any maskable',
+            },
+          ],
+        },
+      }),
     ],
   }
 })
