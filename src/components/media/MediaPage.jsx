@@ -445,18 +445,27 @@ function formatChannelStatus(channels, channel) {
     instagram: 'Instagram',
     member_area: 'Mitgliederbereich',
   }
+  const row = Array.isArray(channels) ? channels.find((item) => item.channel === channel) : null
+  const enabled = Boolean(row?.enabled)
+
+  if (channel === 'facebook' || channel === 'instagram') {
+    return enabled
+      ? `${labels[channel]}: Konfiguriert - Meta-Verbindung folgt`
+      : `${labels[channel]}: Nicht ausgewählt`
+  }
+
   const statusLabels = {
-    draft: 'Entwurf',
+    not_requested: enabled ? 'Noch nicht geplant' : 'Nicht ausgewählt',
+    configured: 'Konfiguriert',
     scheduled: 'Geplant',
+    publishing: 'Wird veröffentlicht',
     published: 'Veröffentlicht',
     failed: 'Fehler',
     archived: 'Archiviert',
   }
-  const row = Array.isArray(channels) ? channels.find((item) => item.channel === channel) : null
-  const enabled = row?.enabled ? 'aktiv' : 'inaktiv'
   const status = statusLabels[row?.status] || row?.status || 'Entwurf'
 
-  return `${labels[channel]}: ${enabled}, ${status}`
+  return `${labels[channel]}: ${status}`
 }
 
 const subHeadingStyle = {

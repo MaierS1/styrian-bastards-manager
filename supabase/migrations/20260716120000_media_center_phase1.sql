@@ -1,3 +1,14 @@
+do $$
+begin
+  if to_regprocedure('public.set_updated_at()') is null then
+    raise exception 'Missing prerequisite function public.set_updated_at() for media center phase 1 migration.';
+  end if;
+
+  if to_regprocedure('public.can_manage_media()') is null then
+    raise exception 'Missing prerequisite function public.can_manage_media() for media center phase 1 migration.';
+  end if;
+end $$;
+
 alter table public.media_items
   add column if not exists social_text text,
   add column if not exists hashtags text[] not null default '{}',
@@ -30,7 +41,7 @@ create table if not exists public.media_post_channels (
   media_item_id uuid not null references public.media_items(id) on delete cascade,
   channel text not null,
   enabled boolean not null default false,
-  status text not null default 'draft',
+  status text not null default 'not_requested',
   scheduled_at timestamptz,
   published_at timestamptz,
   external_id text,
@@ -46,7 +57,11 @@ create table if not exists public.media_post_channels (
     channel in ('homepage', 'facebook', 'instagram', 'member_area')
   ),
   constraint media_post_channels_status_check check (
-    status in ('draft', 'scheduled', 'published', 'failed', 'archived')
+    status in ('not_requested', 'configured', 'scheduled', 'publishing', 'published', 'failed', 'archived')
+    and (
+      channel not in ('facebook', 'instagram')
+      or status in ('not_requested', 'configured')
+    )
   ),
   constraint media_post_channels_attempt_count_check check (attempt_count >= 0),
   constraint media_post_channels_external_id_not_blank check (
@@ -63,6 +78,45 @@ create table if not exists public.media_post_channels (
   ),
   unique (media_item_id, channel)
 );
+
+comment on column public.media_post_channels.status is
+  'Lifecycle: not_requested, configured, scheduled, publishing, published, failed, archived. Phase 1 only uses not_requested/configured for facebook and instagram.';
+
+alter table public.media_post_channels
+  alter column status set default 'not_requested';
+
+alter table public.media_post_channels
+  drop constraint if exists media_post_channels_status_check;
+
+update public.media_post_channels
+set
+  status = case
+    when channel in ('facebook', 'instagram') and enabled = true then 'configured'
+    when channel in ('facebook', 'instagram') then 'not_requested'
+    when enabled = false then 'not_requested'
+    when status = 'draft' then 'not_requested'
+    else status
+  end,
+  scheduled_at = case
+    when channel in ('facebook', 'instagram') or enabled = false then null
+    else scheduled_at
+  end,
+  published_at = case
+    when channel in ('facebook', 'instagram') or enabled = false then null
+    else published_at
+  end
+where status = 'draft'
+  or channel in ('facebook', 'instagram')
+  or enabled = false;
+
+alter table public.media_post_channels
+  add constraint media_post_channels_status_check check (
+    status in ('not_requested', 'configured', 'scheduled', 'publishing', 'published', 'failed', 'archived')
+    and (
+      channel not in ('facebook', 'instagram')
+      or status in ('not_requested', 'configured')
+    )
+  );
 
 create index if not exists media_post_channels_item_idx
   on public.media_post_channels (media_item_id);
@@ -88,7 +142,7 @@ create policy "authenticated users can read media post channels"
   on public.media_post_channels
   for select
   to authenticated
-  using (true);
+  using (public.can_manage_media());
 
 drop policy if exists "media managers can insert media post channels" on public.media_post_channels;
 create policy "media managers can insert media post channels"
@@ -129,16 +183,34 @@ select
     else false
   end as enabled,
   case
+    when c.channel in ('facebook', 'instagram') then 'not_requested'
+    when c.channel = 'homepage' and m.is_public and m.status = 'archived' then 'archived'
     when c.channel = 'homepage' and m.is_public and m.status = 'published' then 'published'
+    when c.channel = 'homepage' and m.is_public and m.scheduled_at is not null then 'scheduled'
+    when c.channel = 'homepage' and not m.is_public then 'not_requested'
+    when c.channel = 'member_area'
+      and (coalesce(m.members_only, false) or coalesce(m.internal_only, false))
+      and m.status = 'archived' then 'archived'
     when c.channel = 'member_area'
       and (coalesce(m.members_only, false) or coalesce(m.internal_only, false))
       and m.status = 'published' then 'published'
-    when m.status = 'archived' then 'archived'
-    else 'draft'
+    when c.channel = 'member_area'
+      and (coalesce(m.members_only, false) or coalesce(m.internal_only, false))
+      and m.scheduled_at is not null then 'scheduled'
+    when c.channel = 'member_area' then 'not_requested'
+    else 'not_requested'
   end as status,
-  m.scheduled_at,
   case
-    when m.status = 'published' then m.published_at
+    when c.channel in ('facebook', 'instagram') then null
+    when c.channel = 'homepage' and m.is_public then m.scheduled_at
+    when c.channel = 'member_area' and (coalesce(m.members_only, false) or coalesce(m.internal_only, false)) then m.scheduled_at
+    else null
+  end as scheduled_at,
+  case
+    when c.channel = 'homepage' and m.is_public and m.status = 'published' then m.published_at
+    when c.channel = 'member_area'
+      and (coalesce(m.members_only, false) or coalesce(m.internal_only, false))
+      and m.status = 'published' then m.published_at
     else null
   end as published_at
 from public.media_items m
@@ -161,6 +233,11 @@ declare
   v_item public.media_items;
   v_existing public.media_items;
   v_channel jsonb;
+  v_channel_name text;
+  v_channel_enabled boolean;
+  v_channel_status text;
+  v_channel_scheduled_at timestamptz;
+  v_channel_published_at timestamptz;
   v_hashtags text[];
 begin
   if not public.can_manage_media() then
@@ -279,6 +356,26 @@ begin
     select value
     from jsonb_array_elements(coalesce(p_channels, '[]'::jsonb)) as value
   loop
+    v_channel_name := v_channel->>'channel';
+    v_channel_enabled := coalesce((v_channel->>'enabled')::boolean, false);
+
+    if v_channel_name in ('facebook', 'instagram') then
+      v_channel_status := case when v_channel_enabled then 'configured' else 'not_requested' end;
+      v_channel_scheduled_at := null;
+      v_channel_published_at := null;
+    elsif not v_channel_enabled then
+      v_channel_status := 'not_requested';
+      v_channel_scheduled_at := null;
+      v_channel_published_at := null;
+    else
+      v_channel_status := coalesce(v_channel->>'status', 'not_requested');
+      if v_channel_status = 'draft' then
+        v_channel_status := 'not_requested';
+      end if;
+      v_channel_scheduled_at := nullif(v_channel->>'scheduled_at', '')::timestamptz;
+      v_channel_published_at := nullif(v_channel->>'published_at', '')::timestamptz;
+    end if;
+
     insert into public.media_post_channels (
       media_item_id,
       channel,
@@ -294,11 +391,11 @@ begin
       last_attempt_at
     ) values (
       v_item.id,
-      v_channel->>'channel',
-      coalesce((v_channel->>'enabled')::boolean, false),
-      coalesce(v_channel->>'status', 'draft'),
-      nullif(v_channel->>'scheduled_at', '')::timestamptz,
-      nullif(v_channel->>'published_at', '')::timestamptz,
+      v_channel_name,
+      v_channel_enabled,
+      v_channel_status,
+      v_channel_scheduled_at,
+      v_channel_published_at,
       nullif(v_channel->>'external_id', ''),
       nullif(v_channel->>'external_url', ''),
       nullif(v_channel->>'error_code', ''),

@@ -296,7 +296,7 @@ function createMediaChannelSettings(channels = []) {
     settings[channel] = {
       channel,
       enabled: false,
-      status: 'draft',
+      status: 'not_requested',
       scheduled_at: null,
       published_at: null,
       external_id: null,
@@ -315,6 +315,32 @@ function createMediaChannelSettings(channels = []) {
 function mediaChannelSettingsToList(settings) {
   const defaults = createMediaChannelSettings()
   return MEDIA_CHANNELS.map((channel) => settings[channel] || defaults[channel])
+}
+
+function isSocialMediaChannel(channel) {
+  return channel === 'facebook' || channel === 'instagram'
+}
+
+function isLocalMediaChannel(channel) {
+  return channel === 'homepage' || channel === 'member_area'
+}
+
+function getMediaChannelSaveStatus({
+  channel,
+  enabled,
+  isSocialChannel,
+  isLocalChannel,
+  isPublishedChannel,
+  mediaStatus,
+  scheduledAt,
+}) {
+  if (!enabled) return 'not_requested'
+  if (isSocialChannel) return 'configured'
+  if (isLocalChannel && mediaStatus === 'archived') return 'archived'
+  if (isPublishedChannel) return 'published'
+  if (isLocalChannel && channel.status === 'failed') return 'failed'
+  if (isLocalChannel && scheduledAt) return 'scheduled'
+  return 'not_requested'
 }
 
 function parseMediaHashtags(value) {
@@ -3754,6 +3780,13 @@ export default function App() {
       [channel]: {
         ...(current[channel] || createMediaChannelSettings()[channel]),
         enabled,
+        status: enabled && isSocialMediaChannel(channel) ? 'configured' : 'not_requested',
+        scheduled_at: null,
+        published_at: null,
+        error_code: null,
+        error_message: null,
+        attempt_count: 0,
+        last_attempt_at: null,
       },
     }))
   }
@@ -3835,21 +3868,31 @@ export default function App() {
     const channels = mediaChannelSettingsToList(channelSettings).map((channel) => {
       const enabled = Boolean(channel.enabled)
       const scheduledAt = mediaScheduledAt || null
-      const isPublishedChannel = enabled && mediaStatus === 'published' && ['homepage', 'member_area'].includes(channel.channel)
-      const status = !enabled
-        ? 'draft'
-        : isPublishedChannel
-          ? 'published'
-          : scheduledAt
-            ? 'scheduled'
-            : channel.status || 'draft'
+      const isSocialChannel = isSocialMediaChannel(channel.channel)
+      const isLocalChannel = isLocalMediaChannel(channel.channel)
+      const isPublishedChannel = enabled && mediaStatus === 'published' && isLocalChannel
+      const status = getMediaChannelSaveStatus({
+        channel,
+        enabled,
+        isSocialChannel,
+        isLocalChannel,
+        isPublishedChannel,
+        mediaStatus,
+        scheduledAt,
+      })
 
       return {
         ...channel,
         enabled,
         status,
-        scheduled_at: scheduledAt,
-        published_at: isPublishedChannel ? mediaPublishedAt || null : channel.published_at || null,
+        scheduled_at: isSocialChannel || !enabled ? null : scheduledAt,
+        published_at: isPublishedChannel ? mediaPublishedAt || null : null,
+        external_id: isSocialChannel ? null : channel.external_id || null,
+        external_url: isSocialChannel ? null : channel.external_url || null,
+        error_code: null,
+        error_message: null,
+        attempt_count: 0,
+        last_attempt_at: null,
       }
     })
 

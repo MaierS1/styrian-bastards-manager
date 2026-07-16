@@ -9,13 +9,15 @@ export function createDefaultMediaChannels(item = {}) {
       : channel === 'member_area'
         ? Boolean(item.members_only || item.internal_only)
         : false
+    const isLocalChannel = channel === 'homepage' || channel === 'member_area'
+    const status = getDefaultChannelStatus({ enabled, isLocalChannel, item })
 
     return {
       channel,
       enabled,
-      status: enabled && item.status === 'published' ? 'published' : item.status === 'archived' ? 'archived' : 'draft',
-      scheduled_at: item.scheduled_at || null,
-      published_at: enabled && item.status === 'published' ? item.published_at || null : null,
+      status,
+      scheduled_at: isLocalChannel && enabled ? item.scheduled_at || null : null,
+      published_at: isLocalChannel && enabled && item.status === 'published' ? item.published_at || null : null,
       external_id: null,
       external_url: null,
       error_code: null,
@@ -26,6 +28,15 @@ export function createDefaultMediaChannels(item = {}) {
   })
 }
 
+function getDefaultChannelStatus({ enabled, isLocalChannel, item }) {
+  if (!enabled) return 'not_requested'
+  if (!isLocalChannel) return 'configured'
+  if (item.status === 'archived') return 'archived'
+  if (item.status === 'published') return 'published'
+  if (item.scheduled_at) return 'scheduled'
+  return 'not_requested'
+}
+
 export function normalizeMediaItem(item) {
   const loadedChannels = Array.isArray(item.media_post_channels)
     ? item.media_post_channels
@@ -33,7 +44,7 @@ export function normalizeMediaItem(item) {
       ? item.channels
       : []
   const channelsByName = new Map(loadedChannels.map((channel) => [channel.channel, channel]))
-  const channels = createDefaultMediaChannels(item).map((channel) => ({
+  const channels = createDefaultMediaChannels(item).map((channel) => normalizeMediaChannel({
     ...channel,
     ...channelsByName.get(channel.channel),
   }))
@@ -42,6 +53,35 @@ export function normalizeMediaItem(item) {
     ...item,
     hashtags: Array.isArray(item.hashtags) ? item.hashtags : [],
     channels,
+  }
+}
+
+function normalizeMediaChannel(channel) {
+  const enabled = Boolean(channel.enabled)
+
+  if (channel.channel === 'facebook' || channel.channel === 'instagram') {
+    return {
+      ...channel,
+      enabled,
+      status: enabled ? 'configured' : 'not_requested',
+      scheduled_at: null,
+      published_at: null,
+    }
+  }
+
+  if (!enabled) {
+    return {
+      ...channel,
+      enabled,
+      status: 'not_requested',
+      scheduled_at: null,
+      published_at: null,
+    }
+  }
+
+  return {
+    ...channel,
+    enabled,
   }
 }
 
