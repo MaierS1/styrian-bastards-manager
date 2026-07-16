@@ -134,6 +134,7 @@ import {
 } from './services/repositories/documentsRepository'
 import {
   deleteMediaItemRecord,
+  MEDIA_CHANNELS,
   saveMediaItemRecord,
 } from './services/repositories/mediaRepository'
 import {
@@ -287,6 +288,42 @@ class DashboardPageErrorBoundary extends Component {
     return this.props.children
   }
 }
+
+function createMediaChannelSettings(channels = []) {
+  const byChannel = new Map((channels || []).map((channel) => [channel.channel, channel]))
+
+  return MEDIA_CHANNELS.reduce((settings, channel) => {
+    settings[channel] = {
+      channel,
+      enabled: false,
+      status: 'draft',
+      scheduled_at: null,
+      published_at: null,
+      external_id: null,
+      external_url: null,
+      error_code: null,
+      error_message: null,
+      attempt_count: 0,
+      last_attempt_at: null,
+      ...byChannel.get(channel),
+    }
+
+    return settings
+  }, {})
+}
+
+function mediaChannelSettingsToList(settings) {
+  const defaults = createMediaChannelSettings()
+  return MEDIA_CHANNELS.map((channel) => settings[channel] || defaults[channel])
+}
+
+function parseMediaHashtags(value) {
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim().replace(/^#/, ''))
+    .filter(Boolean)
+}
+
 export default function App() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -502,14 +539,18 @@ export default function App() {
   const [mediaSummary, setMediaSummary] = useState('')
   const [mediaContent, setMediaContent] = useState('')
   const [mediaContentHtml, setMediaContentHtml] = useState('')
+  const [mediaSocialText, setMediaSocialText] = useState('')
+  const [mediaHashtags, setMediaHashtags] = useState('')
   const [mediaExternalUrl, setMediaExternalUrl] = useState('')
   const [mediaAudioUrl, setMediaAudioUrl] = useState('')
   const [mediaImagePath, setMediaImagePath] = useState('')
   const [mediaImageAlt, setMediaImageAlt] = useState('')
   const [mediaPublicationDate, setMediaPublicationDate] = useState(new Date().toISOString().slice(0, 10))
   const [mediaPublishedAt, setMediaPublishedAt] = useState('')
+  const [mediaScheduledAt, setMediaScheduledAt] = useState('')
   const [mediaStatus, setMediaStatus] = useState('draft')
   const [mediaIsPublic, setMediaIsPublic] = useState(false)
+  const [mediaChannelSettings, setMediaChannelSettings] = useState(() => createMediaChannelSettings())
   const [mediaMembersOnly, setMediaMembersOnly] = useState(false)
   const [mediaInternalOnly, setMediaInternalOnly] = useState(false)
   const [mediaIsFeatured, setMediaIsFeatured] = useState(false)
@@ -3688,19 +3729,33 @@ export default function App() {
     setMediaSummary('')
     setMediaContent('')
     setMediaContentHtml('')
+    setMediaSocialText('')
+    setMediaHashtags('')
     setMediaExternalUrl('')
     setMediaAudioUrl('')
     setMediaImagePath('')
     setMediaImageAlt('')
     setMediaPublicationDate(new Date().toISOString().slice(0, 10))
     setMediaPublishedAt('')
+    setMediaScheduledAt('')
     setMediaStatus('draft')
     setMediaIsPublic(false)
+    setMediaChannelSettings(createMediaChannelSettings())
     setMediaMembersOnly(false)
     setMediaInternalOnly(false)
     setMediaIsFeatured(false)
     setMediaPublicSortOrder('0')
     setMediaInternalNotes('')
+  }
+
+  function setMediaChannelEnabled(channel, enabled) {
+    setMediaChannelSettings((current) => ({
+      ...current,
+      [channel]: {
+        ...(current[channel] || createMediaChannelSettings()[channel]),
+        enabled,
+      },
+    }))
   }
 
   function editMediaItem(mediaItem) {
@@ -3714,14 +3769,18 @@ export default function App() {
     setMediaSummary(mediaItem.summary || '')
     setMediaContent(mediaItem.content || '')
     setMediaContentHtml(mediaItem.content_html || '')
+    setMediaSocialText(mediaItem.social_text || '')
+    setMediaHashtags(Array.isArray(mediaItem.hashtags) ? mediaItem.hashtags.join(', ') : '')
     setMediaExternalUrl(mediaItem.external_url || '')
     setMediaAudioUrl(mediaItem.audio_url || '')
     setMediaImagePath(mediaItem.image_path || '')
     setMediaImageAlt(mediaItem.image_alt || '')
     setMediaPublicationDate(mediaItem.publication_date || new Date().toISOString().slice(0, 10))
     setMediaPublishedAt(mediaItem.published_at ? String(mediaItem.published_at).slice(0, 16) : '')
+    setMediaScheduledAt(mediaItem.scheduled_at ? String(mediaItem.scheduled_at).slice(0, 16) : '')
     setMediaStatus(mediaItem.status || 'draft')
     setMediaIsPublic(Boolean(mediaItem.is_public))
+    setMediaChannelSettings(createMediaChannelSettings(mediaItem.channels))
     setMediaMembersOnly(Boolean(mediaItem.members_only))
     setMediaInternalOnly(Boolean(mediaItem.internal_only))
     setMediaIsFeatured(Boolean(mediaItem.is_featured))
@@ -3759,6 +3818,41 @@ export default function App() {
       return
     }
 
+    const hashtags = parseMediaHashtags(mediaHashtags)
+    const channelSettings = {
+      ...mediaChannelSettings,
+      homepage: {
+        ...mediaChannelSettings.homepage,
+        channel: 'homepage',
+        enabled: mediaIsPublic,
+      },
+      member_area: {
+        ...mediaChannelSettings.member_area,
+        channel: 'member_area',
+        enabled: mediaMembersOnly || mediaInternalOnly,
+      },
+    }
+    const channels = mediaChannelSettingsToList(channelSettings).map((channel) => {
+      const enabled = Boolean(channel.enabled)
+      const scheduledAt = mediaScheduledAt || null
+      const isPublishedChannel = enabled && mediaStatus === 'published' && ['homepage', 'member_area'].includes(channel.channel)
+      const status = !enabled
+        ? 'draft'
+        : isPublishedChannel
+          ? 'published'
+          : scheduledAt
+            ? 'scheduled'
+            : channel.status || 'draft'
+
+      return {
+        ...channel,
+        enabled,
+        status,
+        scheduled_at: scheduledAt,
+        published_at: isPublishedChannel ? mediaPublishedAt || null : channel.published_at || null,
+      }
+    })
+
     const payload = {
       title: mediaTitle.trim(),
       slug: slugValue,
@@ -3767,12 +3861,15 @@ export default function App() {
       summary: mediaSummary.trim() || null,
       content: mediaContent.trim() || null,
       content_html: normalizeRichTextHtml(mediaContentHtml) || null,
+      social_text: mediaSocialText.trim() || null,
+      hashtags,
       external_url: mediaExternalUrl.trim() || null,
       audio_url: mediaAudioUrl.trim() || null,
       image_path: mediaImagePath.trim() || null,
       image_alt: mediaImageAlt.trim() || null,
       publication_date: mediaPublicationDate,
       published_at: mediaPublishedAt || null,
+      scheduled_at: mediaScheduledAt || null,
       status: mediaStatus || 'draft',
       is_public: mediaIsPublic,
       members_only: mediaMembersOnly,
@@ -3788,6 +3885,7 @@ export default function App() {
       const result = await saveMediaItemRecord({
         mediaEditingId,
         payload,
+        channels,
         mediaItems,
         createAuditLog,
         loadMediaItems,
@@ -6053,6 +6151,10 @@ export default function App() {
           setMediaContent={setMediaContent}
           mediaContentHtml={mediaContentHtml}
           setMediaContentHtml={setMediaContentHtml}
+          mediaSocialText={mediaSocialText}
+          setMediaSocialText={setMediaSocialText}
+          mediaHashtags={mediaHashtags}
+          setMediaHashtags={setMediaHashtags}
           mediaExternalUrl={mediaExternalUrl}
           setMediaExternalUrl={setMediaExternalUrl}
           mediaAudioUrl={mediaAudioUrl}
@@ -6065,10 +6167,14 @@ export default function App() {
           setMediaPublicationDate={setMediaPublicationDate}
           mediaPublishedAt={mediaPublishedAt}
           setMediaPublishedAt={setMediaPublishedAt}
+          mediaScheduledAt={mediaScheduledAt}
+          setMediaScheduledAt={setMediaScheduledAt}
           mediaStatus={mediaStatus}
           setMediaStatus={setMediaStatus}
           mediaIsPublic={mediaIsPublic}
           setMediaIsPublic={setMediaIsPublic}
+          mediaChannelSettings={mediaChannelSettings}
+          setMediaChannelEnabled={setMediaChannelEnabled}
           mediaMembersOnly={mediaMembersOnly}
           setMediaMembersOnly={setMediaMembersOnly}
           mediaInternalOnly={mediaInternalOnly}
