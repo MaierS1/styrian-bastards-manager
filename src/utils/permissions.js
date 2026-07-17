@@ -71,7 +71,7 @@ export const MODULE_LABELS = {
   events: 'Events',
   shop: 'Shop & Fanartikel',
   sponsoren: 'Sponsoren',
-  medien_presse: 'Medien & Presse',
+  medien_presse: 'Media Center',
   homepage: 'Homepage-Freigaben',
   inventar: 'Inventar',
   einkauf: 'Einkauf & Preisvergleich',
