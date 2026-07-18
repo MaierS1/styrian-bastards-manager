@@ -120,6 +120,7 @@ import {
   importCashbookRowsService,
   parseCashbookEntries,
 } from './services/cash/import/cashbookImportService'
+import { uploadCashReceipt } from './services/cash/receiptUploadService'
 import {
   checkInMemberRecord,
   createEventRecord,
@@ -5426,7 +5427,7 @@ export default function App() {
       return
     }
 
-    if (cashType === 'ausgabe' && !receiptFile) {
+    if (cashType === 'ausgabe' && !receiptFile && !editingEntry?.receipt_url) {
       const proceedWithoutReceipt = window.confirm(
         'Für Ausgaben sollte ein Beleg hochgeladen werden. Trotzdem ohne Beleg speichern?'
       )
@@ -5493,16 +5494,11 @@ export default function App() {
     let receiptUrl = null
 
     if (receiptFile) {
-      const fileExt = receiptFile.name.split('.').pop()
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
-      const filePath = `cash/${fileName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('receipts')
-        .upload(filePath, receiptFile)
-
-      if (uploadError) return alert(uploadError.message)
-      receiptUrl = filePath
+      try {
+        receiptUrl = await uploadCashReceipt({ file: receiptFile })
+      } catch (error) {
+        return alert(error.message)
+      }
     }
 
     await addCashEntryRecord({
