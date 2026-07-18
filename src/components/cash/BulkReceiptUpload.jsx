@@ -9,6 +9,7 @@ import {
   secondaryButtonStyle,
 } from '../../styles/appStyles'
 import { uploadCashReceipt } from '../../services/cash/receiptUploadService'
+import { BulkReceiptDraftItem } from './BulkReceiptDraftItem'
 
 const MAX_FILES = 50
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024
@@ -20,6 +21,19 @@ const ACCEPTED_MIME_TYPES = new Set([
   'image/webp',
 ])
 const FILE_INPUT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp'
+
+const CASH_CATEGORIES = [
+  { value: 'mitgliedsbeitrag', label: 'Mitgliedsbeitrag' },
+  { value: 'pfandbecher', label: 'Pfandbecher' },
+  { value: 'veranstaltung', label: 'Veranstaltung' },
+  { value: 'fanartikel', label: 'Fanartikel' },
+  { value: 'sonstiges', label: 'Sonstiges' },
+]
+
+const CASH_PAYMENT_METHODS = [
+  { value: 'bar', label: 'Bar' },
+  { value: 'ebanking', label: 'E-Banking' },
+]
 
 function formatFileSize(bytes) {
   if (!Number.isFinite(bytes)) return '-'
@@ -65,24 +79,47 @@ function validateReceiptFile(file) {
   return ''
 }
 
-function createUploadItem(file, index, existingCount) {
-  const validationError = validateReceiptFile(file)
+function validateDraft(draft) {
+  const errors = []
+  const amount = Number(String(draft.amount || '').replace(',', '.'))
 
-  return {
-    id: `${Date.now()}-${existingCount + index}-${file.name}`,
-    fileKey: getFileKey(file),
-    file,
-    name: file.name,
-    size: file.size,
-    type: file.type || getFileExtension(file.name).toUpperCase(),
-    status: validationError ? 'Fehler' : 'Bereit',
-    error: validationError,
-    storagePath: '',
+  if (draft.uploadStatus !== 'uploaded') {
+    errors.push('Upload ist noch nicht erfolgreich abgeschlossen.')
   }
+
+  if (!draft.storagePath) {
+    errors.push('Storage-Pfad fehlt.')
+  }
+
+  if (!draft.date) {
+    errors.push('Belegdatum ist erforderlich.')
+  }
+
+  if (!draft.type) {
+    errors.push('Typ ist erforderlich.')
+  }
+
+  if (!draft.category) {
+    errors.push('Kategorie ist erforderlich.')
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    errors.push('Betrag muss größer als 0 sein.')
+  }
+
+  return errors
+}
+
+function getDraftStatus(draft) {
+  if (draft.error || draft.uploadStatus === 'error') return 'Fehler'
+  if (draft.uploadStatus === 'uploading') return 'Wird hochgeladen'
+  if (draft.uploadStatus !== 'uploaded') return 'Upload ausstehend'
+
+  return draft.validationErrors.length === 0 ? 'Bereit zur Verbuchung' : 'Prüfung erforderlich'
 }
 
 function getStatusStyle(status) {
-  if (status === 'Hochgeladen') {
+  if (status === 'Bereit zur Verbuchung') {
     return { color: colors.successText, fontWeight: 800 }
   }
 
@@ -90,33 +127,74 @@ function getStatusStyle(status) {
     return { color: colors.dangerText, fontWeight: 800 }
   }
 
-  if (status === 'Lädt hoch') {
+  if (status === 'Wird hochgeladen') {
     return { color: colors.infoText, fontWeight: 800 }
   }
 
   return { color: colors.text, fontWeight: 800 }
 }
 
-export function BulkReceiptUpload() {
-  const [items, setItems] = useState([])
+function createDraft(file, index, existingCount) {
+  const validationError = validateReceiptFile(file)
+  const draft = {
+    id: `${Date.now()}-${existingCount + index}-${file.name}`,
+    fileKey: getFileKey(file),
+    file,
+    fileName: file.name,
+    fileSize: file.size,
+    fileType: file.type || getFileExtension(file.name).toUpperCase(),
+    storagePath: '',
+    uploadStatus: validationError ? 'error' : 'pending',
+    error: validationError,
+    date: '',
+    type: 'ausgabe',
+    category: 'sonstiges',
+    paymentMethod: 'bar',
+    eventId: '',
+    amount: '',
+    description: '',
+    validationErrors: [],
+    isExpanded: false,
+  }
+
+  return {
+    ...draft,
+    validationErrors: validationError ? [] : validateDraft(draft),
+  }
+}
+
+function updateDraftValidation(draft) {
+  return {
+    ...draft,
+    validationErrors: draft.error ? [] : validateDraft(draft),
+  }
+}
+
+export function BulkReceiptUpload({ events = [], onBookDrafts }) {
+  const [drafts, setDrafts] = useState([])
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [isPosting, setIsPosting] = useState(false)
   const [limitMessage, setLimitMessage] = useState('')
+  const [bookingMessage, setBookingMessage] = useState('')
   const fileInputRef = useRef(null)
 
-  const readyCount = items.filter((item) => item.status === 'Bereit').length
-  const uploadedCount = items.filter((item) => item.status === 'Hochgeladen').length
-  const hasUploadableFiles = readyCount > 0 && !isUploading
+  const pendingCount = drafts.filter((draft) => draft.uploadStatus === 'pending').length
+  const uploadedCount = drafts.filter((draft) => draft.uploadStatus === 'uploaded').length
+  const readyToPostCount = drafts.filter((draft) => getDraftStatus(draft) === 'Bereit zur Verbuchung').length
+  const isBusy = isUploading || isPosting
+  const hasUploadableFiles = pendingCount > 0 && !isBusy
+  const canBookDrafts = readyToPostCount > 0 && !isBusy && Boolean(onBookDrafts)
 
   function addFiles(fileList) {
-    if (isUploading) return
+    if (isBusy) return
 
     const selectedFiles = Array.from(fileList || [])
     if (selectedFiles.length === 0) return
 
-    setItems((currentItems) => {
-      const availableSlots = Math.max(MAX_FILES - currentItems.length, 0)
-      const existingKeys = new Set(currentItems.map((item) => item.fileKey))
+    setDrafts((currentDrafts) => {
+      const availableSlots = Math.max(MAX_FILES - currentDrafts.length, 0)
+      const existingKeys = new Set(currentDrafts.map((draft) => draft.fileKey))
       const newKeys = new Set()
       const uniqueFiles = []
       let duplicateCount = 0
@@ -134,7 +212,7 @@ export function BulkReceiptUpload() {
       })
 
       const acceptedFiles = uniqueFiles.slice(0, availableSlots)
-      const nextItems = acceptedFiles.map((file, index) => createUploadItem(file, index, currentItems.length))
+      const nextDrafts = acceptedFiles.map((file, index) => createDraft(file, index, currentDrafts.length))
       const messages = []
 
       if (duplicateCount > 0) {
@@ -147,8 +225,45 @@ export function BulkReceiptUpload() {
 
       setLimitMessage(messages.join(' '))
 
-      return [...currentItems, ...nextItems]
+      return [...currentDrafts, ...nextDrafts]
     })
+  }
+
+  function updateDraft(draftId, field, value) {
+    if (isBusy) return
+
+    setDrafts((currentDrafts) => currentDrafts.map((draft) => {
+      if (draft.id !== draftId) return draft
+
+      return updateDraftValidation({
+        ...draft,
+        [field]: value,
+        error: draft.uploadStatus === 'uploaded' ? '' : draft.error,
+      })
+    }))
+  }
+
+  function removeDraft(draftId) {
+    if (isBusy) return
+
+    setDrafts((currentDrafts) => currentDrafts.filter((draft) => draft.id !== draftId))
+  }
+
+  function toggleDraft(draftId) {
+    if (isBusy) return
+
+    setDrafts((currentDrafts) => currentDrafts.map((draft) => (
+      draft.id === draftId ? { ...draft, isExpanded: !draft.isExpanded } : draft
+    )))
+  }
+
+  function setAllExpanded(isExpanded) {
+    if (isBusy) return
+
+    setDrafts((currentDrafts) => currentDrafts.map((draft) => ({
+      ...draft,
+      isExpanded,
+    })))
   }
 
   function handleInputChange(event) {
@@ -158,7 +273,7 @@ export function BulkReceiptUpload() {
 
   function handleDragOver(event) {
     event.preventDefault()
-    setIsDragging(true)
+    if (!isBusy) setIsDragging(true)
   }
 
   function handleDragLeave(event) {
@@ -177,28 +292,38 @@ export function BulkReceiptUpload() {
 
     setIsUploading(true)
 
-    const uploadQueue = items.filter((item) => item.status === 'Bereit')
+    const uploadQueue = drafts.filter((draft) => draft.uploadStatus === 'pending')
 
-    for (const item of uploadQueue) {
-      setItems((currentItems) => currentItems.map((currentItem) => (
-        currentItem.id === item.id
-          ? { ...currentItem, status: 'Lädt hoch', error: '' }
-          : currentItem
+    for (const draft of uploadQueue) {
+      setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
+        currentDraft.id === draft.id
+          ? updateDraftValidation({ ...currentDraft, uploadStatus: 'uploading', error: '' })
+          : currentDraft
       )))
 
       try {
-        const storagePath = await uploadCashReceipt({ file: item.file })
+        const storagePath = await uploadCashReceipt({ file: draft.file })
 
-        setItems((currentItems) => currentItems.map((currentItem) => (
-          currentItem.id === item.id
-            ? { ...currentItem, status: 'Hochgeladen', storagePath }
-            : currentItem
+        setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
+          currentDraft.id === draft.id
+            ? updateDraftValidation({
+              ...currentDraft,
+              uploadStatus: 'uploaded',
+              storagePath,
+              error: '',
+              isExpanded: true,
+            })
+            : currentDraft
         )))
       } catch (error) {
-        setItems((currentItems) => currentItems.map((currentItem) => (
-          currentItem.id === item.id
-            ? { ...currentItem, status: 'Fehler', error: error.message || 'Upload fehlgeschlagen.' }
-            : currentItem
+        setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
+          currentDraft.id === draft.id
+            ? updateDraftValidation({
+              ...currentDraft,
+              uploadStatus: 'error',
+              error: error.message || 'Upload fehlgeschlagen.',
+            })
+            : currentDraft
         )))
       }
     }
@@ -206,11 +331,48 @@ export function BulkReceiptUpload() {
     setIsUploading(false)
   }
 
+  async function bookReadyDrafts() {
+    if (!canBookDrafts) return
+
+    const readyDrafts = drafts.filter((draft) => getDraftStatus(draft) === 'Bereit zur Verbuchung')
+
+    if (readyDrafts.length === 0) return
+
+    setIsPosting(true)
+    setBookingMessage('')
+
+    try {
+      const result = await onBookDrafts(readyDrafts)
+      const bookedIds = new Set(result?.bookedIds || [])
+      const errorsById = result?.errorsById || {}
+      const errorCount = Object.keys(errorsById).length
+
+      setDrafts((currentDrafts) => currentDrafts
+        .filter((draft) => !bookedIds.has(draft.id))
+        .map((draft) => {
+          const error = errorsById[draft.id]
+
+          return error
+            ? updateDraftValidation({ ...draft, error, isExpanded: true })
+            : draft
+        }))
+
+      setBookingMessage([
+        bookedIds.size > 0 ? `${bookedIds.size} Beleg${bookedIds.size === 1 ? '' : 'e'} erfolgreich verbucht.` : '',
+        errorCount > 0 ? `${errorCount} Beleg${errorCount === 1 ? '' : 'e'} konnten nicht verbucht werden.` : '',
+      ].filter(Boolean).join(' '))
+    } catch (error) {
+      setBookingMessage(error.message || 'Verbuchung konnte nicht abgeschlossen werden.')
+    } finally {
+      setIsPosting(false)
+    }
+  }
+
   return (
     <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
       <strong style={{ display: 'block', marginBottom: 8 }}>Bulk-Belegupload</strong>
       <p style={mutedTextStyle}>
-        Mehrere Belege können hier vorab in den Storage hochgeladen werden. Es wird noch kein Kassa-Eintrag erstellt.
+        Mehrere Belege können hier vorab in den Storage hochgeladen und lokal geprüft werden. Es wird noch kein Kassa-Eintrag erstellt.
       </p>
 
       <div
@@ -224,16 +386,16 @@ export function BulkReceiptUpload() {
           borderColor: isDragging ? colors.blue : colors.border,
           background: isDragging ? colors.infoBg : colors.white,
           textAlign: 'center',
-          cursor: isUploading ? 'not-allowed' : 'pointer',
-          opacity: isUploading ? 0.72 : 1,
+          cursor: isBusy ? 'not-allowed' : 'pointer',
+          opacity: isBusy ? 0.72 : 1,
         }}
         role="button"
         tabIndex={0}
         onClick={() => {
-          if (!isUploading) fileInputRef.current?.click()
+          if (!isBusy) fileInputRef.current?.click()
         }}
         onKeyDown={(event) => {
-          if (!isUploading && (event.key === 'Enter' || event.key === ' ')) {
+          if (!isBusy && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault()
             fileInputRef.current?.click()
           }
@@ -253,66 +415,83 @@ export function BulkReceiptUpload() {
         style={{ display: 'none' }}
       />
 
-      <button type="button" onClick={() => fileInputRef.current?.click()} style={secondaryButtonStyle} disabled={isUploading}>
+      <button type="button" onClick={() => fileInputRef.current?.click()} style={secondaryButtonStyle} disabled={isBusy}>
         Dateien hinzufügen
       </button>
       <button
         type="button"
         onClick={() => {
-          setItems([])
+          setDrafts([])
           setLimitMessage('')
+          setBookingMessage('')
         }}
         style={secondaryButtonStyle}
-        disabled={isUploading || items.length === 0}
+        disabled={isBusy || drafts.length === 0}
       >
         Alle entfernen
       </button>
       <button type="button" onClick={startUpload} style={buttonStyle} disabled={!hasUploadableFiles}>
         Upload starten
       </button>
+      <button
+        type="button"
+        onClick={bookReadyDrafts}
+        style={buttonStyle}
+        disabled={!canBookDrafts}
+        title={canBookDrafts ? 'Geprüfte Belege als Kassa-Einträge speichern.' : 'Mindestens ein geprüfter Beleg ist erforderlich.'}
+      >
+        {isPosting ? 'Belege werden verbucht...' : 'Geprüfte Belege verbuchen'}
+      </button>
 
-      {items.length > 0 && (
+      {drafts.length > 1 && (
+        <>
+          <button type="button" onClick={() => setAllExpanded(true)} style={secondaryButtonStyle} disabled={isBusy}>
+            Alle Prüfmasken öffnen
+          </button>
+          <button type="button" onClick={() => setAllExpanded(false)} style={secondaryButtonStyle} disabled={isBusy}>
+            Alle Prüfmasken schließen
+          </button>
+        </>
+      )}
+
+      {drafts.length > 0 && (
         <>
           <p style={mutedTextStyle}>
-            Ausgewählt: {items.length} · Bereit: {readyCount} · Hochgeladen: {uploadedCount}
+            Ausgewählt: {drafts.length} · Upload erfolgreich: {uploadedCount} · Bereit zur Verbuchung: {readyToPostCount}
           </p>
 
           {limitMessage && (
             <p style={{ color: colors.dangerText }}>{limitMessage}</p>
           )}
 
+          {bookingMessage && (
+            <p style={{ color: bookingMessage.includes('konnten nicht') ? colors.dangerText : colors.successText, fontWeight: 800 }}>
+              {bookingMessage}
+            </p>
+          )}
+
           <div style={{ display: 'grid', gap: 8 }}>
-            {items.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: 10,
-                  padding: 10,
-                  background: item.status === 'Fehler' ? colors.dangerBg : item.status === 'Hochgeladen' ? colors.successBg : colors.white,
-                  display: 'grid',
-                  gridTemplateColumns: isMobile ? '1fr' : 'minmax(220px, 1fr) 120px 160px 130px',
-                  gap: 8,
-                  alignItems: 'center',
-                }}
-              >
-                <span style={{ fontWeight: 800, wordBreak: 'break-word' }}>{item.name}</span>
-                <span>{formatFileSize(item.size)}</span>
-                <span>{item.type || '-'}</span>
-                <span style={getStatusStyle(item.status)}>{item.status}</span>
-                {item.status === 'Lädt hoch' && (
-                  <span style={{ ...mutedTextStyle, gridColumn: '1 / -1' }}>Upload läuft...</span>
-                )}
-                {item.storagePath && (
-                  <span style={{ ...mutedTextStyle, gridColumn: '1 / -1', wordBreak: 'break-word' }}>
-                    Gespeichert als: {item.storagePath}
-                  </span>
-                )}
-                {item.error && (
-                  <span style={{ color: colors.dangerText, gridColumn: '1 / -1' }}>{item.error}</span>
-                )}
-              </div>
-            ))}
+            {drafts.map((draft) => {
+              const status = getDraftStatus(draft)
+
+              return (
+                <BulkReceiptDraftItem
+                  key={draft.id}
+                  draft={draft}
+                  status={status}
+                  statusStyle={getStatusStyle(status)}
+                  events={events}
+                  categories={CASH_CATEGORIES}
+                  paymentMethods={CASH_PAYMENT_METHODS}
+                  disabled={isBusy}
+                  isMobile={isMobile}
+                  formatFileSize={formatFileSize}
+                  onChange={updateDraft}
+                  onRemove={removeDraft}
+                  onToggle={toggleDraft}
+                />
+              )
+            })}
           </div>
         </>
       )}

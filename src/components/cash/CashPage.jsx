@@ -53,6 +53,7 @@ export function CashPage({
   updateCashEntry,
   resetCashForm,
   addCashEntry,
+  bookBulkReceiptDrafts,
   getCashbookDetailedSummary,
   getCashMonthLabel,
   isCashMonthClosed,
@@ -263,7 +264,7 @@ export function CashPage({
           style={inputStyle}
         />
 
-        <BulkReceiptUpload />
+        <BulkReceiptUpload events={events} onBookDrafts={bookBulkReceiptDrafts} />
 
         <input
           type="file"

@@ -5381,9 +5381,13 @@ export default function App() {
   }
 
   function getNextReceiptNumber(year = new Date().getFullYear()) {
+    return `${year}-${String(getMaxReceiptNumber(year) + 1).padStart(3, '0')}`
+  }
+
+  function getMaxReceiptNumber(year = new Date().getFullYear()) {
     const prefix = `${year}-`
 
-    const maxNumber = cashEntries.reduce((max, entry) => {
+    return cashEntries.reduce((max, entry) => {
       const receiptNumber = String(entry.receipt_number || '')
 
       if (!receiptNumber.startsWith(prefix)) return max
@@ -5391,8 +5395,6 @@ export default function App() {
       const numberPart = Number(receiptNumber.replace(prefix, ''))
       return Number.isFinite(numberPart) ? Math.max(max, numberPart) : max
     }, 0)
-
-    return `${prefix}${String(maxNumber + 1).padStart(3, '0')}`
   }
 
   function getCashEntrySignedAmount(entry) {
@@ -5508,6 +5510,114 @@ export default function App() {
       loadCashEntries,
       resetCashForm,
     })
+  }
+
+  function validateBulkCashDraftForBooking(draft) {
+    const amount = Number(String(draft.amount || '').replace(',', '.'))
+
+    if (draft.uploadStatus !== 'uploaded') return 'Upload ist noch nicht erfolgreich abgeschlossen.'
+    if (!draft.storagePath) return 'Storage-Pfad fehlt.'
+    if (!draft.date) return 'Belegdatum ist erforderlich.'
+    if (!draft.type) return 'Typ ist erforderlich.'
+    if (!draft.category) return 'Kategorie ist erforderlich.'
+    if (!Number.isFinite(amount) || amount <= 0) return 'Betrag muss größer als 0 sein.'
+
+    const year = Number(String(draft.date).slice(0, 4))
+    const month = Number(String(draft.date).slice(5, 7))
+
+    if (isCashMonthClosed(year, month)) {
+      return 'Der Monat dieses Belegs ist bereits abgeschlossen.'
+    }
+
+    return ''
+  }
+
+  async function bookBulkReceiptDrafts(drafts) {
+    const bookedIds = []
+    const errorsById = {}
+    let shouldReloadCashEntries = false
+
+    if (!canManageCash()) {
+      drafts.forEach((draft) => {
+        errorsById[draft.id] = 'Keine Berechtigung für Kassa.'
+      })
+      return { bookedIds, errorsById }
+    }
+
+    if (!navigator.onLine) {
+      drafts.forEach((draft) => {
+        errorsById[draft.id] = 'Keine Internetverbindung. Bulk-Belege werden nicht offline verbucht.'
+      })
+      return { bookedIds, errorsById }
+    }
+
+    const receiptCountersByYear = {}
+
+    drafts.forEach((draft) => {
+      const year = Number(String(draft.date || '').slice(0, 4))
+      if (Number.isFinite(year) && !receiptCountersByYear[year]) {
+        receiptCountersByYear[year] = getMaxReceiptNumber(year)
+      }
+    })
+
+    for (const draft of drafts) {
+      const validationError = validateBulkCashDraftForBooking(draft)
+
+      if (validationError) {
+        errorsById[draft.id] = validationError
+        continue
+      }
+
+      const entryYear = Number(String(draft.date).slice(0, 4))
+      const amount = Number(String(draft.amount).replace(',', '.'))
+      receiptCountersByYear[entryYear] = (receiptCountersByYear[entryYear] || 0) + 1
+
+      const baseEntry = {
+        entry_date: draft.date,
+        entry_year: entryYear,
+        receipt_number: `${entryYear}-${String(receiptCountersByYear[entryYear]).padStart(3, '0')}`,
+        is_cancelled: false,
+        type: draft.type,
+        category: draft.category,
+        event_id: draft.eventId || null,
+        payment_method: draft.paymentMethod,
+        is_opening: false,
+        amount: Math.abs(amount),
+        description: draft.description || draft.fileName || 'Bulk-Beleg',
+        receipt_url: null,
+      }
+
+      let result
+
+      try {
+        result = await addCashEntryRecord({
+          baseEntry,
+          receiptUrl: draft.storagePath,
+          createAuditLog,
+          loadCashEntries: async () => {},
+          resetCashForm: () => {},
+        })
+        shouldReloadCashEntries = true
+      } catch (error) {
+        shouldReloadCashEntries = true
+        errorsById[draft.id] = error.message || 'Kassa-Eintrag konnte nicht gespeichert werden.'
+        continue
+      }
+
+      if (result?.error) {
+        receiptCountersByYear[entryYear] -= 1
+        errorsById[draft.id] = result.error.message || 'Kassa-Eintrag konnte nicht gespeichert werden.'
+        continue
+      }
+
+      bookedIds.push(draft.id)
+    }
+
+    if (shouldReloadCashEntries) {
+      await loadCashEntries()
+    }
+
+    return { bookedIds, errorsById }
   }
 
   async function deleteCashEntry(entry) {
@@ -6101,6 +6211,7 @@ export default function App() {
             updateCashEntry,
             resetCashForm,
             addCashEntry,
+            bookBulkReceiptDrafts,
             getCashbookDetailedSummary,
             getCashMonthLabel,
             isCashMonthClosed,
