@@ -10,6 +10,7 @@ import {
   secondaryButtonStyle,
   sectionStyle,
 } from '../../styles/appStyles'
+import { BulkReceiptUpload } from './BulkReceiptUpload'
 import { CashEntriesList } from './CashEntriesList'
 
 export function CashPage({
@@ -261,6 +262,8 @@ export function CashPage({
           onChange={(e) => setCashDescription(e.target.value)}
           style={inputStyle}
         />
+
+        <BulkReceiptUpload />
 
         <input
           type="file"
