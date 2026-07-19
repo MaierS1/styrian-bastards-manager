@@ -26,7 +26,9 @@ import { BulkReceiptSummary } from './bulk-receipts/BulkReceiptSummary'
 import { BulkReceiptDraftList } from './bulk-receipts/BulkReceiptDraftList'
 import {
   getBulkReceiptProgress,
+  getBulkReceiptQueueState,
   getBulkReceiptSummary,
+  toggleSingleExpandedDraft,
 } from './bulk-receipts/bulkReceiptUiUtils'
 
 const MAX_FILES = BULK_RECEIPT_FILE_LIMITS.maxFiles
@@ -81,12 +83,11 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
   const queuedTaskIdsRef = useRef(new Set())
   const { queue, enqueue, registerWorker } = useTaskQueue({ concurrency: BULK_RECEIPT_CONCURRENCY })
 
-  const pendingCount = drafts.filter((draft) => draft.status === BULK_RECEIPT_STATUSES.WAITING).length
   const readyToPostCount = drafts.filter((draft) => draft.status === BULK_RECEIPT_STATUSES.READY).length
   const summary = useMemo(() => getBulkReceiptSummary(drafts), [drafts])
   const progress = useMemo(() => getBulkReceiptProgress(drafts), [drafts])
+  const queueState = useMemo(() => getBulkReceiptQueueState(summary), [summary])
   const isBusy = isPosting
-  const hasUploadableFiles = pendingCount > 0 && !isBusy
   const canBookDrafts = readyToPostCount > 0 && !isBusy && Boolean(onBookDrafts)
 
   const enqueueReceiptTask = useCallback((draft) => {
@@ -314,9 +315,7 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
   const toggleDraft = useCallback((draftId) => {
     if (isBusy) return
 
-    setDrafts((currentDrafts) => currentDrafts.map((draft) => (
-      draft.id === draftId ? { ...draft, isExpanded: !draft.isExpanded } : draft
-    )))
+    setDrafts((currentDrafts) => toggleSingleExpandedDraft(currentDrafts, draftId))
   }, [isBusy])
 
   const resetDrafts = useCallback(() => {
@@ -340,14 +339,6 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
     event.preventDefault()
     setIsDragging(false)
     addFiles(event.dataTransfer.files)
-  }
-
-  function startUpload() {
-    if (!hasUploadableFiles) return
-
-    drafts
-      .filter((draft) => draft.status === BULK_RECEIPT_STATUSES.WAITING && !draft.error)
-      .forEach(enqueueReceiptTask)
   }
 
   function analyzeDraft(draftId) {
@@ -429,11 +420,51 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
   }
 
   return (
-    <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
-      <strong style={{ display: 'block', marginBottom: 8 }}>Bulk-Belegupload</strong>
-      <p style={mutedTextStyle}>
-        Mehrere Belege können hier vorab in den Storage hochgeladen und lokal geprüft werden. Es wird noch kein Kassa-Eintrag erstellt.
-      </p>
+    <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}`, display: 'grid', gap: 16 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) auto auto',
+          gap: 14,
+          alignItems: 'center',
+          paddingBottom: 4,
+        }}
+      >
+        <div>
+          <strong style={{ display: 'block', color: colors.black, fontSize: 24, lineHeight: 1.15 }}>
+            Bulk-Belegupload
+          </strong>
+          <p style={{ ...mutedTextStyle, marginTop: 6 }}>
+            Belege gesammelt hochladen, automatisch analysieren und nach Prüfung verbuchen.
+          </p>
+        </div>
+        <div
+          aria-live="polite"
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            padding: '10px 14px',
+            background: colors.offWhite,
+            minWidth: isMobile ? 'auto' : 180,
+          }}
+        >
+          <span style={{ ...mutedTextStyle, display: 'block', fontSize: 12 }}>Queue-Zustand</span>
+          <strong style={{ color: colors.blue }}>{queueState}</strong>
+        </div>
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            padding: '10px 14px',
+            background: colors.white,
+            textAlign: isMobile ? 'left' : 'right',
+            minWidth: isMobile ? 'auto' : 120,
+          }}
+        >
+          <span style={{ ...mutedTextStyle, display: 'block', fontSize: 12 }}>Gesamt</span>
+          <strong style={{ color: colors.black, fontSize: 22 }}>{summary.total}</strong>
+        </div>
+      </div>
 
       <BulkReceiptToolbar
         fileInputRef={fileInputRef}
@@ -441,14 +472,12 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
         isBusy={isBusy}
         isDragging={isDragging}
         hasDrafts={drafts.length > 0}
-        hasUploadableFiles={hasUploadableFiles}
         canBookDrafts={canBookDrafts}
         isPosting={isPosting}
         onAddFiles={handleInputChange}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onStartUpload={startUpload}
         onBookReadyDrafts={bookReadyDrafts}
         onReset={resetDrafts}
       />

@@ -39,6 +39,36 @@ export function getBulkReceiptSummary(drafts = []) {
   }
 }
 
+export function getBulkReceiptDashboard(summary) {
+  const counts = summary?.countsByStatus || {}
+  const processing = (counts[BULK_RECEIPT_STATUSES.UPLOADING] || 0)
+    + (counts[BULK_RECEIPT_STATUSES.ANALYZING] || 0)
+    + (counts[BULK_RECEIPT_STATUSES.SAVING] || 0)
+  const ready = (counts[BULK_RECEIPT_STATUSES.READY] || 0)
+    + (counts[BULK_RECEIPT_STATUSES.SAVED] || 0)
+  const needsReview = counts[BULK_RECEIPT_STATUSES.NEEDS_REVIEW] || 0
+  const error = counts[BULK_RECEIPT_STATUSES.ERROR] || 0
+
+  return {
+    processing,
+    ready,
+    needsReview,
+    error,
+  }
+}
+
+export function getBulkReceiptQueueState(summary) {
+  const dashboard = getBulkReceiptDashboard(summary)
+  const total = summary?.total || 0
+
+  if (dashboard.processing > 0) return 'Verarbeitung läuft'
+  if (dashboard.error > 0 || dashboard.needsReview > 0) return 'Prüfung erforderlich'
+  if (dashboard.ready > 0) return 'bereit zum Verbuchen'
+  if (total > 0) return 'abgeschlossen'
+
+  return 'bereit für Belege'
+}
+
 export function getBulkReceiptProgress(drafts = []) {
   const activeDrafts = drafts.filter((draft) => normalizeDraftStatus(draft?.status) !== BULK_RECEIPT_STATUSES.CANCELLED)
 
@@ -62,6 +92,23 @@ export function getBulkReceiptProgress(drafts = []) {
   }
 }
 
+export function getBulkReceiptProgressHint(summary) {
+  const dashboard = getBulkReceiptDashboard(summary)
+  const hints = []
+
+  if (dashboard.needsReview > 0) {
+    hints.push(`${dashboard.needsReview} Beleg${dashboard.needsReview === 1 ? '' : 'e'} benötigen Prüfung`)
+  }
+
+  if (dashboard.error > 0) {
+    hints.push(`${dashboard.error} Beleg${dashboard.error === 1 ? '' : 'e'} mit Fehler`)
+  }
+
+  return hints.length > 0
+    ? hints.join(' · ')
+    : 'Keine offenen Probleme in der Verarbeitung.'
+}
+
 export function getBulkReceiptStatusLabel(status) {
   return BULK_RECEIPT_STATUS_LABELS[normalizeDraftStatus(status)]
 }
@@ -77,6 +124,27 @@ export function getBulkReceiptShortIssue(draft) {
   }
 
   return ''
+}
+
+export function shortenReceiptFileName(fileName, maxLength = 42) {
+  const text = String(fileName || '').trim()
+  if (text.length <= maxLength) return text
+  if (maxLength < 12) return text.slice(0, maxLength)
+
+  const dotIndex = text.lastIndexOf('.')
+  const extension = dotIndex > 0 ? text.slice(dotIndex) : ''
+  const available = maxLength - extension.length - 3
+  const headLength = Math.max(8, Math.ceil(available * 0.62))
+  const tailLength = Math.max(4, available - headLength)
+
+  return `${text.slice(0, headLength)}...${text.slice(text.length - tailLength - extension.length)}`
+}
+
+export function toggleSingleExpandedDraft(drafts = [], draftId) {
+  return drafts.map((draft) => ({
+    ...draft,
+    isExpanded: draft.id === draftId ? !draft.isExpanded : false,
+  }))
 }
 
 export function isBulkReceiptProcessing(status) {
