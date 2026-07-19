@@ -126,6 +126,7 @@ export function createGeminiReceiptAnalysisProvider(apiKey: string): ReceiptAnal
         }
 
         const data = await response.json().catch(() => null)
+        logGeminiResponseDiagnostics(data, model)
         const parsed = parseGeminiResponse(data, model)
 
         logGeminiMetadata({
@@ -231,6 +232,7 @@ function parseGeminiResponse(data: unknown, model: string):
   try {
     const parsed = JSON.parse(outputText)
     const normalized = normalizeAnalysisResult(parsed, model)
+    logGeminiParserDiagnostics(parsed, normalized, model)
 
     return {
       ok: true,
@@ -458,4 +460,124 @@ function logGeminiMetadata(metadata: {
     mimeType: metadata.mimeType,
     errorCode: metadata.errorCode,
   })
+}
+
+function logGeminiResponseDiagnostics(data: unknown, model: string) {
+  const structure = describeGeminiResponseStructure(data)
+
+  console.info('receipt_analysis_gemini_response_diagnostics', {
+    provider: 'gemini',
+    model,
+    parser: 'candidates[].content.parts[].text -> JSON.parse',
+    hasCandidates: structure.hasCandidates,
+    candidateCount: structure.candidateCount,
+    topLevelKeys: structure.topLevelKeys,
+    firstCandidate: structure.firstCandidate,
+    responseShape: structure.responseShape,
+  })
+}
+
+function logGeminiParserDiagnostics(parsed: unknown, result: ReceiptAnalysisResult, model: string) {
+  const analysis = result.analysis
+  const fieldStates = fieldNames.reduce<Record<string, string>>((states, fieldName) => {
+    const field = analysis[fieldName]
+
+    if (!field) {
+      states[fieldName] = 'missing_or_null_field'
+      return states
+    }
+
+    states[fieldName] = field.value === null
+      ? 'null_value'
+      : 'has_value'
+
+    return states
+  }, {})
+  const populatedFields = Object.entries(fieldStates)
+    .filter(([, state]) => state === 'has_value')
+    .map(([fieldName]) => fieldName)
+
+  console.info('receipt_analysis_gemini_parser_diagnostics', {
+    provider: 'gemini',
+    model,
+    parser: 'JSON.parse on concatenated candidates[].content.parts[].text',
+    parsedTopLevelKeys: parsed && typeof parsed === 'object'
+      ? Object.keys(parsed as Record<string, unknown>)
+      : [],
+    warningCount: result.warnings.length,
+    populatedFieldCount: populatedFields.length,
+    populatedFields,
+    fieldStates,
+    emptyResultReason: populatedFields.length === 0
+      ? 'all_normalized_analysis_values_are_null'
+      : null,
+  })
+}
+
+function describeGeminiResponseStructure(data: unknown) {
+  if (!data || typeof data !== 'object') {
+    return {
+      hasCandidates: false,
+      candidateCount: 0,
+      topLevelKeys: [],
+      firstCandidate: null,
+      responseShape: typeof data,
+    }
+  }
+
+  const record = data as Record<string, unknown>
+  const candidates = Array.isArray(record.candidates) ? record.candidates : []
+  const firstCandidate = candidates[0]
+
+  return {
+    hasCandidates: Array.isArray(record.candidates),
+    candidateCount: candidates.length,
+    topLevelKeys: Object.keys(record),
+    firstCandidate: describeGeminiCandidateStructure(firstCandidate),
+    responseShape: 'object',
+  }
+}
+
+function describeGeminiCandidateStructure(candidate: unknown) {
+  if (!candidate || typeof candidate !== 'object') return null
+
+  const candidateRecord = candidate as Record<string, unknown>
+  const content = candidateRecord.content
+  const contentRecord = content && typeof content === 'object'
+    ? content as Record<string, unknown>
+    : null
+  const parts = contentRecord && Array.isArray(contentRecord.parts)
+    ? contentRecord.parts
+    : []
+
+  return {
+    keys: Object.keys(candidateRecord),
+    finishReason: typeof candidateRecord.finishReason === 'string'
+      ? candidateRecord.finishReason
+      : null,
+    contentKeys: contentRecord ? Object.keys(contentRecord) : [],
+    partCount: parts.length,
+    parts: parts.map(describeGeminiPartStructure),
+  }
+}
+
+function describeGeminiPartStructure(part: unknown) {
+  if (!part || typeof part !== 'object') {
+    return {
+      keys: [],
+      hasText: false,
+      textLength: 0,
+      looksLikeJsonObject: false,
+    }
+  }
+
+  const partRecord = part as Record<string, unknown>
+  const text = typeof partRecord.text === 'string' ? partRecord.text.trim() : ''
+
+  return {
+    keys: Object.keys(partRecord),
+    hasText: typeof partRecord.text === 'string',
+    textLength: text.length,
+    looksLikeJsonObject: text.startsWith('{') && text.endsWith('}'),
+  }
 }
