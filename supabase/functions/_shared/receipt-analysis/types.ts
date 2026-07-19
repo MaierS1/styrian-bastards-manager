@@ -25,6 +25,10 @@ export type ReceiptAnalysis = {
 export type ReceiptAnalysisResult = {
   analysis: ReceiptAnalysis
   warnings: ReceiptAnalysisWarning[]
+  metadata: {
+    provider: string | null
+    model: string | null
+  }
 }
 
 export type ReceiptAnalysisInput = {

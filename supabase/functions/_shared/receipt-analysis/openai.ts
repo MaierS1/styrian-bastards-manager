@@ -8,7 +8,7 @@ import type {
 } from './types.ts'
 
 const openAiResponsesUrl = 'https://api.openai.com/v1/responses'
-const openAiModel = 'gpt-5.5'
+const defaultOpenAiModel = 'gpt-5-mini'
 const requestTimeoutMs = 45_000
 
 const fieldNames = [
@@ -88,6 +88,7 @@ export function createOpenAiReceiptAnalysisProvider(apiKey: string): ReceiptAnal
   return {
     async analyze(input: ReceiptAnalysisInput) {
       const startedAt = performance.now()
+      const model = getConfiguredOpenAiModel()
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs)
 
@@ -98,19 +99,22 @@ export function createOpenAiReceiptAnalysisProvider(apiKey: string): ReceiptAnal
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(buildResponsesRequest(input)),
+          body: JSON.stringify(buildResponsesRequest(input, model)),
           signal: controller.signal,
         })
 
         if (!response.ok) {
+          const errorMessage = await buildOpenAiErrorMessage(response)
+
           logOpenAiMetadata({
             durationMs: performance.now() - startedAt,
             fileSize: input.fileBytes.byteLength,
             mimeType: input.mimeType,
+            model,
             errorCode: `HTTP_${response.status}`,
           })
 
-          return failedAnalysis(`OpenAI analysis failed with HTTP ${response.status}.`)
+          return failedAnalysis(errorMessage, model)
         }
 
         const data = await response.json().catch(() => null)
@@ -120,12 +124,13 @@ export function createOpenAiReceiptAnalysisProvider(apiKey: string): ReceiptAnal
           durationMs: performance.now() - startedAt,
           fileSize: input.fileBytes.byteLength,
           mimeType: input.mimeType,
+          model,
           errorCode: parsed.ok ? null : parsed.errorCode,
         })
 
         return parsed.ok
           ? parsed.result
-          : failedAnalysis(parsed.message)
+          : failedAnalysis(parsed.message, model)
       } catch (error) {
         const isTimeout = error instanceof DOMException && error.name === 'AbortError'
 
@@ -133,12 +138,13 @@ export function createOpenAiReceiptAnalysisProvider(apiKey: string): ReceiptAnal
           durationMs: performance.now() - startedAt,
           fileSize: input.fileBytes.byteLength,
           mimeType: input.mimeType,
+          model,
           errorCode: isTimeout ? 'TIMEOUT' : 'REQUEST_FAILED',
         })
 
         return failedAnalysis(isTimeout
           ? 'OpenAI analysis timed out.'
-          : 'OpenAI analysis request failed.')
+          : 'OpenAI analysis request failed.', model)
       } finally {
         clearTimeout(timeoutId)
       }
@@ -146,9 +152,13 @@ export function createOpenAiReceiptAnalysisProvider(apiKey: string): ReceiptAnal
   }
 }
 
-function buildResponsesRequest(input: ReceiptAnalysisInput) {
+function getConfiguredOpenAiModel() {
+  return Deno.env.get('OPENAI_RECEIPT_MODEL')?.trim() || defaultOpenAiModel
+}
+
+function buildResponsesRequest(input: ReceiptAnalysisInput, model: string) {
   return {
-    model: openAiModel,
+    model,
     input: [
       {
         role: 'user',
@@ -281,17 +291,27 @@ function normalizeAnalysisResult(value: unknown): ReceiptAnalysisResult {
   const analysis = emptyAnalysis() as Record<ReceiptAnalysisFieldName, ReceiptAnalysisField<number | string> | null>
 
   for (const fieldName of fieldNames) {
+    if (!(fieldName in record)) {
+      throw new Error('Missing analysis field.')
+    }
+
     analysis[fieldName] = normalizeField(record[fieldName], fieldName)
   }
 
   return {
     analysis: analysis as ReceiptAnalysis,
     warnings: normalizeWarnings(record.warnings),
+    metadata: {
+      provider: 'openai',
+      model: getConfiguredOpenAiModel(),
+    },
   }
 }
 
 function normalizeField(value: unknown, fieldName: ReceiptAnalysisFieldName): ReceiptAnalysisField<number | string> {
-  if (!value || typeof value !== 'object') return emptyField()
+  if (!value || typeof value !== 'object') {
+    throw new Error('Invalid analysis field.')
+  }
 
   const record = value as Record<string, unknown>
   const rawValue = record.value
@@ -333,7 +353,33 @@ function normalizeWarnings(value: unknown): ReceiptAnalysisWarning[] {
     .filter((warning): warning is ReceiptAnalysisWarning => Boolean(warning))
 }
 
-function failedAnalysis(message: string): ReceiptAnalysisResult {
+async function buildOpenAiErrorMessage(response: Response) {
+  const fallbackMessage = `OpenAI analysis failed with HTTP ${response.status}.`
+  const errorBody = await response.json().catch(() => null)
+
+  if (!errorBody || typeof errorBody !== 'object') {
+    return fallbackMessage
+  }
+
+  const record = errorBody as Record<string, unknown>
+  const error = record.error
+
+  if (!error || typeof error !== 'object') {
+    return fallbackMessage
+  }
+
+  const errorRecord = error as Record<string, unknown>
+  const code = typeof errorRecord.code === 'string' ? errorRecord.code.trim() : ''
+  const message = typeof errorRecord.message === 'string' ? errorRecord.message.trim() : ''
+
+  if (code && message) return `OpenAI analysis failed: ${code}. ${message}`
+  if (message) return `OpenAI analysis failed: ${message}`
+  if (code) return `OpenAI analysis failed: ${code}.`
+
+  return fallbackMessage
+}
+
+function failedAnalysis(message: string, model: string): ReceiptAnalysisResult {
   return {
     analysis: nullAnalysis(),
     warnings: [
@@ -342,6 +388,10 @@ function failedAnalysis(message: string): ReceiptAnalysisResult {
         message,
       },
     ],
+    metadata: {
+      provider: 'openai',
+      model,
+    },
   }
 }
 
@@ -400,10 +450,12 @@ function logOpenAiMetadata(metadata: {
   durationMs: number
   fileSize: number
   mimeType: string
+  model: string
   errorCode: string | null
 }) {
   console.info('receipt_analysis_openai', {
     provider: 'openai',
+    model: metadata.model,
     durationMs: Number(metadata.durationMs.toFixed(0)),
     fileSize: metadata.fileSize,
     mimeType: metadata.mimeType,

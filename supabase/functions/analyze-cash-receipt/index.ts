@@ -125,6 +125,7 @@ Deno.serve(async (req) => {
       success: true,
       analysis: result.analysis,
       warnings: result.warnings,
+      metadata: result.metadata,
     })
   } catch (_error) {
     return errorResponse('INTERNAL_ERROR', 'Beleganalyse konnte nicht verarbeitet werden.', 500)

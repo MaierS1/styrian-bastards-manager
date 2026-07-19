@@ -38,6 +38,10 @@ function providerNotConfiguredResult(): ReceiptAnalysisResult {
         message: 'Receipt analysis provider is not configured yet.',
       },
     ],
+    metadata: {
+      provider: 'provider-neutral',
+      model: 'configured-provider',
+    },
   }
 }
 
