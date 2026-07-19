@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { analyzeReceipt } from '../_shared/receipt-analysis/provider.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -114,26 +115,16 @@ Deno.serve(async (req) => {
       return errorResponse('FILE_TOO_LARGE', 'Belegdatei ist groesser als 15 MiB.', 413)
     }
 
+    const result = await analyzeReceipt({
+      fileBytes,
+      mimeType,
+      fileName: getFileName(storagePath),
+    })
+
     return jsonResponse({
       success: true,
-      analysis: {
-        documentType: null,
-        invoiceDate: null,
-        totalAmount: null,
-        currency: null,
-        merchantName: null,
-        invoiceNumber: null,
-        paymentMethod: null,
-        suggestedCashType: null,
-        suggestedCategory: null,
-        suggestedDescription: null,
-      },
-      warnings: [
-        {
-          code: 'PROVIDER_NOT_CONFIGURED',
-          message: 'Receipt analysis provider is not configured yet.',
-        },
-      ],
+      analysis: result.analysis,
+      warnings: result.warnings,
     })
   } catch (_error) {
     return errorResponse('INTERNAL_ERROR', 'Beleganalyse konnte nicht verarbeitet werden.', 500)
@@ -156,6 +147,10 @@ function isAllowedReceiptPath(storagePath: string) {
   if (storagePath.length <= receiptsPathPrefix.length) return false
 
   return true
+}
+
+function getFileName(storagePath: string) {
+  return storagePath.split('/').pop() || 'receipt'
 }
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
