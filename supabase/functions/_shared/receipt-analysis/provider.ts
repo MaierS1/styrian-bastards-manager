@@ -1,3 +1,4 @@
+import { createGeminiReceiptAnalysisProvider } from './gemini.ts'
 import { createOpenAiReceiptAnalysisProvider } from './openai.ts'
 import type {
   ReceiptAnalysis,
@@ -5,8 +6,6 @@ import type {
   ReceiptAnalysisProvider,
   ReceiptAnalysisResult,
 } from './types.ts'
-
-const configuredProvider = 'openai'
 
 export async function analyzeReceipt(input: ReceiptAnalysisInput): Promise<ReceiptAnalysisResult> {
   const provider = getConfiguredProvider()
@@ -21,12 +20,17 @@ export async function analyzeReceipt(input: ReceiptAnalysisInput): Promise<Recei
 function getConfiguredProvider(): ReceiptAnalysisProvider | null {
   const providerName = String(Deno.env.get('RECEIPT_ANALYSIS_PROVIDER') || '').trim().toLowerCase()
   const openAiApiKey = String(Deno.env.get('OPENAI_API_KEY') || '').trim()
+  const geminiApiKey = String(Deno.env.get('GEMINI_API_KEY') || '').trim()
 
-  if (providerName !== configuredProvider || !openAiApiKey) {
-    return null
+  if (providerName === 'openai' && openAiApiKey) {
+    return createOpenAiReceiptAnalysisProvider(openAiApiKey)
   }
 
-  return createOpenAiReceiptAnalysisProvider(openAiApiKey)
+  if (providerName === 'gemini' && geminiApiKey) {
+    return createGeminiReceiptAnalysisProvider(geminiApiKey)
+  }
+
+  return null
 }
 
 function providerNotConfiguredResult(): ReceiptAnalysisResult {
