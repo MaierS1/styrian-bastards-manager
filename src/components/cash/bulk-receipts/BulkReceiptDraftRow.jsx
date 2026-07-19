@@ -50,6 +50,13 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
         {`
           @keyframes bulkReceiptSpin { to { transform: rotate(360deg); } }
           .bulk-receipt-row:hover { box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08); transform: translateY(-1px); }
+          @media (max-width: 700px) {
+            .bulk-receipt-detail-shell { padding: 12px; }
+            .bulk-receipt-detail-actions { align-items: stretch; flex-direction: column; }
+            .bulk-receipt-detail-actions-primary,
+            .bulk-receipt-detail-actions-secondary { width: 100%; }
+            .bulk-receipt-detail-actions button { width: 100% !important; }
+          }
         `}
       </style>
       <div
@@ -138,98 +145,136 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
 
         {draft.isExpanded && (
           <div
+            className="bulk-receipt-detail-shell"
             style={{
               borderTop: `1px solid ${colors.border}`,
               background: colors.white,
-              padding: 14,
+              padding: '18px clamp(12px, 2.5vw, 28px)',
             }}
           >
-            <DetailSection title="Analysehinweise">
-              {draft.analysisWarnings?.length > 0 ? (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {draft.analysisWarnings.map((warning) => (
-                    <div key={`${warning.code || 'warning'}-${warning.message || ''}`} style={warningPanelStyle}>
-                      <strong style={{ display: 'block' }}>{getAnalysisWarningSummary(warning)}</strong>
-                      <details style={{ marginTop: 6 }}>
-                        <summary style={{ cursor: 'pointer' }}>Originalanalyse anzeigen</summary>
-                        <p style={{ marginBottom: 0 }}>
-                          {warning.message || warning.code || 'Hinweis zur Beleganalyse'}
-                        </p>
-                      </details>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ ...mutedTextStyle, margin: 0 }}>Keine Analysehinweise vorhanden.</p>
-              )}
-            </DetailSection>
-
-            {draft.uploadStatus === 'uploaded' ? (
-              <>
-                <BulkReceiptDraftEditor
-                  draft={draft}
-                  status={statusLabel}
-                  events={events}
-                  categories={categories}
-                  paymentMethods={paymentMethods}
-                  canEditDraft={canEditDraft}
-                  onChange={onChange}
-                />
-                {draft.reviewMessage && (
-                  <p style={{ color: colors.successText, fontWeight: 800, marginTop: 10 }}>
-                    {draft.reviewMessage}
-                  </p>
+            <div style={detailContentStyle}>
+              <DetailSection title="Analysehinweise">
+                {draft.analysisWarnings?.length > 0 ? (
+                  <div style={warningListStyle}>
+                    {draft.analysisWarnings.map((warning) => (
+                      <div key={`${warning.code || 'warning'}-${warning.message || ''}`} style={warningPanelStyle}>
+                        <strong style={{ display: 'block' }}>{getAnalysisWarningSummary(warning)}</strong>
+                        <details style={{ marginTop: 6 }}>
+                          <summary style={{ cursor: 'pointer' }}>Originalanalyse anzeigen</summary>
+                          <p style={{ marginBottom: 0, maxWidth: 760, lineHeight: 1.55 }}>
+                            {warning.message || warning.code || 'Hinweis zur Beleganalyse'}
+                          </p>
+                        </details>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ ...mutedTextStyle, margin: 0 }}>Keine Analysehinweise vorhanden.</p>
                 )}
-                <div style={detailActionsStyle}>
-                  {draft.status === BULK_RECEIPT_STATUSES.NEEDS_REVIEW && (
+              </DetailSection>
+
+              {draft.uploadStatus === 'uploaded' ? (
+                <>
+                  <BulkReceiptDraftEditor
+                    draft={draft}
+                    status={statusLabel}
+                    events={events}
+                    categories={categories}
+                    paymentMethods={paymentMethods}
+                    canEditDraft={canEditDraft}
+                    onChange={onChange}
+                  />
+                  {draft.reviewMessage && (
+                    <p style={{ color: colors.successText, fontWeight: 800, marginTop: 10 }}>
+                      {draft.reviewMessage}
+                    </p>
+                  )}
+                  <div className="bulk-receipt-detail-actions" style={detailActionsStyle}>
+                    <div className="bulk-receipt-detail-actions-primary" style={primaryActionsStyle}>
+                      {draft.status === BULK_RECEIPT_STATUSES.NEEDS_REVIEW && (
+                        <button
+                          type="button"
+                          onClick={() => onConfirmReview(draft.id)}
+                          style={actionButtonStyle(buttonStyle)}
+                          disabled={disabled}
+                        >
+                          ✓ Prüfung bestätigen
+                        </button>
+                      )}
+                    </div>
+                    <div className="bulk-receipt-detail-actions-secondary" style={secondaryActionsGroupStyle}>
+                      <button
+                        type="button"
+                        onClick={() => onAnalyze(draft.id)}
+                        style={actionButtonStyle(secondaryButtonStyle)}
+                        disabled={!canAnalyzeDraft}
+                        aria-label={`${draft.fileName} erneut analysieren`}
+                      >
+                        Neu analysieren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRemove(draft.id)}
+                        style={actionButtonStyle(dangerButtonStyle)}
+                        disabled={disabled}
+                        aria-label={`${draft.fileName} entfernen`}
+                      >
+                        Entfernen
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onToggle(draft.id)}
+                        style={actionButtonStyle(secondaryButtonStyle)}
+                        disabled={disabled}
+                        aria-label={`${draft.fileName} schließen`}
+                      >
+                        Schließen
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={mutedTextStyle}>
+                    Die Belegdaten können bearbeitet werden, sobald der Upload abgeschlossen ist.
+                  </p>
+                  <div className="bulk-receipt-detail-actions" style={detailActionsStyle}>
                     <button
                       type="button"
-                      onClick={() => onConfirmReview(draft.id)}
-                      style={actionButtonStyle(buttonStyle)}
+                      onClick={() => onRemove(draft.id)}
+                      style={actionButtonStyle(dangerButtonStyle)}
                       disabled={disabled}
+                      aria-label={`${draft.fileName} entfernen`}
                     >
-                      ✓ Prüfung bestätigen
+                      Entfernen
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onAnalyze(draft.id)}
-                    style={actionButtonStyle(secondaryButtonStyle)}
-                    disabled={!canAnalyzeDraft}
-                    aria-label={`${draft.fileName} erneut analysieren`}
-                  >
-                    Neu analysieren
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onRemove(draft.id)}
-                    style={actionButtonStyle(dangerButtonStyle)}
-                    disabled={disabled}
-                    aria-label={`${draft.fileName} entfernen`}
-                  >
-                    Entfernen
-                  </button>
-                </div>
-              </>
-            ) : (
-              <p style={mutedTextStyle}>
-                Die Belegdaten können bearbeitet werden, sobald der Upload abgeschlossen ist.
-              </p>
-            )}
+                    <button
+                      type="button"
+                      onClick={() => onToggle(draft.id)}
+                      style={actionButtonStyle(secondaryButtonStyle)}
+                      disabled={disabled}
+                      aria-label={`${draft.fileName} schließen`}
+                    >
+                      Schließen
+                    </button>
+                  </div>
+                </>
+              )}
 
-            <details style={{ marginTop: 12 }}>
-              <summary style={{ ...mutedTextStyle, cursor: 'pointer' }}>Technische Details</summary>
-              {draft.storagePath && (
-                <p style={{ ...mutedTextStyle, wordBreak: 'break-word', marginBottom: 0 }}>
-                  Storage-Pfad: {draft.storagePath}
-                </p>
-              )}
-              {getAnalysisFieldValue(draft.analysisResult, 'invoiceNumber') && (
-                <p style={{ ...mutedTextStyle, wordBreak: 'break-word', marginBottom: 0 }}>
-                  Rechnungsnummer: {getAnalysisFieldValue(draft.analysisResult, 'invoiceNumber')}
-                </p>
-              )}
-            </details>
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ ...mutedTextStyle, cursor: 'pointer' }}>Technische Details</summary>
+                {draft.storagePath && (
+                  <p style={{ ...mutedTextStyle, wordBreak: 'break-word', marginBottom: 0, maxWidth: 760 }}>
+                    Storage-Pfad: {draft.storagePath}
+                  </p>
+                )}
+                {getAnalysisFieldValue(draft.analysisResult, 'invoiceNumber') && (
+                  <p style={{ ...mutedTextStyle, wordBreak: 'break-word', marginBottom: 0 }}>
+                    Rechnungsnummer: {getAnalysisFieldValue(draft.analysisResult, 'invoiceNumber')}
+                  </p>
+                )}
+              </details>
+            </div>
           </div>
         )}
       </div>
@@ -286,19 +331,47 @@ function StatusBadge({ status, label, isProcessing }) {
 
 const smallButtonStyle = {
   ...secondaryButtonStyle,
-  padding: '8px 10px',
+  padding: '7px 10px',
   fontSize: 13,
   margin: 0,
   width: 'auto',
+  minWidth: 78,
+}
+
+const detailContentStyle = {
+  width: '100%',
+  maxWidth: 1050,
+  marginInline: 'auto',
 }
 
 const detailActionsStyle = {
   display: 'flex',
   flexWrap: 'wrap',
+  justifyContent: 'space-between',
+  alignItems: 'center',
   gap: 8,
   marginTop: 12,
   paddingTop: 12,
   borderTop: `1px solid ${colors.border}`,
+}
+
+const primaryActionsStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 8,
+}
+
+const secondaryActionsGroupStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  justifyContent: 'flex-end',
+  gap: 8,
+}
+
+const warningListStyle = {
+  display: 'grid',
+  gap: 8,
+  maxWidth: 820,
 }
 
 const warningPanelStyle = {
@@ -306,7 +379,9 @@ const warningPanelStyle = {
   borderRadius: 8,
   background: '#fff7ed',
   color: '#9a3412',
-  padding: 10,
+  padding: 12,
+  textAlign: 'left',
+  lineHeight: 1.45,
 }
 
 function actionButtonStyle(baseStyle) {

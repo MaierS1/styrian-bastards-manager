@@ -18,6 +18,25 @@ export function BulkReceiptDraftEditor({
 
   return (
     <div style={{ display: 'grid', gap: 14 }}>
+      <style>
+        {`
+          .bulk-receipt-editor-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+
+          @media (max-width: 1040px) {
+            .bulk-receipt-editor-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+          }
+
+          @media (max-width: 700px) {
+            .bulk-receipt-editor-grid {
+              grid-template-columns: 1fr;
+            }
+          }
+        `}
+      </style>
       {draft.validationErrors.length > 0 && (
         <div style={validationPanelStyle}>
           <strong style={{ display: 'block', marginBottom: 4 }}>Bitte prüfen</strong>
@@ -31,8 +50,8 @@ export function BulkReceiptDraftEditor({
 
       <section>
         <strong style={sectionTitleStyle}>Rechnungsdaten</strong>
-        <div style={invoiceGridStyle}>
-          <Field label="Datum" error={errorsByField.date}>
+        <div className="bulk-receipt-editor-grid" style={invoiceGridStyle}>
+          <Field label="Belegdatum" error={errorsByField.date}>
             <input
               type="date"
               value={draft.date}
@@ -40,19 +59,6 @@ export function BulkReceiptDraftEditor({
               style={fieldInputStyle(errorsByField.date)}
               disabled={!canEditDraft}
               aria-invalid={Boolean(errorsByField.date)}
-            />
-          </Field>
-
-          <Field label="Betrag" error={errorsByField.amount}>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={draft.amount}
-              onChange={(event) => onChange(draft.id, 'amount', event.target.value)}
-              style={fieldInputStyle(errorsByField.amount)}
-              disabled={!canEditDraft}
-              aria-invalid={Boolean(errorsByField.amount)}
             />
           </Field>
 
@@ -101,7 +107,7 @@ export function BulkReceiptDraftEditor({
             </select>
           </Field>
 
-          <Field label="Event">
+          <Field label="Event-Zuordnung">
             <select
               value={draft.eventId}
               onChange={(event) => onChange(draft.id, 'eventId', event.target.value)}
@@ -115,6 +121,19 @@ export function BulkReceiptDraftEditor({
                 </option>
               ))}
             </select>
+          </Field>
+
+          <Field label="Betrag" error={errorsByField.amount}>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={draft.amount}
+              onChange={(event) => onChange(draft.id, 'amount', event.target.value)}
+              style={fieldInputStyle(errorsByField.amount)}
+              disabled={!canEditDraft}
+              aria-invalid={Boolean(errorsByField.amount)}
+            />
           </Field>
         </div>
       </section>
@@ -143,7 +162,7 @@ export function BulkReceiptDraftEditor({
 
 function Field({ label, error, children }) {
   return (
-    <label style={{ display: 'grid', gap: 5 }}>
+    <label style={{ display: 'grid', gap: 5, minWidth: 0 }}>
       <span style={{ color: colors.black, fontWeight: 800 }}>{label}</span>
       {children}
       {error && <span style={{ color: colors.dangerText, fontSize: 13 }}>{error}</span>}
@@ -168,8 +187,8 @@ const sectionTitleStyle = {
 
 const invoiceGridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
   gap: 12,
+  maxWidth: 1050,
 }
 
 function fieldInputStyle(error) {
