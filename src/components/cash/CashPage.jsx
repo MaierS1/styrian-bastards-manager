@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   buttonStyle,
   cardStyle,
@@ -90,6 +91,10 @@ export function CashPage({
   editCashEntry,
   deleteCashEntry,
 }) {
+  const [entryMode, setEntryMode] = useState('single')
+  const singleModeActive = entryMode === 'single'
+  const bulkModeActive = entryMode === 'bulk'
+
   return (
 <section style={sectionStyle}>
         <h2 style={headingStyle}>Kassa</h2>
@@ -222,83 +227,124 @@ export function CashPage({
 
         <h3 style={headingStyle}>{editingCashId ? 'Kassa-Eintrag bearbeiten' : 'Kassa-Eintrag erfassen'}</h3>
 
-        <select value={cashType} onChange={(e) => setCashType(e.target.value)} style={inputStyle}>
-          <option value="einnahme">Einnahme</option>
-          <option value="ausgabe">Ausgabe</option>
-        </select>
+        <div style={entryWorkflowStyle}>
+          <div style={entryWorkflowHeaderStyle}>
+            <div>
+              <strong style={{ color: colors.black, fontSize: 18 }}>Erfassungsmodus</strong>
+              <p style={{ ...mutedTextStyle, marginTop: 4, marginBottom: 0 }}>
+                Wähle zwischen einer einzelnen Buchung oder dem separaten Bulk-Belegworkflow.
+              </p>
+            </div>
+            <div style={modeTabsStyle} role="tablist" aria-label="Kassa-Erfassungsmodus">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={singleModeActive}
+                onClick={() => setEntryMode('single')}
+                style={modeTabStyle(singleModeActive)}
+              >
+                Einzelbuchung
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={bulkModeActive}
+                onClick={() => setEntryMode('bulk')}
+                style={modeTabStyle(bulkModeActive)}
+              >
+                Bulk-Belegupload
+              </button>
+            </div>
+          </div>
 
-        <select value={cashCategory} onChange={(e) => setCashCategory(e.target.value)} style={inputStyle}>
-          <option value="mitgliedsbeitrag">Mitgliedsbeitrag</option>
-          <option value="pfandbecher">Pfandbecher</option>
-          <option value="veranstaltung">Veranstaltung</option>
-          <option value="fanartikel">Fanartikel</option>
-          <option value="sonstiges">Sonstiges</option>
-        </select>
+          <div hidden={!singleModeActive} aria-hidden={!singleModeActive}>
+            <div style={singleEntryPanelStyle}>
+              <strong style={{ display: 'block', color: colors.black, marginBottom: 10 }}>
+                Einzelbuchung
+              </strong>
 
-        <select value={cashPaymentMethod} onChange={(e) => setCashPaymentMethod(e.target.value)} style={inputStyle}>
-          <option value="bar">Bar</option>
-          <option value="ebanking">E-Banking</option>
-        </select>
+              <select value={cashType} onChange={(e) => setCashType(e.target.value)} style={inputStyle}>
+                <option value="einnahme">Einnahme</option>
+                <option value="ausgabe">Ausgabe</option>
+              </select>
 
-        <select value={cashEventId} onChange={(e) => setCashEventId(e.target.value)} style={inputStyle}>
-          <option value="">Keinem Event zuordnen</option>
-          {events.map((event) => (
-            <option key={event.id} value={event.id}>
-              {event.name} · {event.event_date}
-            </option>
-          ))}
-        </select>
+              <select value={cashCategory} onChange={(e) => setCashCategory(e.target.value)} style={inputStyle}>
+                <option value="mitgliedsbeitrag">Mitgliedsbeitrag</option>
+                <option value="pfandbecher">Pfandbecher</option>
+                <option value="veranstaltung">Veranstaltung</option>
+                <option value="fanartikel">Fanartikel</option>
+                <option value="sonstiges">Sonstiges</option>
+              </select>
 
-        <input
-          type="number"
-          placeholder="Betrag"
-          value={cashAmount}
-          onChange={(e) => setCashAmount(e.target.value)}
-          style={inputStyle}
-        />
+              <select value={cashPaymentMethod} onChange={(e) => setCashPaymentMethod(e.target.value)} style={inputStyle}>
+                <option value="bar">Bar</option>
+                <option value="ebanking">E-Banking</option>
+              </select>
 
-        <input
-          placeholder="Beschreibung"
-          value={cashDescription}
-          onChange={(e) => setCashDescription(e.target.value)}
-          style={inputStyle}
-        />
+              <select value={cashEventId} onChange={(e) => setCashEventId(e.target.value)} style={inputStyle}>
+                <option value="">Keinem Event zuordnen</option>
+                {events.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {event.name} · {event.event_date}
+                  </option>
+                ))}
+              </select>
 
-        <BulkReceiptUpload events={events} onBookDrafts={bookBulkReceiptDrafts} />
+              <input
+                type="number"
+                placeholder="Betrag"
+                value={cashAmount}
+                onChange={(e) => setCashAmount(e.target.value)}
+                style={inputStyle}
+              />
 
-        <input
-          type="file"
-          accept="image/*,.pdf"
-          onChange={(e) => setReceiptFile(e.target.files[0])}
-          style={inputStyle}
-        />
+              <input
+                placeholder="Beschreibung"
+                value={cashDescription}
+                onChange={(e) => setCashDescription(e.target.value)}
+                style={inputStyle}
+              />
 
-        {cashType === 'ausgabe' && !receiptFile && (
-          <p style={{ ...mutedTextStyle, color: colors.red }}>
-            Hinweis: Für Ausgaben sollte ein Beleg hochgeladen werden.
-          </p>
-        )}
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => setReceiptFile(e.target.files[0])}
+                style={inputStyle}
+              />
 
-        {!isOnline && (
-          <p style={{ color: '#c62828' }}>
-            Offline-Modus: Belege werden offline noch nicht gespeichert. Der Kassa-Eintrag wird lokal vorgemerkt.
-          </p>
-        )}
+              {cashType === 'ausgabe' && !receiptFile && (
+                <p style={{ ...mutedTextStyle, color: colors.red }}>
+                  Hinweis: Für Ausgaben sollte ein Beleg hochgeladen werden.
+                </p>
+              )}
 
-        {editingCashId ? (
-          <>
-            <button onClick={updateCashEntry} style={buttonStyle}>
-              Änderungen speichern
-            </button>
-            <button onClick={resetCashForm} style={secondaryButtonStyle}>
-              Bearbeiten abbrechen
-            </button>
-          </>
-        ) : (
-          <button onClick={addCashEntry} style={buttonStyle}>
-            Kassa-Eintrag speichern
-          </button>
-        )}
+              {!isOnline && (
+                <p style={{ color: '#c62828' }}>
+                  Offline-Modus: Belege werden offline noch nicht gespeichert. Der Kassa-Eintrag wird lokal vorgemerkt.
+                </p>
+              )}
+
+              {editingCashId ? (
+                <>
+                  <button onClick={updateCashEntry} style={buttonStyle}>
+                    Änderungen speichern
+                  </button>
+                  <button onClick={resetCashForm} style={secondaryButtonStyle}>
+                    Bearbeiten abbrechen
+                  </button>
+                </>
+              ) : (
+                <button onClick={addCashEntry} style={buttonStyle}>
+                  Kassa-Eintrag speichern
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div hidden={!bulkModeActive} aria-hidden={!bulkModeActive}>
+            <BulkReceiptUpload events={events} onBookDrafts={bookBulkReceiptDrafts} />
+          </div>
+        </div>
 
         {offlineCashEntries.length > 0 && (
           <>
@@ -548,4 +594,51 @@ export function CashPage({
         />
       </section>
   )
+}
+
+const entryWorkflowStyle = {
+  border: `1px solid ${colors.border}`,
+  borderRadius: 16,
+  padding: isMobile ? 12 : 16,
+  marginBottom: 18,
+  background: colors.offWhite,
+  boxShadow: '0 4px 14px rgba(0,0,0,0.10)',
+}
+
+const entryWorkflowHeaderStyle = {
+  display: 'grid',
+  gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) auto',
+  gap: 12,
+  alignItems: 'center',
+  marginBottom: 14,
+}
+
+const modeTabsStyle = {
+  display: 'inline-flex',
+  flexWrap: 'wrap',
+  gap: 4,
+  padding: 4,
+  border: `1px solid ${colors.border}`,
+  borderRadius: 12,
+  background: colors.white,
+}
+
+const singleEntryPanelStyle = {
+  borderTop: `4px solid ${colors.blue}`,
+  borderRadius: 12,
+  padding: 14,
+  background: colors.white,
+}
+
+function modeTabStyle(active) {
+  return {
+    border: `2px solid ${active ? colors.black : 'transparent'}`,
+    borderRadius: 9,
+    padding: isMobile ? '11px 12px' : '10px 14px',
+    background: active ? colors.black : colors.white,
+    color: active ? colors.white : colors.black,
+    fontWeight: 900,
+    cursor: 'pointer',
+    boxShadow: active ? '0 2px 6px rgba(0,0,0,0.20)' : 'none',
+  }
 }
