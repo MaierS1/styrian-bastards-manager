@@ -10,6 +10,7 @@ import {
 } from '../../styles/appStyles'
 import { uploadCashReceipt } from '../../services/cash/receiptUploadService'
 import { analyzeCashReceipt } from '../../services/cash/receiptAnalysisService'
+import { applyReceiptAnalysisToDraft } from '../../services/cash/receiptAnalysisMappingService'
 import { BulkReceiptDraftItem } from './BulkReceiptDraftItem'
 
 const MAX_FILES = 50
@@ -159,6 +160,7 @@ function createDraft(file, index, existingCount) {
     analysisResult: null,
     analysisError: '',
     analysisWarnings: [],
+    touchedFields: {},
     isExpanded: false,
   }
 
@@ -244,6 +246,10 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
       return updateDraftValidation({
         ...draft,
         [field]: value,
+        touchedFields: {
+          ...(draft.touchedFields || {}),
+          [field]: true,
+        },
         error: draft.uploadStatus === 'uploaded' ? '' : draft.error,
       })
     }))
@@ -370,13 +376,14 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
 
       setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
         currentDraft.id === draftId
-          ? {
+          ? updateDraftValidation(applyReceiptAnalysisToDraft({
             ...currentDraft,
             analysisStatus: 'completed',
             analysisResult: result.analysis,
             analysisError: '',
             analysisWarnings: result.warnings,
-          }
+            isExpanded: true,
+          }, result))
           : currentDraft
       )))
     } catch (error) {
