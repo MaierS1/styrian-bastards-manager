@@ -435,17 +435,19 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
   }
 
   return (
-    <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}`, display: 'grid', gap: 16 }}>
+    <div style={bulkUploadCardStyle}>
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) auto auto',
           gap: 14,
           alignItems: 'center',
-          paddingBottom: 4,
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
       >
-        <div>
+        <div style={{ minWidth: 0 }}>
           <strong style={{ display: 'block', color: colors.black, fontSize: 24, lineHeight: 1.15 }}>
             Bulk-Belegupload
           </strong>
@@ -456,11 +458,11 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
         <div
           aria-live="polite"
           style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: 12,
-            padding: '10px 14px',
-            background: colors.offWhite,
+            borderLeft: `3px solid ${colors.blue}`,
+            paddingLeft: 12,
             minWidth: isMobile ? 'auto' : 180,
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
         >
           <span style={{ ...mutedTextStyle, display: 'block', fontSize: 12 }}>Queue-Zustand</span>
@@ -468,12 +470,12 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
         </div>
         <div
           style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: 12,
-            padding: '10px 14px',
-            background: colors.white,
+            borderLeft: `3px solid ${colors.border}`,
+            paddingLeft: 12,
             textAlign: isMobile ? 'left' : 'right',
             minWidth: isMobile ? 'auto' : 120,
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
         >
           <span style={{ ...mutedTextStyle, display: 'block', fontSize: 12 }}>Gesamt</span>
@@ -526,4 +528,13 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
       />
     </div>
   )
+}
+
+const bulkUploadCardStyle = {
+  ...cardStyle,
+  borderTop: `6px solid ${colors.blue}`,
+  display: 'grid',
+  gap: 16,
+  overflow: 'hidden',
+  maxWidth: '100%',
 }

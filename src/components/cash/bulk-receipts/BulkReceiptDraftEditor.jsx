@@ -17,7 +17,7 @@ export function BulkReceiptDraftEditor({
   const errorsByField = draft.validation?.errorsByField || {}
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
+    <div style={{ display: 'grid', gap: 14, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
       <style>
         {`
           .bulk-receipt-editor-grid {
@@ -48,7 +48,7 @@ export function BulkReceiptDraftEditor({
         </div>
       )}
 
-      <section>
+      <section style={sectionStyle}>
         <strong style={sectionTitleStyle}>Rechnungsdaten</strong>
         <div className="bulk-receipt-editor-grid" style={invoiceGridStyle}>
           <Field label="Belegdatum" error={errorsByField.date}>
@@ -138,7 +138,7 @@ export function BulkReceiptDraftEditor({
         </div>
       </section>
 
-      <section>
+      <section style={sectionStyle}>
         <strong style={sectionTitleStyle}>Beschreibung</strong>
         <Field label="Beschreibung" error={errorsByField.description}>
           <input
@@ -185,10 +185,18 @@ const sectionTitleStyle = {
   marginBottom: 8,
 }
 
+const sectionStyle = {
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
+}
+
 const invoiceGridStyle = {
   display: 'grid',
   gap: 12,
   maxWidth: 1050,
+  width: '100%',
+  boxSizing: 'border-box',
 }
 
 function fieldInputStyle(error) {

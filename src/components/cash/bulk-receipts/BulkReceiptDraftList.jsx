@@ -21,18 +21,21 @@ export function BulkReceiptDraftList({
   }
 
   return (
-    <div style={{ display: 'grid', gap: 8 }} aria-label="Beleg-Queue">
+    <div style={queueRootStyle} aria-label="Beleg-Queue">
       {!isMobile && (
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(210px, 1.45fr) minmax(135px, 0.85fr) minmax(105px, 0.55fr) minmax(125px, 0.7fr) minmax(105px, 0.55fr) minmax(180px, 1fr) minmax(170px, 0.85fr)',
+            gridTemplateColumns: 'minmax(150px, 1.45fr) minmax(110px, 0.8fr) minmax(86px, 0.52fr) minmax(105px, 0.7fr) minmax(86px, 0.5fr) minmax(130px, 1fr) minmax(86px, 0.38fr)',
             gap: 10,
             padding: '0 12px',
             color: colors.muted,
             fontSize: 12,
             fontWeight: 800,
             textTransform: 'uppercase',
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
         >
           <span>Beleg</span>
@@ -64,4 +67,15 @@ export function BulkReceiptDraftList({
       ))}
     </div>
   )
+}
+
+const queueRootStyle = {
+  display: 'grid',
+  gap: 8,
+  paddingTop: 14,
+  borderTop: `1px solid ${colors.border}`,
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
+  overflow: 'hidden',
 }

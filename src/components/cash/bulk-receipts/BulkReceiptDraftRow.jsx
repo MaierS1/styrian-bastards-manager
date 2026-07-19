@@ -49,7 +49,7 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
       <style>
         {`
           @keyframes bulkReceiptSpin { to { transform: rotate(360deg); } }
-          .bulk-receipt-row:hover { box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08); transform: translateY(-1px); }
+          .bulk-receipt-row:hover { box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08); }
           @media (max-width: 700px) {
             .bulk-receipt-detail-shell { padding: 12px; }
             .bulk-receipt-detail-actions { align-items: stretch; flex-direction: column; }
@@ -66,8 +66,11 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
           borderLeft: `5px solid ${tone.color}`,
           borderRadius: 10,
           background: tone.background,
-          transition: 'box-shadow 140ms ease, transform 140ms ease',
+          transition: 'box-shadow 140ms ease',
           overflow: 'hidden',
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
       >
         <div
@@ -75,10 +78,13 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
             display: 'grid',
             gridTemplateColumns: isMobile
               ? '1fr'
-              : 'minmax(210px, 1.45fr) minmax(135px, 0.85fr) minmax(105px, 0.55fr) minmax(125px, 0.7fr) minmax(105px, 0.55fr) minmax(180px, 1fr) minmax(100px, 0.45fr)',
+              : 'minmax(150px, 1.45fr) minmax(110px, 0.8fr) minmax(86px, 0.52fr) minmax(105px, 0.7fr) minmax(86px, 0.5fr) minmax(130px, 1fr) minmax(86px, 0.38fr)',
             gap: isMobile ? 8 : 10,
             alignItems: 'center',
             padding: 12,
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
           aria-live={isProcessing ? 'polite' : undefined}
         >
@@ -150,6 +156,9 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
               borderTop: `1px solid ${colors.border}`,
               background: colors.white,
               padding: '18px clamp(12px, 2.5vw, 28px)',
+              width: '100%',
+              maxWidth: '100%',
+              boxSizing: 'border-box',
             }}
           >
             <div style={detailContentStyle}>
@@ -284,7 +293,7 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
 
 function DetailSection({ title, children }) {
   return (
-    <section style={{ marginBottom: 14 }}>
+    <section style={{ marginBottom: 14, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
       <strong style={{ display: 'block', color: colors.black, marginBottom: 8 }}>{title}</strong>
       {children}
     </section>
@@ -295,7 +304,7 @@ function MobileField({ label, isMobile, children }) {
   if (!isMobile) return children
 
   return (
-    <div style={{ display: 'grid', gap: 2 }}>
+    <div style={{ display: 'grid', gap: 2, minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}>
       <span style={{ ...mutedTextStyle, fontSize: 12, fontWeight: 800 }}>{label}</span>
       {children}
     </div>
@@ -321,6 +330,8 @@ function StatusBadge({ status, label, isProcessing }) {
         background: tone.background,
         fontWeight: 800,
         fontSize: 13,
+        maxWidth: '100%',
+        boxSizing: 'border-box',
       }}
     >
       {isProcessing && <span aria-hidden="true" style={spinnerStyle} />}
@@ -336,12 +347,15 @@ const smallButtonStyle = {
   margin: 0,
   width: 'auto',
   minWidth: 78,
+  maxWidth: '100%',
+  boxSizing: 'border-box',
 }
 
 const detailContentStyle = {
   width: '100%',
   maxWidth: 1050,
   marginInline: 'auto',
+  boxSizing: 'border-box',
 }
 
 const detailActionsStyle = {
@@ -353,12 +367,16 @@ const detailActionsStyle = {
   marginTop: 12,
   paddingTop: 12,
   borderTop: `1px solid ${colors.border}`,
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
 }
 
 const primaryActionsStyle = {
   display: 'flex',
   flexWrap: 'wrap',
   gap: 8,
+  minWidth: 0,
 }
 
 const secondaryActionsGroupStyle = {
@@ -366,12 +384,15 @@ const secondaryActionsGroupStyle = {
   flexWrap: 'wrap',
   justifyContent: 'flex-end',
   gap: 8,
+  minWidth: 0,
 }
 
 const warningListStyle = {
   display: 'grid',
   gap: 8,
   maxWidth: 820,
+  width: '100%',
+  boxSizing: 'border-box',
 }
 
 const warningPanelStyle = {
@@ -382,6 +403,9 @@ const warningPanelStyle = {
   padding: 12,
   textAlign: 'left',
   lineHeight: 1.45,
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
 }
 
 function actionButtonStyle(baseStyle) {
@@ -389,6 +413,8 @@ function actionButtonStyle(baseStyle) {
     ...baseStyle,
     margin: 0,
     width: 'auto',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
   }
 }
 

@@ -23,7 +23,7 @@ export function BulkReceiptToolbar({
   const compact = hasDrafts
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
+    <div style={toolbarRootStyle}>
       <div
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -37,6 +37,9 @@ export function BulkReceiptToolbar({
           cursor: isBusy ? 'not-allowed' : 'pointer',
           opacity: isBusy ? 0.72 : 1,
           transition: 'border-color 120ms ease, background 120ms ease, padding 120ms ease',
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
         role="button"
         tabIndex={0}
@@ -77,7 +80,7 @@ export function BulkReceiptToolbar({
             event.stopPropagation()
             if (!isBusy) fileInputRef.current?.click()
           }}
-          style={{ ...secondaryButtonStyle, marginTop: 10, marginRight: 0 }}
+          style={{ ...toolbarButtonStyle(secondaryButtonStyle), marginTop: 10 }}
           disabled={isBusy}
         >
           oder Dateien auswählen
@@ -111,22 +114,22 @@ export function BulkReceiptToolbar({
             flexWrap: 'wrap',
             gap: 8,
             alignItems: 'center',
-            padding: 10,
-            border: `1px solid ${colors.border}`,
-            borderRadius: 12,
-            background: colors.white,
+            paddingTop: 2,
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
         >
-          <button type="button" onClick={() => fileInputRef.current?.click()} style={secondaryButtonStyle} disabled={isBusy}>
+          <button type="button" onClick={() => fileInputRef.current?.click()} style={toolbarButtonStyle(secondaryButtonStyle)} disabled={isBusy}>
             Dateien hinzufügen
           </button>
-          <button type="button" onClick={onReset} style={secondaryButtonStyle} disabled={isBusy || !hasDrafts}>
+          <button type="button" onClick={onReset} style={toolbarButtonStyle(secondaryButtonStyle)} disabled={isBusy || !hasDrafts}>
             Liste zurücksetzen
           </button>
           <button
             type="button"
             onClick={onBookReadyDrafts}
-            style={buttonStyle}
+            style={toolbarButtonStyle(buttonStyle)}
             disabled={!canBookDrafts}
             title={canBookDrafts ? 'Geprüfte Belege als Kassa-Einträge speichern.' : 'Mindestens ein geprüfter Beleg ist erforderlich.'}
           >
@@ -136,6 +139,24 @@ export function BulkReceiptToolbar({
       )}
     </div>
   )
+}
+
+const toolbarRootStyle = {
+  display: 'grid',
+  gap: 12,
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
+}
+
+function toolbarButtonStyle(baseStyle) {
+  return {
+    ...baseStyle,
+    margin: 0,
+    width: 'auto',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+  }
 }
 
 function UploadIcon({ size }) {
@@ -162,6 +183,8 @@ function StepPill({ number, text }) {
         color: colors.text,
         fontSize: 13,
         fontWeight: 800,
+        maxWidth: '100%',
+        boxSizing: 'border-box',
       }}
     >
       <span style={{ color: colors.blue }}>{number}</span>

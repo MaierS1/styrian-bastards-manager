@@ -46,12 +46,15 @@ export function BulkReceiptSummary({ summary, progress }) {
   ]
 
   return (
-    <div style={{ display: 'grid', gap: 14, marginTop: 16, marginBottom: 14 }} aria-live="polite">
+    <div style={summaryRootStyle} aria-live="polite">
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
           gap: 10,
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
       >
         {cards.map((card) => (
@@ -61,10 +64,11 @@ export function BulkReceiptSummary({ summary, progress }) {
 
       <div
         style={{
-          border: `1px solid ${colors.border}`,
-          borderRadius: 12,
-          padding: 14,
-          background: colors.white,
+          borderTop: `1px solid ${colors.border}`,
+          paddingTop: 14,
+          width: '100%',
+          maxWidth: '100%',
+          boxSizing: 'border-box',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', marginBottom: 8 }}>
@@ -111,6 +115,9 @@ function StatusDashboardCard({ count, label, description, icon, tone }) {
         minHeight: 112,
         display: 'grid',
         alignContent: 'space-between',
+        width: '100%',
+        maxWidth: '100%',
+        boxSizing: 'border-box',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
@@ -139,6 +146,14 @@ function StatusDashboardCard({ count, label, description, icon, tone }) {
       </div>
     </div>
   )
+}
+
+const summaryRootStyle = {
+  display: 'grid',
+  gap: 14,
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
 }
 
 function DashboardIcon({ name }) {
