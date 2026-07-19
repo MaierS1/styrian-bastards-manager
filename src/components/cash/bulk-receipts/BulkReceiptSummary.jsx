@@ -3,6 +3,7 @@ import { BULK_RECEIPT_STATUSES } from '../../../services/cash/bulkReceiptTypes'
 import {
   getBulkReceiptDashboard,
   getBulkReceiptProgressHint,
+  getBulkReceiptStatusTone,
 } from './bulkReceiptUiUtils'
 
 export function BulkReceiptSummary({ summary, progress }) {
@@ -181,20 +182,14 @@ function DashboardIcon({ name }) {
 
 function getProgressColor(dashboard) {
   if (dashboard.error > 0) return colors.dangerText
-  if (dashboard.needsReview > 0) return colors.infoText
+  if (dashboard.needsReview > 0) return getBulkReceiptStatusTone(BULK_RECEIPT_STATUSES.NEEDS_REVIEW).color
   return colors.successText
 }
 
 function getToneColor(status) {
-  if (status === BULK_RECEIPT_STATUSES.READY) return colors.successText
-  if (status === BULK_RECEIPT_STATUSES.ERROR) return colors.dangerText
-  if (status === BULK_RECEIPT_STATUSES.NEEDS_REVIEW) return colors.infoText
-  return colors.blue
+  return getBulkReceiptStatusTone(status).color
 }
 
 function getToneBackground(status) {
-  if (status === BULK_RECEIPT_STATUSES.READY) return colors.successBg
-  if (status === BULK_RECEIPT_STATUSES.ERROR) return colors.dangerBg
-  if (status === BULK_RECEIPT_STATUSES.NEEDS_REVIEW) return colors.infoBg
-  return colors.offWhite
+  return getBulkReceiptStatusTone(status).background
 }

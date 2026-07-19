@@ -89,7 +89,11 @@ export function determineBulkReceiptStatus(draft, validation = validateBulkRecei
     return BULK_RECEIPT_STATUSES.WAITING
   }
 
-  if (validation.isValid && validation.warnings.length === 0) {
+  if (validation.isValid && (validation.warnings.length === 0 && !draft.reviewRequired)) {
+    return BULK_RECEIPT_STATUSES.READY
+  }
+
+  if (validation.isValid && draft.reviewConfirmed) {
     return BULK_RECEIPT_STATUSES.READY
   }
 

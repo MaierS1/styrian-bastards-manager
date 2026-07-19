@@ -8,6 +8,8 @@ import {
   getBulkReceiptQueueState,
   getBulkReceiptShortIssue,
   getBulkReceiptStatusLabel,
+  getBulkReceiptStatusTone,
+  getAnalysisWarningSummary,
   getBulkReceiptSummary,
   shortenReceiptFileName,
   toggleSingleExpandedDraft,
@@ -95,6 +97,56 @@ test('creates progress hints for review and errors', () => {
 test('returns central status labels', () => {
   assert.equal(getBulkReceiptStatusLabel(BULK_RECEIPT_STATUSES.READY), 'Bereit zur Verbuchung')
   assert.equal(getBulkReceiptStatusLabel('unknown'), 'Wartet')
+})
+
+test('maps receipt statuses to the intended visual tones', () => {
+  assert.deepEqual(getBulkReceiptStatusTone(BULK_RECEIPT_STATUSES.WAITING), {
+    color: '#4b5563',
+    background: '#f8fafc',
+  })
+  assert.deepEqual(getBulkReceiptStatusTone(BULK_RECEIPT_STATUSES.UPLOADING), {
+    color: '#003f88',
+    background: '#eff6ff',
+  })
+  assert.deepEqual(getBulkReceiptStatusTone(BULK_RECEIPT_STATUSES.ANALYZING), {
+    color: '#1d4ed8',
+    background: '#dbeafe',
+  })
+  assert.deepEqual(getBulkReceiptStatusTone(BULK_RECEIPT_STATUSES.NEEDS_REVIEW), {
+    color: '#9a3412',
+    background: '#fff7ed',
+  })
+  assert.deepEqual(getBulkReceiptStatusTone(BULK_RECEIPT_STATUSES.READY), {
+    color: '#065f46',
+    background: '#ecfdf5',
+  })
+  assert.deepEqual(getBulkReceiptStatusTone(BULK_RECEIPT_STATUSES.SAVING), {
+    color: '#6d28d9',
+    background: '#f5f3ff',
+  })
+  assert.deepEqual(getBulkReceiptStatusTone(BULK_RECEIPT_STATUSES.SAVED), {
+    color: '#047857',
+    background: '#ecfdf5',
+  })
+  assert.deepEqual(getBulkReceiptStatusTone(BULK_RECEIPT_STATUSES.ERROR), {
+    color: '#991b1b',
+    background: '#fef2f2',
+  })
+})
+
+test('summarizes known analysis warnings in user-friendly language', () => {
+  assert.equal(
+    getAnalysisWarningSummary({ message: 'The bank statement shows a matching payment.' }),
+    'Kontoauszug erkannt. Bitte prüfen, ob Rechnung und Zahlung zusammengehören.',
+  )
+  assert.equal(
+    getAnalysisWarningSummary({ message: 'The document contains two copies of the same invoice.' }),
+    'Mehrere Rechnungen erkannt. Bitte kontrollieren, ob alle Seiten zum selben Beleg gehören.',
+  )
+  assert.equal(
+    getAnalysisWarningSummary({ message: 'The total amount is unclear.' }),
+    'Bitte Analysehinweise prüfen.',
+  )
 })
 
 test('prefers technical errors before validation and warnings for short issues', () => {

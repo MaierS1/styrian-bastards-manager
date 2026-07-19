@@ -3,6 +3,7 @@ import test from 'node:test'
 import { BULK_RECEIPT_STATUSES } from './bulkReceiptTypes.js'
 import {
   applyBulkReceiptDraftFieldChange,
+  confirmBulkReceiptDraftReview,
   createBulkReceiptDraft,
 } from './bulkReceiptDraftService.js'
 import {
@@ -144,4 +145,47 @@ test('manual changes revalidate the draft', () => {
   assert.equal(changed.touchedFields.amount, true)
   assert.equal(changed.validation.isValid, true)
   assert.equal(changed.status, BULK_RECEIPT_STATUSES.READY)
+})
+
+test('confirming review moves a valid needs_review draft to ready', () => {
+  const draft = createUploadedDraft({
+    analysisWarnings: [{ code: 'LOW_CONFIDENCE', message: 'Unsicher' }],
+  })
+
+  assert.equal(draft.status, BULK_RECEIPT_STATUSES.NEEDS_REVIEW)
+
+  const confirmed = confirmBulkReceiptDraftReview(draft)
+
+  assert.equal(confirmed.status, BULK_RECEIPT_STATUSES.READY)
+  assert.equal(confirmed.reviewConfirmed, true)
+  assert.equal(confirmed.reviewRequired, false)
+  assert.equal(confirmed.reviewMessage, 'Beleg erfolgreich geprüft.')
+})
+
+test('confirming review keeps an invalid draft in needs_review', () => {
+  const draft = createUploadedDraft({
+    date: '',
+    cashDraft: {
+      ...createUploadedDraft().cashDraft,
+      date: '',
+    },
+  })
+
+  const confirmed = confirmBulkReceiptDraftReview(draft)
+
+  assert.equal(confirmed.status, BULK_RECEIPT_STATUSES.NEEDS_REVIEW)
+  assert.equal(confirmed.reviewConfirmed, false)
+  assert.equal(confirmed.validationErrors.includes('Belegdatum ist erforderlich.'), true)
+})
+
+test('changing a ready draft makes it require review again', () => {
+  const draft = createUploadedDraft()
+
+  assert.equal(draft.status, BULK_RECEIPT_STATUSES.READY)
+
+  const changed = applyBulkReceiptDraftFieldChange(draft, 'description', 'Manuell geprüft')
+
+  assert.equal(changed.status, BULK_RECEIPT_STATUSES.NEEDS_REVIEW)
+  assert.equal(changed.reviewRequired, true)
+  assert.equal(changed.reviewConfirmed, false)
 })

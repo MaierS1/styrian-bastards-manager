@@ -14,6 +14,7 @@ export function BulkReceiptDraftList({
   onRemove,
   onToggle,
   onAnalyze,
+  onConfirmReview,
 }) {
   if (drafts.length === 0) {
     return null
@@ -58,6 +59,7 @@ export function BulkReceiptDraftList({
           onRemove={onRemove}
           onToggle={onToggle}
           onAnalyze={onAnalyze}
+          onConfirmReview={onConfirmReview}
         />
       ))}
     </div>

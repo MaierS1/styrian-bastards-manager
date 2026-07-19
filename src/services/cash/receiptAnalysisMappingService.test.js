@@ -43,9 +43,8 @@ test('maps wrapped receipt analysis fields to an empty cash draft', () => {
   assert.equal(mapped.type, 'ausgabe')
   assert.equal(mapped.category, 'veranstaltung')
   assert.equal(mapped.paymentMethod, 'ebanking')
-  assert.match(mapped.description, /Einkauf Getränke/)
-  assert.match(mapped.description, /Händler\/Lieferant: METRO/)
-  assert.match(mapped.description, /Rechnungsnummer: R-123/)
+  assert.equal(mapped.description, 'METRO – Einkauf Getränke')
+  assert.doesNotMatch(mapped.description, /Rechnungsnummer/)
 })
 
 test('does not overwrite manually edited fields', () => {
@@ -84,4 +83,15 @@ test('normalizes Austrian dates and comma amounts from direct analysis payloads'
 
   assert.equal(mapped.date, '2026-07-19')
   assert.equal(mapped.amount, '12.34')
+})
+
+test('formats merchant and recognized items without invoice number in the standard description', () => {
+  const mapped = applyReceiptAnalysisToDraft(createDraft(), {
+    merchantName: field('Billa AG'),
+    invoiceNumber: field('R-456'),
+    suggestedDescription: field('100 x Knopfsemmel'),
+  })
+
+  assert.equal(mapped.description, 'Billa AG – 100× Knopfsemmel')
+  assert.doesNotMatch(mapped.description, /R-456/)
 })

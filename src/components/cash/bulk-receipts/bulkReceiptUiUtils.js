@@ -113,6 +113,40 @@ export function getBulkReceiptStatusLabel(status) {
   return BULK_RECEIPT_STATUS_LABELS[normalizeDraftStatus(status)]
 }
 
+export function getBulkReceiptStatusTone(status) {
+  const normalized = normalizeDraftStatus(status)
+
+  if (normalized === BULK_RECEIPT_STATUSES.UPLOADING) {
+    return { color: '#003f88', background: '#eff6ff' }
+  }
+
+  if (normalized === BULK_RECEIPT_STATUSES.ANALYZING) {
+    return { color: '#1d4ed8', background: '#dbeafe' }
+  }
+
+  if (normalized === BULK_RECEIPT_STATUSES.NEEDS_REVIEW) {
+    return { color: '#9a3412', background: '#fff7ed' }
+  }
+
+  if (normalized === BULK_RECEIPT_STATUSES.READY) {
+    return { color: '#065f46', background: '#ecfdf5' }
+  }
+
+  if (normalized === BULK_RECEIPT_STATUSES.SAVING) {
+    return { color: '#6d28d9', background: '#f5f3ff' }
+  }
+
+  if (normalized === BULK_RECEIPT_STATUSES.SAVED) {
+    return { color: '#047857', background: '#ecfdf5' }
+  }
+
+  if (normalized === BULK_RECEIPT_STATUSES.ERROR) {
+    return { color: '#991b1b', background: '#fef2f2' }
+  }
+
+  return { color: '#4b5563', background: '#f8fafc' }
+}
+
 export function getBulkReceiptShortIssue(draft) {
   if (draft?.error) return draft.error
   if (draft?.uploadError) return draft.uploadError
@@ -124,6 +158,40 @@ export function getBulkReceiptShortIssue(draft) {
   }
 
   return ''
+}
+
+export function getAnalysisWarningSummary(warning) {
+  const text = [
+    warning?.message,
+    warning?.code,
+  ].filter(Boolean).join(' ').toLowerCase()
+
+  if (text.includes('bank statement') || text.includes('kontoauszug')) {
+    return 'Kontoauszug erkannt. Bitte prüfen, ob Rechnung und Zahlung zusammengehören.'
+  }
+
+  if (
+    text.includes('two copies')
+    || text.includes('multiple copies')
+    || text.includes('two invoices')
+    || text.includes('multiple invoices')
+    || text.includes('mehrere rechnungen')
+    || text.includes('zwei rechnungen')
+  ) {
+    return 'Mehrere Rechnungen erkannt. Bitte kontrollieren, ob alle Seiten zum selben Beleg gehören.'
+  }
+
+  return 'Bitte Analysehinweise prüfen.'
+}
+
+export function getAnalysisFieldValue(analysis, fieldName) {
+  const field = analysis?.[fieldName]
+
+  if (field && typeof field === 'object' && 'value' in field) {
+    return field.value
+  }
+
+  return field || ''
 }
 
 export function shortenReceiptFileName(fileName, maxLength = 42) {

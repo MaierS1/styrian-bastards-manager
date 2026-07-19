@@ -52,6 +52,9 @@ export function createBulkReceiptDraft(file, index = 0, existingCount = 0, optio
     analysisResult: null,
     analysisError: '',
     analysisWarnings: [],
+    reviewConfirmed: false,
+    reviewRequired: false,
+    reviewMessage: '',
     touchedFields: {},
     selected: true,
     isExpanded: false,
@@ -61,6 +64,7 @@ export function createBulkReceiptDraft(file, index = 0, existingCount = 0, optio
 }
 
 export function applyBulkReceiptDraftFieldChange(draft, field, value) {
+  const wasReady = draft.status === BULK_RECEIPT_STATUSES.READY
   const cashDraft = {
     ...draft.cashDraft,
     [field]: value,
@@ -74,8 +78,37 @@ export function applyBulkReceiptDraftFieldChange(draft, field, value) {
       ...(draft.touchedFields || {}),
       [field]: true,
     },
+    reviewConfirmed: wasReady ? false : draft.reviewConfirmed,
+    reviewRequired: wasReady ? true : draft.reviewRequired,
+    reviewMessage: '',
     error: draft.uploadStatus === 'uploaded' ? '' : draft.error,
   })
+}
+
+export function confirmBulkReceiptDraftReview(draft) {
+  const confirmedDraft = updateBulkReceiptDraftValidation({
+    ...draft,
+    reviewConfirmed: true,
+    reviewRequired: false,
+    reviewMessage: '',
+  })
+
+  if (confirmedDraft.validation.isValid) {
+    return {
+      ...confirmedDraft,
+      status: BULK_RECEIPT_STATUSES.READY,
+      taskStatus: BULK_RECEIPT_STATUSES.READY,
+      reviewMessage: 'Beleg erfolgreich geprüft.',
+    }
+  }
+
+  return {
+    ...confirmedDraft,
+    status: BULK_RECEIPT_STATUSES.NEEDS_REVIEW,
+    taskStatus: BULK_RECEIPT_STATUSES.NEEDS_REVIEW,
+    reviewConfirmed: false,
+    reviewRequired: true,
+  }
 }
 
 export function getBulkReceiptFileKey(file) {

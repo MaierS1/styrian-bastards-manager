@@ -1,13 +1,18 @@
 import { memo } from 'react'
 import {
+  buttonStyle,
   colors,
+  dangerButtonStyle,
   mutedTextStyle,
   secondaryButtonStyle,
 } from '../../../styles/appStyles'
 import { BULK_RECEIPT_STATUSES } from '../../../services/cash/bulkReceiptTypes'
 import {
+  getAnalysisFieldValue,
+  getAnalysisWarningSummary,
   getBulkReceiptShortIssue,
   getBulkReceiptStatusLabel,
+  getBulkReceiptStatusTone,
   isBulkReceiptProcessing,
   shortenReceiptFileName,
 } from './bulkReceiptUiUtils'
@@ -26,10 +31,12 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
   onRemove,
   onToggle,
   onAnalyze,
+  onConfirmReview,
 }) {
   const statusLabel = getBulkReceiptStatusLabel(draft.status)
   const issue = getBulkReceiptShortIssue(draft)
   const isProcessing = isBulkReceiptProcessing(draft.status)
+  const tone = getBulkReceiptStatusTone(draft.status)
   const canEditDraft = !disabled && draft.uploadStatus === 'uploaded'
   const canAnalyzeDraft = draft.uploadStatus === 'uploaded'
     && Boolean(draft.storagePath)
@@ -48,10 +55,10 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
       <div
         className="bulk-receipt-row"
         style={{
-          border: `1px solid ${getRowBorder(draft.status)}`,
-          borderLeft: `5px solid ${getStatusColor(draft.status)}`,
+          border: `1px solid ${tone.color}`,
+          borderLeft: `5px solid ${tone.color}`,
           borderRadius: 10,
-          background: getRowBackground(draft.status),
+          background: tone.background,
           transition: 'box-shadow 140ms ease, transform 140ms ease',
           overflow: 'hidden',
         }}
@@ -61,7 +68,7 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
             display: 'grid',
             gridTemplateColumns: isMobile
               ? '1fr'
-              : 'minmax(210px, 1.45fr) minmax(135px, 0.85fr) minmax(105px, 0.55fr) minmax(125px, 0.7fr) minmax(105px, 0.55fr) minmax(180px, 1fr) minmax(170px, 0.85fr)',
+              : 'minmax(210px, 1.45fr) minmax(135px, 0.85fr) minmax(105px, 0.55fr) minmax(125px, 0.7fr) minmax(105px, 0.55fr) minmax(180px, 1fr) minmax(100px, 0.45fr)',
             gap: isMobile ? 8 : 10,
             alignItems: 'center',
             padding: 12,
@@ -115,14 +122,7 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
               {issue || 'Keine offenen Hinweise'}
             </span>
           </MobileField>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 6,
-              justifyContent: isMobile ? 'flex-start' : 'flex-end',
-            }}
-          >
+          <div style={{ display: 'flex', justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
             <button
               type="button"
               onClick={() => onToggle(draft.id)}
@@ -132,24 +132,6 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
               aria-label={draft.isExpanded ? `${draft.fileName} schließen` : `${draft.fileName} öffnen`}
             >
               {draft.isExpanded ? 'Schließen' : 'Öffnen'}
-            </button>
-            <button
-              type="button"
-              onClick={() => onAnalyze(draft.id)}
-              style={smallButtonStyle}
-              disabled={!canAnalyzeDraft}
-              aria-label={`${draft.fileName} erneut analysieren`}
-            >
-              Neu analysieren
-            </button>
-            <button
-              type="button"
-              onClick={() => onRemove(draft.id)}
-              style={smallButtonStyle}
-              disabled={disabled}
-              aria-label={`${draft.fileName} entfernen`}
-            >
-              Entfernen
             </button>
           </div>
         </div>
@@ -162,58 +144,107 @@ export const BulkReceiptDraftRow = memo(function BulkReceiptDraftRow({
               padding: 14,
             }}
           >
-            {draft.analysisWarnings?.length > 0 && (
-              <div
-                style={{
-                  border: `1px solid ${colors.infoText}`,
-                  borderRadius: 8,
-                  background: colors.infoBg,
-                  color: colors.infoText,
-                  padding: 10,
-                  marginBottom: 12,
-                }}
-              >
-                <strong style={{ display: 'block', marginBottom: 4 }}>Analysehinweise</strong>
-                <ul style={{ margin: 0, paddingLeft: 18 }}>
+            <DetailSection title="Analysehinweise">
+              {draft.analysisWarnings?.length > 0 ? (
+                <div style={{ display: 'grid', gap: 8 }}>
                   {draft.analysisWarnings.map((warning) => (
-                    <li key={`${warning.code || 'warning'}-${warning.message || ''}`}>
-                      {warning.message || warning.code || 'Hinweis zur Beleganalyse'}
-                    </li>
+                    <div key={`${warning.code || 'warning'}-${warning.message || ''}`} style={warningPanelStyle}>
+                      <strong style={{ display: 'block' }}>{getAnalysisWarningSummary(warning)}</strong>
+                      <details style={{ marginTop: 6 }}>
+                        <summary style={{ cursor: 'pointer' }}>Originalanalyse anzeigen</summary>
+                        <p style={{ marginBottom: 0 }}>
+                          {warning.message || warning.code || 'Hinweis zur Beleganalyse'}
+                        </p>
+                      </details>
+                    </div>
                   ))}
-                </ul>
-              </div>
-            )}
+                </div>
+              ) : (
+                <p style={{ ...mutedTextStyle, margin: 0 }}>Keine Analysehinweise vorhanden.</p>
+              )}
+            </DetailSection>
 
             {draft.uploadStatus === 'uploaded' ? (
-              <BulkReceiptDraftEditor
-                draft={draft}
-                status={statusLabel}
-                events={events}
-                categories={categories}
-                paymentMethods={paymentMethods}
-                canEditDraft={canEditDraft}
-                onChange={onChange}
-              />
+              <>
+                <BulkReceiptDraftEditor
+                  draft={draft}
+                  status={statusLabel}
+                  events={events}
+                  categories={categories}
+                  paymentMethods={paymentMethods}
+                  canEditDraft={canEditDraft}
+                  onChange={onChange}
+                />
+                {draft.reviewMessage && (
+                  <p style={{ color: colors.successText, fontWeight: 800, marginTop: 10 }}>
+                    {draft.reviewMessage}
+                  </p>
+                )}
+                <div style={detailActionsStyle}>
+                  {draft.status === BULK_RECEIPT_STATUSES.NEEDS_REVIEW && (
+                    <button
+                      type="button"
+                      onClick={() => onConfirmReview(draft.id)}
+                      style={actionButtonStyle(buttonStyle)}
+                      disabled={disabled}
+                    >
+                      ✓ Prüfung bestätigen
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onAnalyze(draft.id)}
+                    style={actionButtonStyle(secondaryButtonStyle)}
+                    disabled={!canAnalyzeDraft}
+                    aria-label={`${draft.fileName} erneut analysieren`}
+                  >
+                    Neu analysieren
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(draft.id)}
+                    style={actionButtonStyle(dangerButtonStyle)}
+                    disabled={disabled}
+                    aria-label={`${draft.fileName} entfernen`}
+                  >
+                    Entfernen
+                  </button>
+                </div>
+              </>
             ) : (
               <p style={mutedTextStyle}>
                 Die Belegdaten können bearbeitet werden, sobald der Upload abgeschlossen ist.
               </p>
             )}
 
-            {draft.storagePath && (
-              <details style={{ marginTop: 12 }}>
-                <summary style={{ ...mutedTextStyle, cursor: 'pointer' }}>Technische Details</summary>
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ ...mutedTextStyle, cursor: 'pointer' }}>Technische Details</summary>
+              {draft.storagePath && (
                 <p style={{ ...mutedTextStyle, wordBreak: 'break-word', marginBottom: 0 }}>
                   Storage-Pfad: {draft.storagePath}
                 </p>
-              </details>
-            )}
+              )}
+              {getAnalysisFieldValue(draft.analysisResult, 'invoiceNumber') && (
+                <p style={{ ...mutedTextStyle, wordBreak: 'break-word', marginBottom: 0 }}>
+                  Rechnungsnummer: {getAnalysisFieldValue(draft.analysisResult, 'invoiceNumber')}
+                </p>
+              )}
+            </details>
           </div>
         )}
       </div>
     </>
   )
 })
+
+function DetailSection({ title, children }) {
+  return (
+    <section style={{ marginBottom: 14 }}>
+      <strong style={{ display: 'block', color: colors.black, marginBottom: 8 }}>{title}</strong>
+      {children}
+    </section>
+  )
+}
 
 function MobileField({ label, isMobile, children }) {
   if (!isMobile) return children
@@ -227,6 +258,10 @@ function MobileField({ label, isMobile, children }) {
 }
 
 function StatusBadge({ status, label, isProcessing }) {
+  const tone = getBulkReceiptStatusTone(status)
+  const baseText = status === BULK_RECEIPT_STATUSES.READY ? 'Bereit' : label
+  const text = status === BULK_RECEIPT_STATUSES.SAVED ? `✓ ${baseText}` : baseText
+
   return (
     <span
       style={{
@@ -235,16 +270,16 @@ function StatusBadge({ status, label, isProcessing }) {
         gap: 7,
         width: 'fit-content',
         borderRadius: 999,
-        border: `1px solid ${getStatusColor(status)}`,
+        border: `1px solid ${tone.color}`,
         padding: '4px 10px',
-        color: getStatusColor(status),
-        background: colors.white,
+        color: tone.color,
+        background: tone.background,
         fontWeight: 800,
         fontSize: 13,
       }}
     >
       {isProcessing && <span aria-hidden="true" style={spinnerStyle} />}
-      {label}
+      {text}
     </span>
   )
 }
@@ -257,30 +292,33 @@ const smallButtonStyle = {
   width: 'auto',
 }
 
-function getRowBorder(status) {
-  if (isBulkReceiptProcessing(status)) return colors.infoText
-  if (status === BULK_RECEIPT_STATUSES.READY || status === BULK_RECEIPT_STATUSES.SAVED) return colors.successText
-  if (status === BULK_RECEIPT_STATUSES.ERROR) return colors.dangerText
-  return colors.border
+const detailActionsStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 8,
+  marginTop: 12,
+  paddingTop: 12,
+  borderTop: `1px solid ${colors.border}`,
 }
 
-function getRowBackground(status) {
-  if (isBulkReceiptProcessing(status)) return colors.infoBg
-  if (status === BULK_RECEIPT_STATUSES.READY || status === BULK_RECEIPT_STATUSES.SAVED) return colors.successBg
-  if (status === BULK_RECEIPT_STATUSES.ERROR) return colors.dangerBg
-  return colors.white
+const warningPanelStyle = {
+  border: '1px solid #9a3412',
+  borderRadius: 8,
+  background: '#fff7ed',
+  color: '#9a3412',
+  padding: 10,
+}
+
+function actionButtonStyle(baseStyle) {
+  return {
+    ...baseStyle,
+    margin: 0,
+    width: 'auto',
+  }
 }
 
 function getIssueColor(status) {
-  return status === BULK_RECEIPT_STATUSES.ERROR ? colors.dangerText : colors.infoText
-}
-
-function getStatusColor(status) {
-  if (status === BULK_RECEIPT_STATUSES.READY || status === BULK_RECEIPT_STATUSES.SAVED) return colors.successText
-  if (status === BULK_RECEIPT_STATUSES.ERROR) return colors.dangerText
-  if (status === BULK_RECEIPT_STATUSES.NEEDS_REVIEW) return colors.infoText
-  if (isBulkReceiptProcessing(status)) return colors.infoText
-  return colors.muted
+  return status === BULK_RECEIPT_STATUSES.ERROR ? colors.dangerText : '#9a3412'
 }
 
 const spinnerStyle = {

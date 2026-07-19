@@ -107,14 +107,19 @@ function normalizePaymentMethod(value) {
 function buildDescription(analysis) {
   const suggestedDescription = normalizeText(getFieldValue(analysis.suggestedDescription))
   const merchantName = normalizeText(getFieldValue(analysis.merchantName))
-  const invoiceNumber = normalizeText(getFieldValue(analysis.invoiceNumber))
-  const parts = []
 
-  if (suggestedDescription) parts.push(suggestedDescription)
-  if (merchantName) parts.push(`Händler/Lieferant: ${merchantName}`)
-  if (invoiceNumber) parts.push(`Rechnungsnummer: ${invoiceNumber}`)
+  if (merchantName && suggestedDescription) {
+    return `${merchantName} – ${normalizeLineItemText(suggestedDescription)}`
+  }
 
-  return parts.join(' | ')
+  if (merchantName) return merchantName
+  if (suggestedDescription) return normalizeLineItemText(suggestedDescription)
+
+  return ''
+}
+
+function normalizeLineItemText(value) {
+  return normalizeText(value).replace(/\b(\d+)\s*x\s+/i, '$1× ')
 }
 
 function normalizeText(value) {

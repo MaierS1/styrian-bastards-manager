@@ -16,6 +16,7 @@ import {
 } from '../../services/cash/bulkReceiptTypes'
 import {
   applyBulkReceiptDraftFieldChange,
+  confirmBulkReceiptDraftReview,
   createBulkReceiptDraft,
   getBulkReceiptFileKey,
 } from '../../services/cash/bulkReceiptDraftService'
@@ -209,6 +210,9 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
           analysisResult: result.analysis,
           analysisError: '',
           analysisWarnings: result.warnings,
+          reviewConfirmed: false,
+          reviewRequired: false,
+          reviewMessage: '',
           isExpanded: true,
         }, result)
 
@@ -366,6 +370,9 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
           analysisStatus: 'analyzing',
           analysisError: '',
           analysisWarnings: [],
+          reviewConfirmed: false,
+          reviewRequired: false,
+          reviewMessage: '',
         }
         : currentDraft
     )))
@@ -375,6 +382,14 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
       taskId,
     })
   }
+
+  const confirmDraftReview = useCallback((draftId) => {
+    if (isBusy) return
+
+    setDrafts((currentDrafts) => currentDrafts.map((draft) => (
+      draft.id === draftId ? confirmBulkReceiptDraftReview(draft) : draft
+    )))
+  }, [isBusy])
 
   async function bookReadyDrafts() {
     if (!canBookDrafts) return
@@ -507,6 +522,7 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
         onRemove={removeDraft}
         onToggle={toggleDraft}
         onAnalyze={analyzeDraft}
+        onConfirmReview={confirmDraftReview}
       />
     </div>
   )
