@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   buttonStyle,
   cardStyle,
@@ -11,10 +11,13 @@ import {
 import { uploadCashReceipt } from '../../services/cash/receiptUploadService'
 import { analyzeCashReceipt } from '../../services/cash/receiptAnalysisService'
 import { applyReceiptAnalysisToDraft } from '../../services/cash/receiptAnalysisMappingService'
+import { useTaskQueue } from '../../services/tasks/useTaskQueue.ts'
 import { BulkReceiptDraftItem } from './BulkReceiptDraftItem'
 
 const MAX_FILES = 50
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024
+const BULK_RECEIPT_TASK_TYPE = 'bulk-receipt-upload-analysis'
+const BULK_RECEIPT_CONCURRENCY = 3
 const ACCEPTED_EXTENSIONS = new Set(['pdf', 'jpg', 'jpeg', 'png', 'webp'])
 const ACCEPTED_MIME_TYPES = new Set([
   'application/pdf',
@@ -114,7 +117,9 @@ function validateDraft(draft) {
 
 function getDraftStatus(draft) {
   if (draft.error || draft.uploadStatus === 'error') return 'Fehler'
+  if (draft.taskStatus === 'waiting') return 'Wartet'
   if (draft.uploadStatus === 'uploading') return 'Wird hochgeladen'
+  if (draft.analysisStatus === 'analyzing') return 'Wird analysiert'
   if (draft.uploadStatus !== 'uploaded') return 'Upload ausstehend'
 
   return draft.validationErrors.length === 0 ? 'Bereit zur Verbuchung' : 'Prüfung erforderlich'
@@ -129,23 +134,36 @@ function getStatusStyle(status) {
     return { color: colors.dangerText, fontWeight: 800 }
   }
 
-  if (status === 'Wird hochgeladen') {
+  if (status === 'Wird hochgeladen' || status === 'Wird analysiert') {
     return { color: colors.infoText, fontWeight: 800 }
   }
 
   return { color: colors.text, fontWeight: 800 }
 }
 
+function parseTaskProgressMessage(message) {
+  const text = String(message || '')
+  const [phase, ...details] = text.split('|')
+
+  return {
+    phase,
+    storagePath: details.join('|'),
+  }
+}
+
 function createDraft(file, index, existingCount) {
   const validationError = validateReceiptFile(file)
+  const id = `${Date.now()}-${existingCount + index}-${file.name}`
   const draft = {
-    id: `${Date.now()}-${existingCount + index}-${file.name}`,
+    id,
     fileKey: getFileKey(file),
     file,
     fileName: file.name,
     fileSize: file.size,
     fileType: file.type || getFileExtension(file.name).toUpperCase(),
     storagePath: '',
+    taskId: validationError ? '' : id,
+    taskStatus: validationError ? 'error' : 'waiting',
     uploadStatus: validationError ? 'error' : 'pending',
     error: validationError,
     date: '',
@@ -180,19 +198,163 @@ function updateDraftValidation(draft) {
 export function BulkReceiptUpload({ events = [], onBookDrafts }) {
   const [drafts, setDrafts] = useState([])
   const [isDragging, setIsDragging] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
   const [isPosting, setIsPosting] = useState(false)
   const [limitMessage, setLimitMessage] = useState('')
   const [bookingMessage, setBookingMessage] = useState('')
   const fileInputRef = useRef(null)
+  const queuedTaskIdsRef = useRef(new Set())
+  const { queue, enqueue, registerWorker } = useTaskQueue({ concurrency: BULK_RECEIPT_CONCURRENCY })
 
   const pendingCount = drafts.filter((draft) => draft.uploadStatus === 'pending').length
   const uploadedCount = drafts.filter((draft) => draft.uploadStatus === 'uploaded').length
   const readyToPostCount = drafts.filter((draft) => getDraftStatus(draft) === 'Bereit zur Verbuchung').length
-  const isAnalyzing = drafts.some((draft) => draft.analysisStatus === 'analyzing')
-  const isBusy = isUploading || isPosting
+  const isBusy = isPosting
   const hasUploadableFiles = pendingCount > 0 && !isBusy
   const canBookDrafts = readyToPostCount > 0 && !isBusy && Boolean(onBookDrafts)
+
+  const enqueueReceiptTask = useCallback((draft) => {
+    if (!draft?.taskId || queuedTaskIdsRef.current.has(draft.taskId)) return
+
+    queuedTaskIdsRef.current.add(draft.taskId)
+    enqueue(BULK_RECEIPT_TASK_TYPE, {
+      draftId: draft.id,
+      file: draft.file,
+      storagePath: draft.storagePath,
+    }, {
+      id: draft.taskId,
+      maxAttempts: 1,
+      progress: {
+        current: 0,
+        total: 100,
+        message: draft.storagePath ? 'analyzing' : 'waiting',
+      },
+    })
+  }, [enqueue])
+
+  useEffect(() => registerWorker(BULK_RECEIPT_TASK_TYPE, async (payload, context) => {
+    let storagePath = String(payload.storagePath || '').trim()
+
+    if (!storagePath) {
+      context.reportProgress({ current: 10, message: 'uploading' })
+      storagePath = await uploadCashReceipt({ file: payload.file })
+    }
+
+    if (context.signal.aborted) {
+      throw new Error('Task wurde abgebrochen.')
+    }
+
+    context.reportProgress({ current: 55, message: `analyzing|${storagePath}` })
+    const analysisResult = await analyzeCashReceipt({ storagePath })
+
+    if (context.signal.aborted) {
+      throw new Error('Task wurde abgebrochen.')
+    }
+
+    context.reportProgress({ current: 100, message: 'completed' })
+
+    return {
+      draftId: payload.draftId,
+      storagePath,
+      analysisResult,
+    }
+  }), [registerWorker])
+
+  useEffect(() => {
+    drafts.forEach((draft) => {
+      if (draft.uploadStatus === 'pending' && !draft.error) {
+        enqueueReceiptTask(draft)
+      }
+    })
+  }, [drafts, enqueueReceiptTask])
+
+  useEffect(() => queue.on('*', (event) => {
+    if (event.task.type !== BULK_RECEIPT_TASK_TYPE) return
+
+    const draftId = event.task.payload?.draftId
+    if (!draftId) return
+
+    if (event.name === 'task:started') {
+      setDrafts((currentDrafts) => currentDrafts.map((draft) => (
+        draft.id === draftId
+          ? updateDraftValidation({
+            ...draft,
+            taskStatus: 'running',
+            uploadStatus: draft.storagePath ? 'uploaded' : 'uploading',
+            analysisStatus: draft.storagePath ? 'analyzing' : 'idle',
+            error: '',
+            analysisError: '',
+            analysisWarnings: [],
+          })
+          : draft
+      )))
+      return
+    }
+
+    if (event.name === 'task:progress') {
+      const { phase, storagePath } = parseTaskProgressMessage(event.task.progress.message)
+
+      setDrafts((currentDrafts) => currentDrafts.map((draft) => (
+        draft.id === draftId
+          ? updateDraftValidation({
+            ...draft,
+            taskStatus: 'running',
+            uploadStatus: phase === 'uploading' ? 'uploading' : 'uploaded',
+            analysisStatus: phase === 'analyzing' ? 'analyzing' : draft.analysisStatus,
+            storagePath: storagePath || draft.storagePath,
+          })
+          : draft
+      )))
+      return
+    }
+
+    if (event.name === 'task:succeeded') {
+      setDrafts((currentDrafts) => currentDrafts.map((draft) => {
+        if (draft.id !== draftId) return draft
+
+        const result = event.task.result?.analysisResult || {}
+        const mappedDraft = applyReceiptAnalysisToDraft({
+          ...draft,
+          taskStatus: 'running',
+          uploadStatus: 'uploaded',
+          storagePath: event.task.result?.storagePath || draft.storagePath,
+          error: '',
+          analysisStatus: 'completed',
+          analysisResult: result.analysis,
+          analysisError: '',
+          analysisWarnings: result.warnings,
+          isExpanded: true,
+        }, result)
+        const validatedDraft = updateDraftValidation(mappedDraft)
+
+        return {
+          ...validatedDraft,
+          taskStatus: validatedDraft.validationErrors.length === 0 ? 'ready' : 'needs_review',
+        }
+      }))
+      return
+    }
+
+    if (event.name === 'task:failed') {
+      setDrafts((currentDrafts) => currentDrafts.map((draft) => (
+        draft.id === draftId
+          ? updateDraftValidation({
+            ...draft,
+            taskStatus: 'error',
+            uploadStatus: draft.storagePath ? 'uploaded' : 'error',
+            analysisStatus: draft.storagePath ? 'error' : draft.analysisStatus,
+            error: event.task.error?.message || 'Belegverarbeitung fehlgeschlagen.',
+            analysisError: draft.storagePath ? event.task.error?.message || 'Beleganalyse fehlgeschlagen.' : draft.analysisError,
+            isExpanded: true,
+          })
+          : draft
+      )))
+      return
+    }
+
+    if (event.name === 'task:cancelled') {
+      queuedTaskIdsRef.current.delete(event.task.id)
+    }
+  }), [queue])
 
   function addFiles(fileList) {
     if (isBusy) return
@@ -258,6 +420,12 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
   function removeDraft(draftId) {
     if (isBusy) return
 
+    const draft = drafts.find((currentDraft) => currentDraft.id === draftId)
+    if (draft?.taskId) {
+      queue.cancel(draft.taskId)
+      queuedTaskIdsRef.current.delete(draft.taskId)
+    }
+
     setDrafts((currentDrafts) => currentDrafts.filter((draft) => draft.id !== draftId))
   }
 
@@ -302,49 +470,9 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
   async function startUpload() {
     if (!hasUploadableFiles) return
 
-    setIsUploading(true)
-
-    const uploadQueue = drafts.filter((draft) => draft.uploadStatus === 'pending')
-
-    for (const draft of uploadQueue) {
-      setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
-        currentDraft.id === draft.id
-          ? updateDraftValidation({ ...currentDraft, uploadStatus: 'uploading', error: '' })
-          : currentDraft
-      )))
-
-      try {
-        const storagePath = await uploadCashReceipt({ file: draft.file })
-
-        setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
-          currentDraft.id === draft.id
-            ? updateDraftValidation({
-              ...currentDraft,
-              uploadStatus: 'uploaded',
-              storagePath,
-              error: '',
-              analysisStatus: 'idle',
-              analysisResult: null,
-              analysisError: '',
-              analysisWarnings: [],
-              isExpanded: true,
-            })
-            : currentDraft
-        )))
-      } catch (error) {
-        setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
-          currentDraft.id === draft.id
-            ? updateDraftValidation({
-              ...currentDraft,
-              uploadStatus: 'error',
-              error: error.message || 'Upload fehlgeschlagen.',
-            })
-            : currentDraft
-        )))
-      }
-    }
-
-    setIsUploading(false)
+    drafts
+      .filter((draft) => draft.uploadStatus === 'pending' && !draft.error)
+      .forEach(enqueueReceiptTask)
   }
 
   async function analyzeDraft(draftId) {
@@ -354,16 +482,20 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
       !draft
       || draft.uploadStatus !== 'uploaded'
       || !draft.storagePath
-      || isAnalyzing
       || isPosting
     ) {
       return
     }
 
+    const taskId = `${draft.id}-analysis-${Date.now()}`
+    queuedTaskIdsRef.current.delete(draft.taskId)
+
     setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
       currentDraft.id === draftId
         ? {
           ...currentDraft,
+          taskId,
+          taskStatus: 'waiting',
           analysisStatus: 'analyzing',
           analysisError: '',
           analysisWarnings: [],
@@ -371,32 +503,10 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
         : currentDraft
     )))
 
-    try {
-      const result = await analyzeCashReceipt({ storagePath: draft.storagePath })
-
-      setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
-        currentDraft.id === draftId
-          ? updateDraftValidation(applyReceiptAnalysisToDraft({
-            ...currentDraft,
-            analysisStatus: 'completed',
-            analysisResult: result.analysis,
-            analysisError: '',
-            analysisWarnings: result.warnings,
-            isExpanded: true,
-          }, result))
-          : currentDraft
-      )))
-    } catch (error) {
-      setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
-        currentDraft.id === draftId
-          ? {
-            ...currentDraft,
-            analysisStatus: 'error',
-            analysisError: error.message || 'Beleganalyse fehlgeschlagen.',
-          }
-          : currentDraft
-      )))
-    }
+    enqueueReceiptTask({
+      ...draft,
+      taskId,
+    })
   }
 
   async function bookReadyDrafts() {
@@ -489,6 +599,12 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
       <button
         type="button"
         onClick={() => {
+          drafts.forEach((draft) => {
+            if (draft.taskId) {
+              queue.cancel(draft.taskId)
+              queuedTaskIdsRef.current.delete(draft.taskId)
+            }
+          })
           setDrafts([])
           setLimitMessage('')
           setBookingMessage('')
@@ -554,7 +670,7 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
                   disabled={isBusy}
                   isMobile={isMobile}
                   formatFileSize={formatFileSize}
-                  analysisDisabled={isAnalyzing || isPosting}
+                  analysisDisabled={isPosting}
                   onChange={updateDraft}
                   onRemove={removeDraft}
                   onToggle={toggleDraft}
