@@ -15,11 +15,21 @@ export function BulkReceiptDraftItem({
   disabled,
   isMobile,
   formatFileSize,
+  analysisDisabled,
   onChange,
   onRemove,
   onToggle,
+  onAnalyze,
 }) {
   const canEditDraft = !disabled && draft.uploadStatus === 'uploaded'
+  const canAnalyzeDraft = draft.uploadStatus === 'uploaded'
+    && Boolean(draft.storagePath)
+    && !analysisDisabled
+    && draft.analysisStatus !== 'analyzing'
+  const analysisStatusLabel = getAnalysisStatusLabel(draft.analysisStatus)
+  const analysisButtonLabel = draft.analysisStatus === 'completed' || draft.analysisStatus === 'error'
+    ? 'Erneut analysieren'
+    : 'Beleg analysieren'
 
   return (
     <div
@@ -56,6 +66,37 @@ export function BulkReceiptDraftItem({
 
       {draft.error && (
         <p style={{ color: colors.dangerText }}>{draft.error}</p>
+      )}
+
+      {draft.uploadStatus === 'uploaded' && (
+        <div style={{ marginTop: 8 }}>
+          <p style={getAnalysisStatusStyle(draft.analysisStatus)}>
+            {analysisStatusLabel}
+          </p>
+
+          {draft.analysisError && (
+            <p style={{ color: colors.dangerText }}>{draft.analysisError}</p>
+          )}
+
+          {draft.analysisWarnings?.length > 0 && (
+            <ul style={{ color: colors.infoText, marginTop: 8 }}>
+              {draft.analysisWarnings.map((warning) => (
+                <li key={`${warning.code || 'warning'}-${warning.message || ''}`}>
+                  {warning.message || warning.code || 'Hinweis zur Beleganalyse'}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onAnalyze(draft.id)}
+            style={secondaryButtonStyle}
+            disabled={!canAnalyzeDraft}
+          >
+            {analysisButtonLabel}
+          </button>
+        </div>
       )}
 
       {draft.validationErrors.length > 0 && draft.uploadStatus === 'uploaded' && (
@@ -187,4 +228,28 @@ export function BulkReceiptDraftItem({
       )}
     </div>
   )
+}
+
+function getAnalysisStatusLabel(status) {
+  if (status === 'analyzing') return 'Wird analysiert ...'
+  if (status === 'completed') return 'Analyse abgeschlossen'
+  if (status === 'error') return 'Analyse fehlgeschlagen'
+
+  return 'Nicht analysiert'
+}
+
+function getAnalysisStatusStyle(status) {
+  if (status === 'completed') {
+    return { color: colors.successText, fontWeight: 800, marginBottom: 6 }
+  }
+
+  if (status === 'error') {
+    return { color: colors.dangerText, fontWeight: 800, marginBottom: 6 }
+  }
+
+  if (status === 'analyzing') {
+    return { color: colors.infoText, fontWeight: 800, marginBottom: 6 }
+  }
+
+  return { ...mutedTextStyle, marginBottom: 6 }
 }

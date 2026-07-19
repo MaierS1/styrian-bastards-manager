@@ -9,6 +9,7 @@ import {
   secondaryButtonStyle,
 } from '../../styles/appStyles'
 import { uploadCashReceipt } from '../../services/cash/receiptUploadService'
+import { analyzeCashReceipt } from '../../services/cash/receiptAnalysisService'
 import { BulkReceiptDraftItem } from './BulkReceiptDraftItem'
 
 const MAX_FILES = 50
@@ -154,6 +155,10 @@ function createDraft(file, index, existingCount) {
     amount: '',
     description: '',
     validationErrors: [],
+    analysisStatus: 'idle',
+    analysisResult: null,
+    analysisError: '',
+    analysisWarnings: [],
     isExpanded: false,
   }
 
@@ -182,6 +187,7 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
   const pendingCount = drafts.filter((draft) => draft.uploadStatus === 'pending').length
   const uploadedCount = drafts.filter((draft) => draft.uploadStatus === 'uploaded').length
   const readyToPostCount = drafts.filter((draft) => getDraftStatus(draft) === 'Bereit zur Verbuchung').length
+  const isAnalyzing = drafts.some((draft) => draft.analysisStatus === 'analyzing')
   const isBusy = isUploading || isPosting
   const hasUploadableFiles = pendingCount > 0 && !isBusy
   const canBookDrafts = readyToPostCount > 0 && !isBusy && Boolean(onBookDrafts)
@@ -311,6 +317,10 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
               uploadStatus: 'uploaded',
               storagePath,
               error: '',
+              analysisStatus: 'idle',
+              analysisResult: null,
+              analysisError: '',
+              analysisWarnings: [],
               isExpanded: true,
             })
             : currentDraft
@@ -329,6 +339,57 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
     }
 
     setIsUploading(false)
+  }
+
+  async function analyzeDraft(draftId) {
+    const draft = drafts.find((currentDraft) => currentDraft.id === draftId)
+
+    if (
+      !draft
+      || draft.uploadStatus !== 'uploaded'
+      || !draft.storagePath
+      || isAnalyzing
+      || isPosting
+    ) {
+      return
+    }
+
+    setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
+      currentDraft.id === draftId
+        ? {
+          ...currentDraft,
+          analysisStatus: 'analyzing',
+          analysisError: '',
+          analysisWarnings: [],
+        }
+        : currentDraft
+    )))
+
+    try {
+      const result = await analyzeCashReceipt({ storagePath: draft.storagePath })
+
+      setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
+        currentDraft.id === draftId
+          ? {
+            ...currentDraft,
+            analysisStatus: 'completed',
+            analysisResult: result.analysis,
+            analysisError: '',
+            analysisWarnings: result.warnings,
+          }
+          : currentDraft
+      )))
+    } catch (error) {
+      setDrafts((currentDrafts) => currentDrafts.map((currentDraft) => (
+        currentDraft.id === draftId
+          ? {
+            ...currentDraft,
+            analysisStatus: 'error',
+            analysisError: error.message || 'Beleganalyse fehlgeschlagen.',
+          }
+          : currentDraft
+      )))
+    }
   }
 
   async function bookReadyDrafts() {
@@ -486,9 +547,11 @@ export function BulkReceiptUpload({ events = [], onBookDrafts }) {
                   disabled={isBusy}
                   isMobile={isMobile}
                   formatFileSize={formatFileSize}
+                  analysisDisabled={isAnalyzing || isPosting}
                   onChange={updateDraft}
                   onRemove={removeDraft}
                   onToggle={toggleDraft}
+                  onAnalyze={analyzeDraft}
                 />
               )
             })}
