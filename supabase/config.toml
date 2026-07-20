@@ -386,6 +386,9 @@ verify_jwt = false
 [functions.membership-notifications]
 verify_jwt = false
 
+[functions.send-invoice-email]
+verify_jwt = false
+
 [functions.member-document-link]
 verify_jwt = false
 

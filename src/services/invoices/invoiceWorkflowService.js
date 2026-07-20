@@ -87,22 +87,14 @@ export async function sendInvoiceEmailService({
   const { blob, filename } = await buildInvoicePdfBlob(invoice)
   const pdfBase64 = await blobToBase64(blob)
 
-  const subject = reminder
-    ? `Zahlungserinnerung ${invoice.invoice_number}`
-    : `Rechnung ${invoice.invoice_number}`
-
-  const html = reminder
-    ? `<p>Hallo,</p><p>wir möchten freundlich an die offene Rechnung <strong>${invoice.invoice_number}</strong> erinnern.</p><p>Danke und sportliche Grüße<br/>Styrian Bastards Eishockey-Fanclub</p>`
-    : `<p>Hallo,</p><p>anbei senden wir die Rechnung <strong>${invoice.invoice_number}</strong>.</p><p>Danke und sportliche Grüße<br/>Styrian Bastards Eishockey-Fanclub</p>`
-
   const { data, error } = await supabase.functions.invoke('send-invoice-email', {
     body: {
-      to: invoice.customer_email,
-      subject,
-      html,
+      invoice_id: invoice.id,
+      reminder,
+      allow_resend: reminder ? Boolean(invoice.last_reminder_at) : Boolean(invoice.emailed_at),
       pdf_base64: pdfBase64,
       filename,
-      invoice_number: invoice.invoice_number,
+      mime_type: 'application/pdf',
     },
   })
 
