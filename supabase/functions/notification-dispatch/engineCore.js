@@ -3,7 +3,9 @@ export function dedupeRecipients(recipients) {
   const result = []
 
   for (const recipient of recipients) {
-    const key = recipient.auth_user_id
+    const key = recipient.invoice_id
+      ? `invoice:${recipient.invoice_id}`
+      : recipient.auth_user_id
       ? `auth:${recipient.auth_user_id}`
       : `member:${recipient.member_id || recipient.input_id || ''}`
 

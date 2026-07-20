@@ -25,7 +25,7 @@ import {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-internal-notification-secret, x-internal-actor-user-id',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
@@ -45,9 +45,10 @@ type Recipient = {
   auth_user_id: string | null
   member_id: string | null
   event_registration_id?: string | null
+  invoice_id?: string | null
   email?: string | null
   status?: string | null
-  source: 'auth_user' | 'member' | 'system' | 'event_registration'
+  source: 'auth_user' | 'member' | 'system' | 'event_registration' | 'invoice'
 }
 
 Deno.serve(async (req) => {
@@ -118,12 +119,20 @@ Deno.serve(async (req) => {
     }
 
     const body = await readJsonBody(req)
+    if (!isInternalRequest && hasInternalInvoiceFields(body)) {
+      return jsonResponse({ error: 'Rechnungsempfaenger und Anhaenge sind nur fuer interne Fachadapter erlaubt.' }, 403)
+    }
+
     const validation = validateDispatchPayload(body)
     if (!validation.ok) return jsonResponse({ error: validation.error }, validation.status)
 
     const payload = validation.value
     if (payload.recipientEventRegistrationIds.length > 0 && !isInternalRequest) {
       return jsonResponse({ error: 'Event-Registrierungsempfaenger sind nur fuer interne Fachadapter erlaubt.' }, 403)
+    }
+
+    if ((payload.recipientInvoiceIds.length > 0 || payload.attachments.length > 0) && !isInternalRequest) {
+      return jsonResponse({ error: 'Rechnungsempfaenger und Anhaenge sind nur fuer interne Fachadapter erlaubt.' }, 403)
     }
 
     const canCreateCommunication = isInternalRequest
@@ -363,7 +372,55 @@ async function resolveRecipients(adminClient: SupabaseClientLike, payload: any) 
     }
   }
 
+  if (payload.recipientInvoiceIds.length > 0) {
+    const { data, error } = await adminClient
+      .from('invoices')
+      .select('id, customer_email, status, member_id')
+      .in('id', payload.recipientInvoiceIds)
+
+    if (error) return { error: 'Rechnungsempfaenger konnten nicht geladen werden.', status: 500, recipients: [] }
+
+    const invoiceById = new Map((data || []).map((invoice: any) => [invoice.id, invoice]))
+    const memberIds = [...new Set((data || []).map((invoice: any) => invoice.member_id).filter(Boolean))]
+    const memberById = await loadMembersById(adminClient, memberIds)
+
+    for (const invoiceId of payload.recipientInvoiceIds) {
+      const invoice = invoiceById.get(invoiceId)
+      const member = invoice?.member_id ? memberById.get(invoice.member_id) : null
+      recipients.push({
+        input_id: invoiceId,
+        auth_user_id: member?.auth_user_id || null,
+        member_id: member?.id || invoice?.member_id || null,
+        invoice_id: invoice?.id || invoiceId,
+        email: invoice?.customer_email || null,
+        status: member?.status || null,
+        source: 'invoice',
+      })
+    }
+  }
+
   return { recipients: dedupeRecipients(recipients) }
+}
+
+async function loadMembersById(adminClient: SupabaseClientLike, memberIds: string[]) {
+  const result = new Map<string, any>()
+  if (memberIds.length === 0) return result
+
+  const { data, error } = await adminClient
+    .from('members')
+    .select('id, auth_user_id, email, status')
+    .in('id', memberIds)
+
+  if (error) {
+    console.error('notification-dispatch member lookup failed', { error: error.message })
+    return result
+  }
+
+  for (const member of data || []) {
+    if (member.id && !result.has(member.id)) result.set(member.id, member)
+  }
+
+  return result
 }
 
 async function loadMembersByEmail(adminClient: SupabaseClientLike, emails: string[]) {
@@ -602,7 +659,8 @@ async function deliverEmail(adminClient: SupabaseClientLike, { jobId, payload, r
         replyToEmail: emailConfig.replyToEmail,
         to: normalizedEmail,
         email,
-        idempotencyKey: `${jobId}:email:${recipient.auth_user_id || recipient.member_id || normalizedEmail}`,
+        idempotencyKey: `${jobId}:email:${recipient.auth_user_id || recipient.member_id || recipient.event_registration_id || recipient.invoice_id || 'recipient'}`,
+        attachments: payload.attachments,
       })
 
       if (!result.ok) {
@@ -700,9 +758,10 @@ async function writeLog(adminClient: SupabaseClientLike, { jobId, channel, recip
   const payload = {
     job_id: jobId,
     channel,
-    member_id: recipient.member_id,
-    auth_user_id: recipient.auth_user_id,
+    member_id: recipient.invoice_id ? null : recipient.member_id,
+    auth_user_id: recipient.invoice_id ? null : recipient.auth_user_id,
     event_registration_id: recipient.event_registration_id || null,
+    invoice_id: recipient.invoice_id || null,
     email: emailMasked || null,
     status,
     http_status: httpStatus || null,
@@ -736,7 +795,9 @@ async function hasDeliveredLog(adminClient: SupabaseClientLike, jobId: string, r
     .eq('status', 'delivered')
     .limit(1)
 
-  if (recipient.auth_user_id) {
+  if (recipient.invoice_id) {
+    query = query.eq('invoice_id', recipient.invoice_id)
+  } else if (recipient.auth_user_id) {
     query = query.eq('auth_user_id', recipient.auth_user_id)
   } else if (recipient.member_id) {
     query = query.eq('member_id', recipient.member_id)
@@ -860,6 +921,15 @@ function isDuplicateError(error: unknown) {
       (error as { code?: string }).code === '23505'
       || String((error as { message?: string }).message || '').includes('duplicate key')
     )
+}
+
+function hasInternalInvoiceFields(body: unknown) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false
+  return [
+    'recipient_invoice_id',
+    'recipient_invoice_ids',
+    'attachments',
+  ].some((key) => Object.prototype.hasOwnProperty.call(body, key))
 }
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {

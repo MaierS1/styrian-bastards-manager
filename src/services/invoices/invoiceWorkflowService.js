@@ -108,19 +108,9 @@ export async function sendInvoiceEmailService({
     return
   }
 
-  const updatePayload = reminder
-    ? {
-        last_reminder_at: new Date().toISOString(),
-        reminder_count: Number(invoice.reminder_count || 0) + 1,
-      }
-    : {
-        emailed_at: new Date().toISOString(),
-      }
-
-  await supabase.from('invoices').update(updatePayload).eq('id', invoice.id)
-
   await createAuditLog(reminder ? 'send_invoice_reminder' : 'send_invoice_email', 'invoices', invoice.id, invoice, {
-    to: invoice.customer_email,
+    notification_job_id: data?.notification_job_id || null,
+    existing: data?.existing === true,
   })
 
   await loadInvoices()

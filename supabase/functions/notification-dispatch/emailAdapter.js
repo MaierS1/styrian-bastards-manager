@@ -46,6 +46,14 @@ export function isRequiredEmailNotification(payload) {
         'membership_fee_payment_confirmed_test',
       ].includes(payload.type)
     )
+    || (
+      payload.category === 'invoice'
+      && [
+        'invoice_issued',
+        'invoice_resent',
+        'invoice_reminder',
+      ].includes(payload.type)
+    )
 }
 
 export function shouldDeliverEmail({ payload, recipient, preference }) {
@@ -124,6 +132,7 @@ export async function sendEmailWithResend({
   to,
   email,
   idempotencyKey,
+  attachments = [],
 }) {
   if (!resendApiKey || !fromEmail) {
     return {
@@ -150,6 +159,13 @@ export async function sendEmailWithResend({
       subject: email.subject,
       html: email.html,
       text: email.text,
+      ...(attachments.length > 0 ? {
+        attachments: attachments.map((attachment) => ({
+          filename: attachment.filename,
+          content: attachment.contentBase64,
+          content_type: attachment.contentType,
+        })),
+      } : {}),
       ...(replyToEmail ? { reply_to: replyToEmail } : {}),
     }),
   })

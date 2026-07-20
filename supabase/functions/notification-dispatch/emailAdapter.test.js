@@ -125,6 +125,31 @@ test('transactional membership fee email bypasses optional email preference', ()
   }).deliver, true)
 })
 
+test('transactional invoice email bypasses optional email preference', () => {
+  assert.equal(shouldDeliverEmail({
+    payload: {
+      ...payload,
+      type: 'invoice_issued',
+      category: 'invoice',
+      priority: 'normal',
+    },
+    recipient: activeRecipient,
+    preference: null,
+  }).deliver, true)
+
+  assert.equal(shouldDeliverEmail({
+    payload: {
+      ...payload,
+      type: 'invoice_reminder',
+      category: 'invoice',
+      priority: 'high',
+    },
+    recipient: activeRecipient,
+    preference: { enabled: false },
+  }).deliver, true)
+})
+
+
 test('builds escaped html, plain text, and safe cta links', () => {
   const email = buildNotificationEmail({
     payload,
@@ -167,6 +192,13 @@ test('sends email through Resend with sanitized request shape and idempotency he
     to: 'user@example.test',
     email,
     idempotencyKey: 'job-1:email:user-1',
+    attachments: [
+      {
+        filename: 'Rechnung_2026-001.pdf',
+        contentBase64: 'JVBERi0xLjQgdGVzdA==',
+        contentType: 'application/pdf',
+      },
+    ],
   })
 
   assert.equal(result.ok, true)
@@ -177,6 +209,13 @@ test('sends email through Resend with sanitized request shape and idempotency he
   assert.equal(requestBody.reply_to, 'reply@example.test')
   assert.equal(requestBody.html, email.html)
   assert.equal(requestBody.text, email.text)
+  assert.deepEqual(requestBody.attachments, [
+    {
+      filename: 'Rechnung_2026-001.pdf',
+      content: 'JVBERi0xLjQgdGVzdA==',
+      content_type: 'application/pdf',
+    },
+  ])
 })
 
 test('normalizes Resend configuration and provider failures', async () => {

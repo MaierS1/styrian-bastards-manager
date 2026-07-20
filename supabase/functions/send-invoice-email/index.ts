@@ -1,10 +1,13 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import {
-  buildInvoiceEmail,
-  maskEmail,
   validateInvoiceEmailPayload,
   validateInvoiceForSending,
 } from './validation.js'
+import {
+  buildInvoiceNotificationPayload,
+  buildInvoiceUpdatePayload,
+  dispatchInvoiceNotification,
+} from '../_shared/invoiceNotificationService.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,16 +40,19 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const resendApiKey = Deno.env.get('RESEND_API_KEY')
-    const fromEmail = Deno.env.get('FROM_EMAIL') || 'Styrian Bastards <noreply@example.com>'
+    const internalNotificationSecret = Deno.env.get('INTERNAL_NOTIFICATION_SECRET') || ''
 
-    if (!supabaseUrl || !anonKey || !serviceRoleKey || !resendApiKey) {
+    if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       console.error('invoice-email configuration missing', {
         hasSupabaseUrl: Boolean(supabaseUrl),
         hasAnonKey: Boolean(anonKey),
         hasServiceRoleKey: Boolean(serviceRoleKey),
-        hasResendApiKey: Boolean(resendApiKey),
       })
+      return jsonResponse({ error: 'E-Mail-Versand ist aktuell nicht verfuegbar.' }, 500)
+    }
+
+    if (!internalNotificationSecret) {
+      console.error('invoice-email internal notification secret missing')
       return jsonResponse({ error: 'E-Mail-Versand ist aktuell nicht verfuegbar.' }, 500)
     }
 
@@ -134,7 +140,11 @@ Deno.serve(async (req) => {
         emailed_at,
         last_reminder_at,
         reminder_count,
-        pdf_url
+        pdf_url,
+        issue_date,
+        due_date,
+        total_amount,
+        updated_at
       `)
       .eq('id', payload.invoiceId)
       .maybeSingle()
@@ -166,12 +176,15 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: invoiceValidation.error }, invoiceValidation.status)
     }
 
-    const message = buildInvoiceEmail({
+    const payloadResult = buildInvoiceNotificationPayload({
       invoice,
       reminder: payload.reminder,
+      allowResend: payload.allowResend,
+      pdfBase64: payload.pdfBase64,
+      mimeType: payload.mimeType,
     })
 
-    if (!message.ok) {
+    if (!payloadResult.ok) {
       await logInvoiceEmailAttempt({
         adminClient,
         status: 'failed',
@@ -180,39 +193,27 @@ Deno.serve(async (req) => {
         errorCode: 'invalid_invoice_content',
         startedAt,
       })
-      return jsonResponse({ error: message.error }, message.status)
+      return jsonResponse({ error: payloadResult.error }, payloadResult.status)
     }
 
-    const resendResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: [invoice.customer_email],
-        subject: message.subject,
-        html: message.html,
-        attachments: [
-          {
-            filename: payload.filename,
-            content: payload.pdfBase64,
-          },
-        ],
-      }),
+    const dispatchResult = await dispatchInvoiceNotification({
+      notificationDispatchUrl: `${supabaseUrl}/functions/v1/notification-dispatch`,
+      internalSecret: internalNotificationSecret,
+      actorUserId: user.id,
+      payload: payloadResult.value,
     })
 
-    const resendResult = await safeReadJson(resendResponse)
-
-    if (!resendResponse.ok) {
-      console.error('invoice-email resend failed', {
+    if (
+      !dispatchResult.ok
+      || Number(dispatchResult.data?.failed_count || 0) > 0
+      || (dispatchResult.data?.existing !== true && Number(dispatchResult.data?.delivered_count || 0) === 0)
+    ) {
+      console.error('invoice-email notification dispatch failed', {
         userId,
         invoiceId: payload.invoiceId,
-        recipient: maskEmail(invoice.customer_email),
-        httpStatus: resendResponse.status,
-        providerCode: getProviderCode(resendResult),
-        providerMessage: getProviderMessage(resendResult),
+        status: dispatchResult.status,
+        failedCount: dispatchResult.data?.failed_count || 0,
+        skippedCount: dispatchResult.data?.skipped_count || 0,
       })
 
       await logInvoiceEmailAttempt({
@@ -220,40 +221,27 @@ Deno.serve(async (req) => {
         status: 'failed',
         userId,
         invoiceId: payload.invoiceId,
-        recipientEmail: invoice.customer_email,
-        errorCode: 'resend_failed',
-        providerResponse: {
-          http_status: resendResponse.status,
-          code: getProviderCode(resendResult),
-        },
+        errorCode: 'notification_dispatch_failed',
         startedAt,
       })
 
       return jsonResponse({ error: 'E-Mail konnte nicht gesendet werden.' }, 500)
     }
 
-    const resendMessageId = getResendMessageId(resendResult)
-    const now = new Date().toISOString()
-    const updatePayload = payload.reminder
-      ? {
-          last_reminder_at: now,
-          reminder_count: Number(invoice.reminder_count || 0) + 1,
-        }
-      : {
-          emailed_at: now,
-        }
+    const updatePayload = buildInvoiceUpdatePayload({ invoice, reminder: payload.reminder, dispatchResult })
+    if (updatePayload) {
+      const { error: updateError } = await adminClient
+        .from('invoices')
+        .update(updatePayload)
+        .eq('id', payload.invoiceId)
 
-    const { error: updateError } = await adminClient
-      .from('invoices')
-      .update(updatePayload)
-      .eq('id', payload.invoiceId)
-
-    if (updateError) {
-      console.error('invoice-email status update failed', {
-        userId,
-        invoiceId: payload.invoiceId,
-        error: updateError.message,
-      })
+      if (updateError) {
+        console.error('invoice-email status update failed', {
+          userId,
+          invoiceId: payload.invoiceId,
+          error: updateError.message,
+        })
+      }
     }
 
     await logInvoiceEmailAttempt({
@@ -261,8 +249,6 @@ Deno.serve(async (req) => {
       status: 'sent',
       userId,
       invoiceId: payload.invoiceId,
-      recipientEmail: invoice.customer_email,
-      resendMessageId,
       startedAt,
     })
 
@@ -270,7 +256,13 @@ Deno.serve(async (req) => {
       success: true,
       invoice_id: payload.invoiceId,
       reminder: payload.reminder,
-      resend_message_id: resendMessageId,
+      notification_type: payloadResult.value.type,
+      notification_job_id: dispatchResult.data?.job_id || null,
+      existing: dispatchResult.data?.existing === true,
+      recipient_count: dispatchResult.data?.recipient_count || 0,
+      delivered_count: dispatchResult.data?.delivered_count || 0,
+      skipped_count: dispatchResult.data?.skipped_count || 0,
+      failed_count: dispatchResult.data?.failed_count || 0,
     })
   } catch (error) {
     console.error('invoice-email unexpected failure', {
@@ -303,52 +295,19 @@ async function readJsonBody(req: Request) {
   }
 }
 
-async function safeReadJson(response: Response) {
-  try {
-    return await response.json()
-  } catch {
-    return null
-  }
-}
-
-function getProviderCode(result: unknown) {
-  return typeof result === 'object' && result && 'name' in result
-    ? String((result as Record<string, unknown>).name || '')
-    : null
-}
-
-function getProviderMessage(result: unknown) {
-  return typeof result === 'object' && result && 'message' in result
-    ? String((result as Record<string, unknown>).message || '')
-    : null
-}
-
-function getResendMessageId(result: unknown) {
-  if (!result || typeof result !== 'object') return null
-
-  const id = (result as Record<string, unknown>).id
-  return typeof id === 'string' && id.trim() ? id : null
-}
-
 async function logInvoiceEmailAttempt({
   adminClient,
   status,
   userId,
   invoiceId,
-  recipientEmail,
-  resendMessageId,
   errorCode,
-  providerResponse,
   startedAt,
 }: {
   adminClient: SupabaseClientLike
   status: 'sent' | 'failed'
   userId: string | null
   invoiceId: string | null
-  recipientEmail?: string
-  resendMessageId?: string | null
   errorCode?: string
-  providerResponse?: Record<string, unknown>
   startedAt: string
 }) {
   const logPayload = {
@@ -360,10 +319,8 @@ async function logInvoiceEmailAttempt({
       channel: 'email',
       status,
       user_id: userId,
-      recipient_masked: recipientEmail ? maskEmail(recipientEmail) : null,
+      recipient_masked: null,
       error_code: errorCode || null,
-      resend_message_id: resendMessageId || null,
-      provider_response: providerResponse || null,
       attempted_at: startedAt,
     },
     user_id: userId,

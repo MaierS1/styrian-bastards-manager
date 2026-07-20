@@ -1,6 +1,4 @@
-export const MAX_SUBJECT_LENGTH = 160
 export const MAX_FILENAME_LENGTH = 140
-export const MAX_HTML_LENGTH = 12000
 export const MAX_PDF_BYTES = 8 * 1024 * 1024
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -94,6 +92,10 @@ export function validatePdfBase64(value) {
     return { ok: false, status: 400, error: 'PDF ist zu gross.' }
   }
 
+  if (!hasPdfSignature(normalized)) {
+    return { ok: false, status: 400, error: 'PDF-Signatur ist ungueltig.' }
+  }
+
   return { ok: true, bytes }
 }
 
@@ -101,22 +103,60 @@ export function isValidEmail(value) {
   return EMAIL_PATTERN.test(String(value || '').trim())
 }
 
-export function buildInvoiceEmail({ invoice, reminder }) {
+export function buildInvoiceNotificationMessage({ invoice, reminder, resent }) {
   const invoiceNumber = String(invoice?.invoice_number || '').trim()
+  const amount = formatCurrency(invoice?.total_amount)
+  const dueDate = invoice?.due_date ? formatDate(invoice.due_date) : null
+  const issueDate = invoice?.issue_date ? formatDate(invoice.issue_date) : null
 
-  const subject = reminder
-    ? `Zahlungserinnerung ${invoiceNumber}`
-    : `Rechnung ${invoiceNumber}`
-
-  const html = reminder
-    ? `<p>Hallo,</p><p>wir moechten freundlich an die offene Rechnung <strong>${escapeHtml(invoiceNumber)}</strong> erinnern.</p><p>Danke und sportliche Gruesse<br/>Styrian Bastards Eishockey-Fanclub</p>`
-    : `<p>Hallo,</p><p>anbei senden wir die Rechnung <strong>${escapeHtml(invoiceNumber)}</strong>.</p><p>Danke und sportliche Gruesse<br/>Styrian Bastards Eishockey-Fanclub</p>`
-
-  if (!invoiceNumber || subject.length > MAX_SUBJECT_LENGTH || html.length > MAX_HTML_LENGTH) {
+  if (!invoiceNumber) {
     return { ok: false, status: 400, error: 'Rechnungsinhalt ist ungueltig.' }
   }
 
-  return { ok: true, subject, html }
+  const title = reminder
+    ? `Zahlungserinnerung zu Rechnung ${invoiceNumber}`
+    : resent
+      ? `Rechnung ${invoiceNumber} erneut zugesendet`
+      : `Rechnung ${invoiceNumber}`
+
+  const message = reminder
+    ? [
+        'Hallo,',
+        '',
+        `wir moechten freundlich an die offene Rechnung ${invoiceNumber} erinnern.`,
+        `Betrag: ${amount}`,
+        dueDate ? `Faellig am: ${dueDate}` : '',
+        '',
+        'Die Rechnung ist als PDF angehaengt.',
+        '',
+        'Danke und sportliche Gruesse',
+        'Styrian Bastards Eishockey-Fanclub',
+      ].filter(Boolean).join('\n')
+    : [
+        'Hallo,',
+        '',
+        `anbei senden wir die Rechnung ${invoiceNumber}.`,
+        issueDate ? `Rechnungsdatum: ${issueDate}` : '',
+        `Betrag: ${amount}`,
+        dueDate ? `Faellig am: ${dueDate}` : '',
+        '',
+        'Die Rechnung ist als PDF angehaengt.',
+        '',
+        'Danke und sportliche Gruesse',
+        'Styrian Bastards Eishockey-Fanclub',
+      ].filter(Boolean).join('\n')
+
+  return { ok: true, title, message }
+}
+
+export function buildSafeInvoiceFilename(invoice) {
+  const number = String(invoice?.invoice_number || 'rechnung')
+    .replace(/[^A-Za-z0-9._ -]/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 100)
+    || 'rechnung'
+
+  return `Rechnung_${number}.pdf`
 }
 
 export function validateInvoiceForSending({ invoice, reminder, allowResend }) {
@@ -160,11 +200,29 @@ export function maskEmail(value) {
   return `${visibleLocal}@${domain}`
 }
 
-function escapeHtml(value) {
-  return String(value || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
+function hasPdfSignature(value) {
+  try {
+    const prefix = atob(value.slice(0, 16))
+    return prefix.startsWith('%PDF-')
+  } catch {
+    return false
+  }
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat('de-AT', {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(Number(value || 0))
+}
+
+function formatDate(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return String(value || '')
+
+  return new Intl.DateTimeFormat('de-AT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date)
 }

@@ -102,6 +102,41 @@ test('accepts event registration recipients as a distinct server-side target typ
   assert.deepEqual(result.value.recipientEventRegistrationIds, ['33333333-3333-4333-8333-333333333333'])
 })
 
+test('accepts invoice recipients and one validated pdf attachment as internal target data', () => {
+  const result = validateDispatchPayload({
+    ...createPayload({ recipient_user_id: undefined, channels: ['email'], category: 'invoice' }),
+    type: 'invoice_issued',
+    recipient_invoice_id: '44444444-4444-4444-8444-444444444444',
+    attachments: [
+      {
+        filename: 'Rechnung_2026-001.pdf',
+        contentBase64: 'JVBERi0xLjQgdGVzdA==',
+        contentType: 'application/pdf',
+      },
+    ],
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.value.recipientInvoiceIds, ['44444444-4444-4444-8444-444444444444'])
+  assert.equal(result.value.attachments[0].filename, 'Rechnung_2026-001.pdf')
+})
+
+test('rejects unsafe invoice attachments', () => {
+  assert.equal(validateDispatchPayload({
+    ...createPayload({ recipient_user_id: undefined, channels: ['email'], category: 'invoice' }),
+    type: 'invoice_issued',
+    recipient_invoice_id: '44444444-4444-4444-8444-444444444444',
+    attachments: [{ filename: '../rechnung.pdf', contentBase64: 'JVBERi0xLjQgdGVzdA==', contentType: 'application/pdf' }],
+  }).status, 400)
+
+  assert.equal(validateDispatchPayload({
+    ...createPayload({ recipient_user_id: undefined, channels: ['email'], category: 'invoice' }),
+    type: 'invoice_issued',
+    recipient_invoice_id: '44444444-4444-4444-8444-444444444444',
+    attachments: [{ filename: 'rechnung.pdf', contentBase64: 'bm90IGEgcGRm', contentType: 'application/pdf' }],
+  }).status, 400)
+})
+
 test('marks administrative dispatches that require communication.create', () => {
   assert.equal(requiresCommunicationCreate(validateDispatchPayload(createPayload()).value), false)
   assert.equal(requiresCommunicationCreate(validateDispatchPayload(createPayload({ priority: 'critical' })).value), true)

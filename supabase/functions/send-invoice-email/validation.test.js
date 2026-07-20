@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   MAX_PDF_BYTES,
-  buildInvoiceEmail,
+  buildInvoiceNotificationMessage,
+  buildSafeInvoiceFilename,
   maskEmail,
   validateInvoiceEmailPayload,
   validateInvoiceForSending,
@@ -70,6 +71,7 @@ test('rejects non-pdf mime type and invalid base64', () => {
   assert.equal(validateInvoiceEmailPayload(createPayload({ mime_type: 'text/html' })).status, 400)
   assert.equal(validateInvoiceEmailPayload(createPayload({ pdf_base64: 'data:application/pdf;base64,abc' })).status, 400)
   assert.equal(validateInvoiceEmailPayload(createPayload({ pdf_base64: 'not base64' })).status, 400)
+  assert.equal(validateInvoiceEmailPayload(createPayload({ pdf_base64: 'bm90IGEgcGRm' })).status, 400)
 })
 
 test('rejects too large pdf payloads', () => {
@@ -120,11 +122,26 @@ test('requires explicit resend for duplicate invoice and reminder emails', () =>
   }).status, 409)
 })
 
-test('builds server-side invoice email and masks recipient for logs', () => {
-  const result = buildInvoiceEmail({ invoice: createInvoice(), reminder: false })
+test('builds server-side invoice notification text and masks recipient for logs', () => {
+  const result = buildInvoiceNotificationMessage({ invoice: createInvoice(), reminder: false, resent: false })
 
   assert.equal(result.ok, true)
-  assert.equal(result.subject, 'Rechnung 2026-001')
-  assert.match(result.html, /2026-001/)
+  assert.equal(result.title, 'Rechnung 2026-001')
+  assert.match(result.message, /2026-001/)
   assert.equal(maskEmail('kunde@example.com'), 'ku***@example.com')
+})
+
+test('builds notification message and safe invoice filename server-side', () => {
+  const invoice = createInvoice({
+    invoice_number: '2026/001',
+    issue_date: '2026-07-20',
+    due_date: '2026-08-01',
+    total_amount: 123.45,
+  })
+  const message = buildInvoiceNotificationMessage({ invoice, reminder: true, resent: false })
+
+  assert.equal(message.ok, true)
+  assert.match(message.title, /Zahlungserinnerung/)
+  assert.match(message.message, /123,45/)
+  assert.equal(buildSafeInvoiceFilename(invoice), 'Rechnung_2026_001.pdf')
 })

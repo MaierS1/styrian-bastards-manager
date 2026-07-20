@@ -5,6 +5,7 @@ export const MAX_MESSAGE_LENGTH = 4000
 export const MAX_TYPE_LENGTH = 80
 export const MAX_METADATA_BYTES = 8192
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 180
+export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
 
 export const SUPPORTED_CHANNELS = ['in_app', 'email']
 export const KNOWN_CHANNELS = ['in_app', 'email', 'push']
@@ -23,9 +24,11 @@ const ALLOWED_KEYS = new Set([
   'recipient_user_id',
   'recipient_member_id',
   'recipient_event_registration_id',
+  'recipient_invoice_id',
   'recipient_user_ids',
   'recipient_member_ids',
   'recipient_event_registration_ids',
+  'recipient_invoice_ids',
   'system_wide',
   'source',
   'url',
@@ -33,6 +36,7 @@ const ALLOWED_KEYS = new Set([
   'scheduled_at',
   'idempotency_key',
   'metadata',
+  'attachments',
 ])
 
 const ALLOWED_SOURCE_KEYS = new Set(['module', 'entity_type', 'entity_id'])
@@ -86,6 +90,9 @@ export function validateDispatchPayload(body) {
   if (!isPlainObject(metadata)) return invalid(400, 'metadata ist ungueltig.')
   if (jsonByteSize(metadata) > MAX_METADATA_BYTES) return invalid(400, 'metadata ist zu gross.')
 
+  const attachmentResult = validateAttachments(body.attachments)
+  if (!attachmentResult.ok) return attachmentResult
+
   const recipientResult = normalizeRecipients(body)
   if (!recipientResult.ok) return recipientResult
 
@@ -93,6 +100,7 @@ export function validateDispatchPayload(body) {
     recipientResult.recipientUserIds.length > 0,
     recipientResult.recipientMemberIds.length > 0,
     recipientResult.recipientEventRegistrationIds.length > 0,
+    recipientResult.recipientInvoiceIds.length > 0,
     systemWide,
   ].filter(Boolean).length
 
@@ -103,6 +111,7 @@ export function validateDispatchPayload(body) {
   const explicitRecipientCount = recipientResult.recipientUserIds.length
     + recipientResult.recipientMemberIds.length
     + recipientResult.recipientEventRegistrationIds.length
+    + recipientResult.recipientInvoiceIds.length
   if (explicitRecipientCount > MAX_RECIPIENTS) return invalid(429, 'Zu viele Empfaenger.')
 
   return {
@@ -116,6 +125,7 @@ export function validateDispatchPayload(body) {
       recipientUserIds: recipientResult.recipientUserIds,
       recipientMemberIds: recipientResult.recipientMemberIds,
       recipientEventRegistrationIds: recipientResult.recipientEventRegistrationIds,
+      recipientInvoiceIds: recipientResult.recipientInvoiceIds,
       systemWide,
       source: sourceResult.value,
       url,
@@ -123,13 +133,14 @@ export function validateDispatchPayload(body) {
       scheduledAt,
       idempotencyKey,
       metadata,
+      attachments: attachmentResult.value,
     },
   }
 }
 
 export function requiresCommunicationCreate(payload) {
   return payload.systemWide
-    || payload.recipientUserIds.length + payload.recipientMemberIds.length + payload.recipientEventRegistrationIds.length > 1
+    || payload.recipientUserIds.length + payload.recipientMemberIds.length + payload.recipientEventRegistrationIds.length + payload.recipientInvoiceIds.length > 1
     || ['high', 'critical'].includes(payload.priority)
 }
 
@@ -138,6 +149,7 @@ export function buildTargetType(payload) {
   if (payload.recipientUserIds.length === 1) return 'user'
   if (payload.recipientMemberIds.length === 1) return 'member'
   if (payload.recipientEventRegistrationIds.length === 1) return 'event_registration'
+  if (payload.recipientInvoiceIds.length === 1) return 'invoice'
   return 'explicit'
 }
 
@@ -146,6 +158,7 @@ export function buildTargetPayload(payload) {
     recipient_user_ids: payload.recipientUserIds,
     recipient_member_ids: payload.recipientMemberIds,
     recipient_event_registration_ids: payload.recipientEventRegistrationIds,
+    recipient_invoice_ids: payload.recipientInvoiceIds,
     system_wide: payload.systemWide,
   }
 }
@@ -162,6 +175,7 @@ export function buildStableIdempotencyKey(payload) {
     payload.recipientUserIds.join(','),
     payload.recipientMemberIds.join(','),
     payload.recipientEventRegistrationIds.join(','),
+    payload.recipientInvoiceIds.join(','),
     payload.systemWide ? 'system' : '',
   ].join('|')
 }
@@ -170,6 +184,7 @@ function normalizeRecipients(body) {
   const recipientUserIds = []
   const recipientMemberIds = []
   const recipientEventRegistrationIds = []
+  const recipientInvoiceIds = []
 
   if (body.recipient_user_id !== undefined) {
     const id = normalizeText(body.recipient_user_id)
@@ -187,6 +202,12 @@ function normalizeRecipients(body) {
     const id = normalizeText(body.recipient_event_registration_id)
     if (!UUID_PATTERN.test(id)) return invalid(400, 'recipient_event_registration_id ist ungueltig.')
     recipientEventRegistrationIds.push(id)
+  }
+
+  if (body.recipient_invoice_id !== undefined) {
+    const id = normalizeText(body.recipient_invoice_id)
+    if (!UUID_PATTERN.test(id)) return invalid(400, 'recipient_invoice_id ist ungueltig.')
+    recipientInvoiceIds.push(id)
   }
 
   if (body.recipient_user_ids !== undefined) {
@@ -216,11 +237,21 @@ function normalizeRecipients(body) {
     }
   }
 
+  if (body.recipient_invoice_ids !== undefined) {
+    if (!Array.isArray(body.recipient_invoice_ids)) return invalid(400, 'recipient_invoice_ids ist ungueltig.')
+    for (const value of body.recipient_invoice_ids) {
+      const id = normalizeText(value)
+      if (!UUID_PATTERN.test(id)) return invalid(400, 'recipient_invoice_ids enthaelt ungueltige IDs.')
+      recipientInvoiceIds.push(id)
+    }
+  }
+
   return {
     ok: true,
     recipientUserIds: [...new Set(recipientUserIds)],
     recipientMemberIds: [...new Set(recipientMemberIds)],
     recipientEventRegistrationIds: [...new Set(recipientEventRegistrationIds)],
+    recipientInvoiceIds: [...new Set(recipientInvoiceIds)],
   }
 }
 
@@ -242,6 +273,71 @@ function validateSource(source) {
   }
 
   return { ok: true, value }
+}
+
+function validateAttachments(attachments) {
+  if (attachments === undefined) return { ok: true, value: [] }
+  if (!Array.isArray(attachments)) return invalid(400, 'attachments ist ungueltig.')
+  if (attachments.length > 1) return invalid(400, 'Nur ein Anhang ist erlaubt.')
+
+  const result = []
+  for (const attachment of attachments) {
+    if (!isPlainObject(attachment)) return invalid(400, 'attachment ist ungueltig.')
+
+    const unknownKeys = Object.keys(attachment).filter((key) => !['filename', 'contentBase64', 'contentType'].includes(key))
+    if (unknownKeys.length > 0) return invalid(400, 'attachment enthaelt unerwartete Felder.')
+
+    const filename = normalizeText(attachment.filename)
+    const contentBase64 = normalizeText(attachment.contentBase64)
+    const contentType = normalizeText(attachment.contentType).toLowerCase()
+
+    if (contentType !== 'application/pdf') return invalid(400, 'Nur PDF-Anhaenge sind erlaubt.')
+    if (!isSafePdfFilename(filename)) return invalid(400, 'Ungueltiger PDF-Dateiname.')
+
+    const pdfValidation = validatePdfBase64(contentBase64)
+    if (!pdfValidation.ok) return pdfValidation
+
+    result.push({
+      filename,
+      contentBase64,
+      contentType,
+      bytes: pdfValidation.bytes,
+    })
+  }
+
+  return { ok: true, value: result }
+}
+
+function validatePdfBase64(value) {
+  if (!value) return invalid(400, 'PDF ist erforderlich.')
+  if (value.startsWith('data:')) return invalid(400, 'PDF muss als reiner Base64-Inhalt uebergeben werden.')
+  if (/\s/.test(value) || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+    return invalid(400, 'PDF ist kein gueltiger Base64-Inhalt.')
+  }
+
+  const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0
+  const bytes = Math.floor((value.length * 3) / 4) - padding
+  if (bytes <= 0) return invalid(400, 'PDF ist leer.')
+  if (bytes > MAX_ATTACHMENT_BYTES) return invalid(400, 'PDF ist zu gross.')
+  if (!hasPdfSignature(value)) return invalid(400, 'PDF-Signatur ist ungueltig.')
+
+  return { ok: true, bytes }
+}
+
+function hasPdfSignature(value) {
+  try {
+    const prefix = atob(value.slice(0, 16))
+    return prefix.startsWith('%PDF-')
+  } catch {
+    return false
+  }
+}
+
+function isSafePdfFilename(value) {
+  return /^[A-Za-z0-9._ -]+\.pdf$/i.test(value)
+    && value.length <= 140
+    && !value.includes('..')
+    && !/[\\/\0\r\n]/.test(value)
 }
 
 function isSafeInternalUrl(value) {

@@ -31,7 +31,7 @@ Empfaengerarten: `recipient_user_id`, `recipient_member_id`, `recipient_user_ids
 
 Freie Transportfelder wie `to`, `from`, `subject` oder `html` sind nicht erlaubt. E-Mail-Empfaenger werden serverseitig aus `members.email` oder, fuer reine Auth-User ohne Mitgliedsdatensatz, aus Supabase Auth aufgeloest.
 
-Fachadapter koennen serverseitig `recipient_event_registration_id` verwenden. Dieser Empfaengertyp ist in `notification-dispatch` nur mit `INTERNAL_NOTIFICATION_SECRET` erlaubt und dient der sicheren Migration oeffentlicher Event-Gastregistrierungen ohne freie Empfaengeradresse.
+Fachadapter koennen serverseitig `recipient_event_registration_id` oder `recipient_invoice_id` verwenden. Diese Empfaengertypen sind in `notification-dispatch` nur mit `INTERNAL_NOTIFICATION_SECRET` erlaubt und dienen der sicheren Migration oeffentlicher Event-Gastregistrierungen sowie externer Rechnungsempfaenger ohne freie Empfaengeradresse.
 
 ## Berechtigungsmodell
 
@@ -68,6 +68,14 @@ Migrierte Mitgliedsbeitrags-Typen:
 
 Diese Typen sind required, weil die bisherigen manuell ausgeloesten Beitragsmails direkt und ohne Preference-Gate per Resend versendet wurden. Der Fachadapter `membership-notifications` bleibt als rueckwaertskompatibler Einstiegspunkt bestehen.
 
+Migrierte Rechnungstypen werden ebenfalls als transaktional required behandelt:
+
+- `invoice_issued`
+- `invoice_resent`
+- `invoice_reminder`
+
+Der Fachadapter `send-invoice-email` bleibt als rueckwaertskompatibler Einstiegspunkt bestehen und uebergibt PDF-Anhaenge nur intern.
+
 ## E-Mail-Adapter
 
 Der E-Mail-Adapter nutzt die bestehende Resend-Infrastruktur per `https://api.resend.com/emails`.
@@ -84,6 +92,8 @@ Das Template wird serverseitig aus `title`, `message`, `priority` und optional `
 
 Resend-Fehler werden normalisiert, z.B. `email_rate_limited`, `email_provider_unavailable`, `email_configuration_missing`, `email_send_failed` oder `timeout`. Providerdetails und Secrets werden nicht an den Client zurueckgegeben.
 
+Fuer Rechnungen unterstuetzt der E-Mail-Adapter genau einen internen PDF-Anhang. `attachments` ist nur fuer interne Fachadapter mit `INTERNAL_NOTIFICATION_SECRET` nutzbar, wird validiert und nicht in Jobs oder Logs gespeichert.
+
 ## Jobstatus
 
 Die bestehende Statusmenge wird wiederverwendet:
@@ -99,7 +109,7 @@ Die Job-Zaehler (`recipient_count`, `success_count`, `skipped_count`, `failure_c
 
 Pro Empfaenger und Kanal wird ein `notification_logs`-Eintrag geschrieben. Logs enthalten Job, Kanal, technische Statuswerte und knappe Fehlercodes, aber keine vollstaendigen Nachrichteninhalte. E-Mail-Adressen werden nur maskiert im Feld `email` gespeichert. Resend Message IDs werden datenschutzarm in `provider_response.resend_message_id` abgelegt.
 
-Erfolgreiche Deliveries sind pro Job, Kanal und Empfaenger eindeutig. Fuer Gast-Eventregistrierungen wird `notification_logs.event_registration_id` als eindeutiger Empfaengerbezug genutzt. Fehlgeschlagene oder uebersprungene Versuche koennen fuer spaetere Retry-Analysen mehrfach protokolliert werden. `attempt_count` und `last_attempt_at` bilden die minimale Retry-Grundlage; ein Scheduler oder Worker ist noch nicht enthalten.
+Erfolgreiche Deliveries sind pro Job, Kanal und Empfaenger eindeutig. Fuer Gast-Eventregistrierungen wird `notification_logs.event_registration_id` als eindeutiger Empfaengerbezug genutzt. Fuer externe Rechnungsempfaenger wird `notification_logs.invoice_id` genutzt. Fehlgeschlagene oder uebersprungene Versuche koennen fuer spaetere Retry-Analysen mehrfach protokolliert werden. `attempt_count` und `last_attempt_at` bilden die minimale Retry-Grundlage; ein Scheduler oder Worker ist noch nicht enthalten.
 
 ## Fehlercodes
 
@@ -155,6 +165,6 @@ Nicht enthalten:
 - Template-Platzhalter aus Clientdaten
 - komplexe Zielgruppenfilter
 
-`event-notifications` und `membership-notifications` sind auf die zentrale Engine migriert und bleiben als schmale fachliche Adapter bestehen. `send-invoice-email` und dessen Frontend-Aufrufer bleiben unveraendert.
+`event-notifications`, `membership-notifications` und `send-invoice-email` sind auf die zentrale Engine migriert und bleiben als schmale fachliche Adapter bestehen.
 
 Spaeter koennen Fachmodul-Trigger, Templateverwaltung, Retry-Worker und Push-Adapter hinter derselben Dispatch-Struktur ergaenzt werden.

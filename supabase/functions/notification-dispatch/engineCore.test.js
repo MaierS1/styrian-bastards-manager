@@ -23,6 +23,16 @@ test('deduplicates recipients by auth user first', () => {
   assert.equal(recipients.length, 2)
 })
 
+test('deduplicates invoice recipients by invoice before member', () => {
+  const recipients = dedupeRecipients([
+    { invoice_id: 'invoice-1', auth_user_id: 'user-1', member_id: 'member-1' },
+    { invoice_id: 'invoice-2', auth_user_id: 'user-1', member_id: 'member-1' },
+    { invoice_id: 'invoice-1', auth_user_id: 'user-1', member_id: 'member-1' },
+  ])
+
+  assert.equal(recipients.length, 2)
+})
+
 test('delivers active in-app recipient by default', () => {
   const decision = shouldDeliverInApp({
     payload,
