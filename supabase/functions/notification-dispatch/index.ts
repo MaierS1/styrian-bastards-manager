@@ -44,9 +44,10 @@ type Recipient = {
   input_id?: string
   auth_user_id: string | null
   member_id: string | null
+  event_registration_id?: string | null
   email?: string | null
   status?: string | null
-  source: 'auth_user' | 'member' | 'system'
+  source: 'auth_user' | 'member' | 'system' | 'event_registration'
 }
 
 Deno.serve(async (req) => {
@@ -62,6 +63,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const internalNotificationSecret = Deno.env.get('INTERNAL_NOTIFICATION_SECRET') || ''
     const emailConfig = {
       resendApiKey: Deno.env.get('RESEND_API_KEY') || '',
       fromEmail: Deno.env.get('FROM_EMAIL') || 'Styrian Bastards <mail@styrian-bastards.at>',
@@ -79,7 +81,11 @@ Deno.serve(async (req) => {
     }
 
     const authHeader = req.headers.get('Authorization') || ''
-    if (!authHeader.startsWith('Bearer ')) {
+    const internalHeader = req.headers.get('x-internal-notification-secret') || ''
+    const internalActorUserId = req.headers.get('x-internal-actor-user-id') || ''
+    const isInternalRequest = Boolean(internalNotificationSecret && internalHeader === internalNotificationSecret)
+
+    if (!isInternalRequest && !authHeader.startsWith('Bearer ')) {
       return jsonResponse({ error: 'Nicht angemeldet.' }, 401)
     }
 
@@ -94,13 +100,21 @@ Deno.serve(async (req) => {
       },
     }) as SupabaseClientLike
 
-    const {
-      data: { user },
-      error: userError,
-    } = await userClient.auth!.getUser!()
+    let user: { id: string; email?: string } | null = null
 
-    if (userError || !user) {
-      return jsonResponse({ error: 'Nicht angemeldet.' }, 401)
+    if (isInternalRequest) {
+      user = isUuid(internalActorUserId) ? { id: internalActorUserId } : null
+    } else {
+      const {
+        data: { user: authenticatedUser },
+        error: userError,
+      } = await userClient.auth!.getUser!()
+
+      if (userError || !authenticatedUser) {
+        return jsonResponse({ error: 'Nicht angemeldet.' }, 401)
+      }
+
+      user = authenticatedUser
     }
 
     const body = await readJsonBody(req)
@@ -108,7 +122,13 @@ Deno.serve(async (req) => {
     if (!validation.ok) return jsonResponse({ error: validation.error }, validation.status)
 
     const payload = validation.value
-    const canCreateCommunication = await hasPermission(userClient, 'kommunikation', 'create')
+    if (payload.recipientEventRegistrationIds.length > 0 && !isInternalRequest) {
+      return jsonResponse({ error: 'Event-Registrierungsempfaenger sind nur fuer interne Fachadapter erlaubt.' }, 403)
+    }
+
+    const canCreateCommunication = isInternalRequest
+      ? true
+      : await hasPermission(userClient, 'kommunikation', 'create')
     const resolvedRecipientsResult = await resolveRecipients(adminClient, payload)
 
     if (resolvedRecipientsResult.error) {
@@ -135,7 +155,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    const rateLimitResult = await checkRateLimit(adminClient, user.id)
+    const rateLimitResult = user?.id
+      ? await checkRateLimit(adminClient, user.id)
+      : { ok: true }
     if (!rateLimitResult.ok) return jsonResponse({ error: rateLimitResult.error }, 429)
 
     const idempotencyKey = payload.idempotencyKey || buildStableIdempotencyKey(payload)
@@ -157,7 +179,7 @@ Deno.serve(async (req) => {
 
     const jobInsert = await createJob(adminClient, {
       payload,
-      userId: user.id,
+      userId: user?.id || null,
       recipients,
       idempotencyKey,
     })
@@ -311,7 +333,59 @@ async function resolveRecipients(adminClient: SupabaseClientLike, payload: any) 
     }
   }
 
+  if (payload.recipientEventRegistrationIds.length > 0) {
+    const { data, error } = await adminClient
+      .from('event_registrations')
+      .select('id, event_id, email, status')
+      .in('id', payload.recipientEventRegistrationIds)
+
+    if (error) return { error: 'Event-Empfaenger konnten nicht geladen werden.', status: 500, recipients: [] }
+
+    const registrationById = new Map((data || []).map((registration: any) => [registration.id, registration]))
+    const emails = [...new Set((data || [])
+      .map((registration: any) => normalizeEmail(registration.email))
+      .filter(Boolean))]
+    const memberByEmail = await loadMembersByEmail(adminClient, emails)
+
+    for (const registrationId of payload.recipientEventRegistrationIds) {
+      const registration = registrationById.get(registrationId)
+      const normalizedEmail = normalizeEmail(registration?.email)
+      const member = normalizedEmail ? memberByEmail.get(normalizedEmail) : null
+      recipients.push({
+        input_id: registrationId,
+        auth_user_id: member?.auth_user_id || null,
+        member_id: member?.id || null,
+        event_registration_id: registration?.id || registrationId,
+        email: registration?.email || null,
+        status: member?.status || null,
+        source: 'event_registration',
+      })
+    }
+  }
+
   return { recipients: dedupeRecipients(recipients) }
+}
+
+async function loadMembersByEmail(adminClient: SupabaseClientLike, emails: string[]) {
+  const result = new Map<string, any>()
+  if (emails.length === 0) return result
+
+  const { data, error } = await adminClient
+    .from('members')
+    .select('id, auth_user_id, email, status')
+    .in('email', emails)
+
+  if (error) {
+    console.error('notification-dispatch member email lookup failed', { error: error.message })
+    return result
+  }
+
+  for (const member of data || []) {
+    const email = normalizeEmail(member.email)
+    if (email && !result.has(email)) result.set(email, member)
+  }
+
+  return result
 }
 
 async function loadAuthEmails(adminClient: SupabaseClientLike, authUserIds: string[]) {
@@ -628,6 +702,7 @@ async function writeLog(adminClient: SupabaseClientLike, { jobId, channel, recip
     channel,
     member_id: recipient.member_id,
     auth_user_id: recipient.auth_user_id,
+    event_registration_id: recipient.event_registration_id || null,
     email: emailMasked || null,
     status,
     http_status: httpStatus || null,
@@ -665,6 +740,8 @@ async function hasDeliveredLog(adminClient: SupabaseClientLike, jobId: string, r
     query = query.eq('auth_user_id', recipient.auth_user_id)
   } else if (recipient.member_id) {
     query = query.eq('member_id', recipient.member_id)
+  } else if (recipient.event_registration_id) {
+    query = query.eq('event_registration_id', recipient.event_registration_id)
   } else {
     return false
   }
@@ -684,7 +761,7 @@ async function hasDeliveredLog(adminClient: SupabaseClientLike, jobId: string, r
 
 async function createJob(adminClient: SupabaseClientLike, { payload, userId, recipients, idempotencyKey }: {
   payload: any
-  userId: string
+  userId: string | null
   recipients: Recipient[]
   idempotencyKey: string
 }) {

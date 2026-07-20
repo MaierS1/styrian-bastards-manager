@@ -37,7 +37,7 @@ export function shouldDeliverInApp({ payload, recipient, preference }) {
 
 export function calculateJobStatus({ deliveredCount, skippedCount, failedCount, recipientCount }) {
   if (recipientCount === 0) return 'failed'
-  if (failedCount > 0 && deliveredCount === 0 && skippedCount === 0) return 'failed'
+  if (failedCount > 0 && deliveredCount === 0) return 'failed'
   if (deliveredCount === 0 && skippedCount > 0 && failedCount === 0) return 'sent'
   if (failedCount > 0 || skippedCount > 0) return 'partial'
   return 'sent'

@@ -26,7 +26,17 @@ export function maskEmail(value) {
 }
 
 export function isRequiredEmailNotification(payload) {
-  return payload.category === 'system' && payload.priority === 'critical'
+  return (payload.category === 'system' && payload.priority === 'critical')
+    || (
+      payload.category === 'event'
+      && [
+        'event_registration_confirmed',
+        'event_registration_waitlisted',
+        'event_registration_cancelled',
+        'event_waitlist_promoted',
+        'event_cancelled',
+      ].includes(payload.type)
+    )
 }
 
 export function shouldDeliverEmail({ payload, recipient, preference }) {

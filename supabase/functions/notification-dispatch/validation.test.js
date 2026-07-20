@@ -92,6 +92,16 @@ test('deduplicates repeated explicit recipients', () => {
   assert.deepEqual(result.value.recipientUserIds, [userId])
 })
 
+test('accepts event registration recipients as a distinct server-side target type', () => {
+  const result = validateDispatchPayload({
+    ...createPayload({ recipient_user_id: undefined }),
+    recipient_event_registration_id: '33333333-3333-4333-8333-333333333333',
+  })
+
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.value.recipientEventRegistrationIds, ['33333333-3333-4333-8333-333333333333'])
+})
+
 test('marks administrative dispatches that require communication.create', () => {
   assert.equal(requiresCommunicationCreate(validateDispatchPayload(createPayload()).value), false)
   assert.equal(requiresCommunicationCreate(validateDispatchPayload(createPayload({ priority: 'critical' })).value), true)

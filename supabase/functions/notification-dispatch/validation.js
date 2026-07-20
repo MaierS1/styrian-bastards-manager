@@ -22,8 +22,10 @@ const ALLOWED_KEYS = new Set([
   'channels',
   'recipient_user_id',
   'recipient_member_id',
+  'recipient_event_registration_id',
   'recipient_user_ids',
   'recipient_member_ids',
+  'recipient_event_registration_ids',
   'system_wide',
   'source',
   'url',
@@ -90,6 +92,7 @@ export function validateDispatchPayload(body) {
   const targetDefinitions = [
     recipientResult.recipientUserIds.length > 0,
     recipientResult.recipientMemberIds.length > 0,
+    recipientResult.recipientEventRegistrationIds.length > 0,
     systemWide,
   ].filter(Boolean).length
 
@@ -97,7 +100,9 @@ export function validateDispatchPayload(body) {
   if (targetDefinitions > 1) return invalid(400, 'Nur eine Empfaengerart pro Request ist erlaubt.')
   if (systemWide && body.system_wide !== true) return invalid(400, 'system_wide muss boolean sein.')
 
-  const explicitRecipientCount = recipientResult.recipientUserIds.length + recipientResult.recipientMemberIds.length
+  const explicitRecipientCount = recipientResult.recipientUserIds.length
+    + recipientResult.recipientMemberIds.length
+    + recipientResult.recipientEventRegistrationIds.length
   if (explicitRecipientCount > MAX_RECIPIENTS) return invalid(429, 'Zu viele Empfaenger.')
 
   return {
@@ -110,6 +115,7 @@ export function validateDispatchPayload(body) {
       channels,
       recipientUserIds: recipientResult.recipientUserIds,
       recipientMemberIds: recipientResult.recipientMemberIds,
+      recipientEventRegistrationIds: recipientResult.recipientEventRegistrationIds,
       systemWide,
       source: sourceResult.value,
       url,
@@ -123,7 +129,7 @@ export function validateDispatchPayload(body) {
 
 export function requiresCommunicationCreate(payload) {
   return payload.systemWide
-    || payload.recipientUserIds.length + payload.recipientMemberIds.length > 1
+    || payload.recipientUserIds.length + payload.recipientMemberIds.length + payload.recipientEventRegistrationIds.length > 1
     || ['high', 'critical'].includes(payload.priority)
 }
 
@@ -131,6 +137,7 @@ export function buildTargetType(payload) {
   if (payload.systemWide) return 'system'
   if (payload.recipientUserIds.length === 1) return 'user'
   if (payload.recipientMemberIds.length === 1) return 'member'
+  if (payload.recipientEventRegistrationIds.length === 1) return 'event_registration'
   return 'explicit'
 }
 
@@ -138,6 +145,7 @@ export function buildTargetPayload(payload) {
   return {
     recipient_user_ids: payload.recipientUserIds,
     recipient_member_ids: payload.recipientMemberIds,
+    recipient_event_registration_ids: payload.recipientEventRegistrationIds,
     system_wide: payload.systemWide,
   }
 }
@@ -153,6 +161,7 @@ export function buildStableIdempotencyKey(payload) {
     payload.channels.join(','),
     payload.recipientUserIds.join(','),
     payload.recipientMemberIds.join(','),
+    payload.recipientEventRegistrationIds.join(','),
     payload.systemWide ? 'system' : '',
   ].join('|')
 }
@@ -160,6 +169,7 @@ export function buildStableIdempotencyKey(payload) {
 function normalizeRecipients(body) {
   const recipientUserIds = []
   const recipientMemberIds = []
+  const recipientEventRegistrationIds = []
 
   if (body.recipient_user_id !== undefined) {
     const id = normalizeText(body.recipient_user_id)
@@ -171,6 +181,12 @@ function normalizeRecipients(body) {
     const id = normalizeText(body.recipient_member_id)
     if (!UUID_PATTERN.test(id)) return invalid(400, 'recipient_member_id ist ungueltig.')
     recipientMemberIds.push(id)
+  }
+
+  if (body.recipient_event_registration_id !== undefined) {
+    const id = normalizeText(body.recipient_event_registration_id)
+    if (!UUID_PATTERN.test(id)) return invalid(400, 'recipient_event_registration_id ist ungueltig.')
+    recipientEventRegistrationIds.push(id)
   }
 
   if (body.recipient_user_ids !== undefined) {
@@ -191,10 +207,20 @@ function normalizeRecipients(body) {
     }
   }
 
+  if (body.recipient_event_registration_ids !== undefined) {
+    if (!Array.isArray(body.recipient_event_registration_ids)) return invalid(400, 'recipient_event_registration_ids ist ungueltig.')
+    for (const value of body.recipient_event_registration_ids) {
+      const id = normalizeText(value)
+      if (!UUID_PATTERN.test(id)) return invalid(400, 'recipient_event_registration_ids enthaelt ungueltige IDs.')
+      recipientEventRegistrationIds.push(id)
+    }
+  }
+
   return {
     ok: true,
     recipientUserIds: [...new Set(recipientUserIds)],
     recipientMemberIds: [...new Set(recipientMemberIds)],
+    recipientEventRegistrationIds: [...new Set(recipientEventRegistrationIds)],
   }
 }
 

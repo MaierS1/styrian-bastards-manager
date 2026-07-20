@@ -31,6 +31,8 @@ Empfaengerarten: `recipient_user_id`, `recipient_member_id`, `recipient_user_ids
 
 Freie Transportfelder wie `to`, `from`, `subject` oder `html` sind nicht erlaubt. E-Mail-Empfaenger werden serverseitig aus `members.email` oder, fuer reine Auth-User ohne Mitgliedsdatensatz, aus Supabase Auth aufgeloest.
 
+Fachadapter koennen serverseitig `recipient_event_registration_id` verwenden. Dieser Empfaengertyp ist in `notification-dispatch` nur mit `INTERNAL_NOTIFICATION_SECRET` erlaubt und dient der sicheren Migration oeffentlicher Event-Gastregistrierungen ohne freie Empfaengeradresse.
+
 ## Berechtigungsmodell
 
 Die Function akzeptiert keine anonymen Requests. Sie validiert das JWT ueber Supabase Auth und bestimmt `created_by` serverseitig.
@@ -65,6 +67,7 @@ ENV-Werte:
 - `FROM_EMAIL`: optional, Fallback ist `Styrian Bastards <mail@styrian-bastards.at>`.
 - `REPLY_TO_EMAIL`: optional.
 - `APP_PUBLIC_URL`: optional fuer CTA-Links aus internen App-Pfaden.
+- `INTERNAL_NOTIFICATION_SECRET`: erforderlich fuer serverseitige Fachadapter wie `event-notifications`.
 
 Das Template wird serverseitig aus `title`, `message`, `priority` und optional `url` erzeugt. Client-HTML wird nicht akzeptiert; Titel und Nachricht werden fuer HTML escaped. Es gibt immer eine Plain-Text-Version. CTA-Links werden nur aus bereits validierten internen Pfaden und einer sicheren `APP_PUBLIC_URL` erzeugt.
 
@@ -85,7 +88,7 @@ Die Job-Zaehler (`recipient_count`, `success_count`, `skipped_count`, `failure_c
 
 Pro Empfaenger und Kanal wird ein `notification_logs`-Eintrag geschrieben. Logs enthalten Job, Kanal, technische Statuswerte und knappe Fehlercodes, aber keine vollstaendigen Nachrichteninhalte. E-Mail-Adressen werden nur maskiert im Feld `email` gespeichert. Resend Message IDs werden datenschutzarm in `provider_response.resend_message_id` abgelegt.
 
-Erfolgreiche Deliveries sind pro Job, Kanal und Empfaenger eindeutig. Fehlgeschlagene oder uebersprungene Versuche koennen fuer spaetere Retry-Analysen mehrfach protokolliert werden. `attempt_count` und `last_attempt_at` bilden die minimale Retry-Grundlage; ein Scheduler oder Worker ist noch nicht enthalten.
+Erfolgreiche Deliveries sind pro Job, Kanal und Empfaenger eindeutig. Fuer Gast-Eventregistrierungen wird `notification_logs.event_registration_id` als eindeutiger Empfaengerbezug genutzt. Fehlgeschlagene oder uebersprungene Versuche koennen fuer spaetere Retry-Analysen mehrfach protokolliert werden. `attempt_count` und `last_attempt_at` bilden die minimale Retry-Grundlage; ein Scheduler oder Worker ist noch nicht enthalten.
 
 ## Fehlercodes
 
@@ -142,6 +145,6 @@ Nicht enthalten:
 - Template-Platzhalter aus Clientdaten
 - komplexe Zielgruppenfilter
 
-Die bestehenden produktiven Fach-Mail-Flows `event-notifications`, `membership-notifications`, `send-invoice-email` und deren Frontend-Aufrufer bleiben unveraendert. Ihre Migration in die zentrale Engine ist ein separater Folgeauftrag.
+`event-notifications` ist auf die zentrale Engine migriert und bleibt als schmaler fachlicher Adapter bestehen. Die produktiven Fach-Mail-Flows `membership-notifications`, `send-invoice-email` und deren Frontend-Aufrufer bleiben unveraendert.
 
 Spaeter koennen Fachmodul-Trigger, Templateverwaltung, Retry-Worker und Push-Adapter hinter derselben Dispatch-Struktur ergaenzt werden.

@@ -72,6 +72,7 @@ test('calculates job status from delivery counters', () => {
   assert.equal(calculateJobStatus({ deliveredCount: 2, skippedCount: 0, failedCount: 0, recipientCount: 2 }), 'sent')
   assert.equal(calculateJobStatus({ deliveredCount: 1, skippedCount: 1, failedCount: 0, recipientCount: 2 }), 'partial')
   assert.equal(calculateJobStatus({ deliveredCount: 0, skippedCount: 0, failedCount: 2, recipientCount: 2 }), 'failed')
+  assert.equal(calculateJobStatus({ deliveredCount: 0, skippedCount: 1, failedCount: 1, recipientCount: 2 }), 'failed')
 })
 
 test('creates response summaries and sanitizes log errors', () => {

@@ -1,4 +1,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import {
+  buildEventNotificationPayload,
+  buildRegistrationUpdatePayload,
+  dispatchEventNotification,
+  LEGACY_EVENT_NOTIFICATION_TYPES,
+  validateEventNotificationState,
+} from '../_shared/eventNotificationService.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,27 +13,36 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const fromEmail = 'Styrian Bastards <mail@styrian-bastards.at>'
-const allowedTypes = [
-  'registration_confirmation',
-  'waitlist_confirmation',
-  'cancellation_notification',
-  'event_reminder',
-]
+type SupabaseClientLike = {
+  from: (table: string) => any
+  rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: Error | null }>
+  auth?: {
+    getUser?: () => Promise<{ data: { user: { id: string; email?: string } | null }; error: Error | null }>
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: 'Nur POST ist erlaubt.' }, 405)
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const resendApiKey = Deno.env.get('RESEND_API_KEY')
+    const internalNotificationSecret = Deno.env.get('INTERNAL_NOTIFICATION_SECRET') || ''
 
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       return jsonResponse({ error: 'Supabase Function Secrets fehlen.' }, 500)
+    }
+
+    if (!internalNotificationSecret) {
+      console.error('event-notifications internal notification secret missing')
+      return jsonResponse({ error: 'Benachrichtigungen sind aktuell nicht verfuegbar.' }, 500)
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
@@ -34,64 +50,35 @@ Deno.serve(async (req) => {
         autoRefreshToken: false,
         persistSession: false,
       },
-    })
+    }) as SupabaseClientLike
 
-    const body = await req.json()
-    const type = String(body.type || '').trim()
-    const registrationId = String(body.registration_id || '').trim()
-    const eventId = String(body.event_id || '').trim()
-    const source = String(body.source || '').trim()
+    const body = await readJsonBody(req)
+    const type = String(body?.type || '').trim()
+    const registrationId = String(body?.registration_id || '').trim()
+    const eventId = String(body?.event_id || '').trim()
+    const source = String(body?.source || '').trim()
     const isPublicRegistrationNotification = source === 'public_registration'
 
-    if (!allowedTypes.includes(type)) {
-      return jsonResponse({ error: 'Ungültiger Benachrichtigungstyp.' }, 400)
+    if (!LEGACY_EVENT_NOTIFICATION_TYPES.includes(type)) {
+      return jsonResponse({ error: 'Ungueltiger Benachrichtigungstyp.' }, 400)
     }
 
     if (!registrationId) {
       return jsonResponse({ error: 'registration_id ist Pflicht.' }, 400)
     }
 
-    if (isPublicRegistrationNotification) {
-      if (!['registration_confirmation', 'waitlist_confirmation'].includes(type)) {
-        return jsonResponse({ error: 'Ungültiger öffentlicher Benachrichtigungstyp.' }, 400)
-      }
-    } else {
-      const authHeader = req.headers.get('Authorization') || ''
+    const authContext = isPublicRegistrationNotification
+      ? { actorUserId: null }
+      : await authenticateEventNotificationCaller({
+          req,
+          supabaseUrl,
+          anonKey,
+          adminClient,
+          type,
+        })
 
-      if (!authHeader.startsWith('Bearer ')) {
-        return jsonResponse({ error: 'Nicht angemeldet.' }, 401)
-      }
-
-      const userClient = createClient(supabaseUrl, anonKey, {
-        global: {
-          headers: {
-            Authorization: authHeader,
-          },
-        },
-      })
-
-      const {
-        data: { user },
-        error: userError,
-      } = await userClient.auth.getUser()
-
-      if (userError || !user) {
-        return jsonResponse({ error: 'Benutzer konnte nicht geprüft werden.' }, 401)
-      }
-
-      const { data: callerMember, error: callerError } = await adminClient
-        .from('members')
-        .select('id, app_role, email')
-        .eq('auth_user_id', user.id)
-        .maybeSingle()
-
-      if (callerError) {
-        return jsonResponse({ error: callerError.message }, 500)
-      }
-
-      if (!callerMember || !['admin', 'super_admin', 'administrator', 'vorstand'].includes(callerMember.app_role)) {
-        return jsonResponse({ error: 'Keine Berechtigung für Event-Benachrichtigungen.' }, 403)
-      }
+    if ('error' in authContext) {
+      return jsonResponse({ error: authContext.error }, authContext.status)
     }
 
     const { data: registration, error: registrationError } = await adminClient
@@ -101,7 +88,7 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     if (registrationError) {
-      return jsonResponse({ error: registrationError.message }, 500)
+      return jsonResponse({ error: 'Anmeldung konnte nicht geladen werden.' }, 500)
     }
 
     if (!registration) {
@@ -112,16 +99,17 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Anmeldung gehoert nicht zum angegebenen Event.' }, 409)
     }
 
-    if (isPublicRegistrationNotification) {
-      const expectedStatus = type === 'waitlist_confirmation' ? 'waitlist' : 'registered'
+    const stateValidation = validateEventNotificationState({
+      type,
+      registration,
+      isPublicRegistrationNotification,
+    })
 
-      if (
-        registration.status !== expectedStatus ||
-        registration.notification_status !== 'pending' ||
-        registration.confirmation_sent_at
-      ) {
-        return jsonResponse({ error: 'Öffentliche Benachrichtigung ist für diese Anmeldung nicht zulässig.' }, 409)
+    if (!stateValidation.ok) {
+      if (stateValidation.status >= 500) {
+        await markNotificationError(adminClient, registrationId, stateValidation.error)
       }
+      return jsonResponse({ error: stateValidation.error }, stateValidation.status)
     }
 
     const { data: event, error: eventError } = await adminClient
@@ -131,8 +119,8 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     if (eventError) {
-      await markNotificationError(adminClient, registrationId, eventError.message)
-      return jsonResponse({ error: eventError.message }, 500)
+      await markNotificationError(adminClient, registrationId, 'Event konnte nicht geladen werden.')
+      return jsonResponse({ error: 'Event konnte nicht geladen werden.' }, 500)
     }
 
     if (!event) {
@@ -141,231 +129,131 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: message }, 404)
     }
 
-    if (!registration.email) {
-      const message = 'Für diese Anmeldung ist keine E-Mail-Adresse hinterlegt.'
-      await markNotificationError(adminClient, registrationId, message)
-      return jsonResponse({ error: message }, 400)
+    const payloadResult = buildEventNotificationPayload({ type, event, registration })
+    if (!payloadResult.ok) {
+      return jsonResponse({ error: payloadResult.error }, payloadResult.status)
     }
 
-    if (!resendApiKey) {
-      const message = 'RESEND_API_KEY fehlt in den Supabase Function Secrets.'
-      await markNotificationError(adminClient, registrationId, message)
-      return jsonResponse({ error: message }, 500)
-    }
-
-    const email = buildEmail(type, event, registration)
-
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: [registration.email],
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-      }),
+    const dispatchResult = await dispatchEventNotification({
+      notificationDispatchUrl: `${supabaseUrl}/functions/v1/notification-dispatch`,
+      internalSecret: internalNotificationSecret,
+      actorUserId: authContext.actorUserId,
+      payload: payloadResult.value,
     })
 
-    const result = await response.json()
-
-    if (!response.ok) {
-      const message = result?.message || 'E-Mail konnte nicht gesendet werden.'
-      await markNotificationError(adminClient, registrationId, message)
-      return jsonResponse({ error: message, detail: result }, 400)
-    }
-
-    const updatePayload = type === 'event_reminder'
-      ? {
-        reminder_sent_at: new Date().toISOString(),
-        notification_status: 'sent',
-        notification_error: null,
-      }
-      : {
-        confirmation_sent_at: new Date().toISOString(),
-        notification_status: 'sent',
-        notification_error: null,
-      }
-
+    const updatePayload = buildRegistrationUpdatePayload({ type, dispatchResult })
     const { error: updateError } = await adminClient
       .from('event_registrations')
       .update(updatePayload)
       .eq('id', registrationId)
 
     if (updateError) {
-      return jsonResponse({ error: updateError.message }, 500)
+      return jsonResponse({ error: 'Benachrichtigungsstatus konnte nicht gespeichert werden.' }, 500)
+    }
+
+    if (!dispatchResult.ok) {
+      return jsonResponse({ error: 'Benachrichtigung konnte nicht versendet werden.' }, 500)
     }
 
     return jsonResponse({
       success: true,
       type,
+      notification_type: payloadResult.value.type,
       registration_id: registrationId,
-      to: registration.email,
-      result,
+      notification_job_id: dispatchResult.data?.job_id || null,
+      existing: dispatchResult.data?.existing === true,
+      recipient_count: dispatchResult.data?.recipient_count || 0,
+      delivered_count: dispatchResult.data?.delivered_count || 0,
+      skipped_count: dispatchResult.data?.skipped_count || 0,
+      failed_count: dispatchResult.data?.failed_count || 0,
     })
   } catch (error) {
-    return jsonResponse({ error: getErrorMessage(error, 'Unbekannter Fehler.') }, 500)
+    console.error('event-notifications unexpected failure', {
+      error: error instanceof Error ? error.message : 'unknown',
+    })
+    return jsonResponse({ error: 'Interner Fehler beim Event-Benachrichtigungsversand.' }, 500)
   }
 })
 
-function buildEmail(type: string, event: Record<string, unknown>, registration: Record<string, unknown>) {
-  if (type === 'waitlist_confirmation') return buildWaitlistEmail(event, registration)
-  if (type === 'cancellation_notification') return buildCancellationEmail(event, registration)
-  if (type === 'event_reminder') return buildEventReminderEmail(event, registration)
-  return buildRegistrationConfirmationEmail(event, registration)
-}
+async function authenticateEventNotificationCaller({
+  req,
+  supabaseUrl,
+  anonKey,
+  adminClient,
+  type,
+}: {
+  req: Request
+  supabaseUrl: string
+  anonKey: string
+  adminClient: SupabaseClientLike
+  type: string
+}) {
+  const authHeader = req.headers.get('Authorization') || ''
 
-function buildRegistrationConfirmationEmail(event: Record<string, unknown>, registration: Record<string, unknown>) {
-  const eventTitle = getEventTitle(event)
-  const greetingName = getGreetingName(registration)
-
-  return formatEmail({
-    subject: `Anmeldung bestätigt: ${eventTitle}`,
-    previewText: `Deine Anmeldung für ${eventTitle} wurde eingetragen.`,
-    text: [
-      `Hallo ${greetingName},`,
-      '',
-      `deine Anmeldung für ${eventTitle} wurde eingetragen.`,
-      buildEventLine(event),
-      buildTeamLine(registration),
-      buildParticipantLine(registration),
-      '',
-      'Danke und sportliche Grüße',
-      'Styrian Bastards',
-    ],
-  })
-}
-
-function buildWaitlistEmail(event: Record<string, unknown>, registration: Record<string, unknown>) {
-  const eventTitle = getEventTitle(event)
-  const greetingName = getGreetingName(registration)
-
-  return formatEmail({
-    subject: `Warteliste: ${eventTitle}`,
-    previewText: `Du wurdest für ${eventTitle} auf die Warteliste gesetzt.`,
-    text: [
-      `Hallo ${greetingName},`,
-      '',
-      `das Event ${eventTitle} ist aktuell voll. Du wurdest auf die Warteliste gesetzt.`,
-      buildEventLine(event),
-      buildTeamLine(registration),
-      buildParticipantLine(registration),
-      '',
-      'Wir melden uns, sobald ein Platz frei wird.',
-      '',
-      'Sportliche Grüße',
-      'Styrian Bastards',
-    ],
-  })
-}
-
-function buildCancellationEmail(event: Record<string, unknown>, registration: Record<string, unknown>) {
-  const eventTitle = getEventTitle(event)
-  const greetingName = getGreetingName(registration)
-
-  return formatEmail({
-    subject: `Anmeldung storniert: ${eventTitle}`,
-    previewText: `Deine Anmeldung für ${eventTitle} wurde storniert.`,
-    text: [
-      `Hallo ${greetingName},`,
-      '',
-      `deine Anmeldung für ${eventTitle} wurde storniert.`,
-      buildEventLine(event),
-      '',
-      'Falls das nicht korrekt ist, melde dich bitte direkt beim Verein.',
-      '',
-      'Sportliche Grüße',
-      'Styrian Bastards',
-    ],
-  })
-}
-
-function buildEventReminderEmail(event: Record<string, unknown>, registration: Record<string, unknown>) {
-  const eventTitle = getEventTitle(event)
-  const greetingName = getGreetingName(registration)
-
-  return formatEmail({
-    subject: `Erinnerung: ${eventTitle}`,
-    previewText: `Erinnerung an ${eventTitle}.`,
-    text: [
-      `Hallo ${greetingName},`,
-      '',
-      `kurze Erinnerung an deine Anmeldung für ${eventTitle}.`,
-      buildEventLine(event),
-      event.meeting_point ? `Treffpunkt: ${event.meeting_point}` : '',
-      buildTeamLine(registration),
-      buildParticipantLine(registration),
-      '',
-      'Bis bald und sportliche Grüße',
-      'Styrian Bastards',
-    ],
-  })
-}
-
-function formatEmail({ subject, previewText, text }: { subject: string; previewText: string; text: string[] }) {
-  const textBody = text.filter(Boolean).join('\n')
-
-  return {
-    subject,
-    previewText,
-    text: textBody,
-    html: textBody
-      .split('\n')
-      .map((line) => line ? `<p>${escapeHtml(line)}</p>` : '<br />')
-      .join(''),
+  if (!authHeader.startsWith('Bearer ')) {
+    return { error: 'Nicht angemeldet.', status: 401 }
   }
+
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: {
+      headers: {
+        Authorization: authHeader,
+      },
+    },
+  }) as SupabaseClientLike
+
+  const {
+    data: { user },
+    error: userError,
+  } = await userClient.auth!.getUser!()
+
+  if (userError || !user) {
+    return { error: 'Benutzer konnte nicht geprueft werden.', status: 401 }
+  }
+
+  const canEditEvents = await hasPermission(userClient, 'events', 'edit')
+  const canCreateCommunication = await hasPermission(userClient, 'kommunikation', 'create')
+
+  if (type === 'event_reminder') {
+    if (!canEditEvents || !canCreateCommunication) {
+      return { error: 'Keine Berechtigung fuer Event-Erinnerungen.', status: 403 }
+    }
+  } else if (!canEditEvents) {
+    return { error: 'Keine Berechtigung fuer Event-Benachrichtigungen.', status: 403 }
+  }
+
+  const { data: callerMember, error: callerError } = await adminClient
+    .from('members')
+    .select('id, app_role')
+    .eq('auth_user_id', user.id)
+    .maybeSingle()
+
+  if (callerError) {
+    return { error: 'Benutzerrolle konnte nicht geprueft werden.', status: 500 }
+  }
+
+  if (!callerMember) {
+    return { error: 'Keine Berechtigung fuer Event-Benachrichtigungen.', status: 403 }
+  }
+
+  return { actorUserId: user.id }
 }
 
-function getEventTitle(event: Record<string, unknown>) {
-  return String(event.public_title || event.title || event.name || 'Event')
+async function hasPermission(client: SupabaseClientLike, module: string, action: string) {
+  const { data, error } = await client.rpc('has_app_permission', {
+    p_module: module,
+    p_action: action,
+  })
+
+  return !error && data === true
 }
 
-function getGreetingName(registration: Record<string, unknown>) {
-  return String(registration.full_name || 'zusammen')
-}
-
-function buildEventLine(event: Record<string, unknown>) {
-  const startsAt = event.starts_at || event.event_date
-  const parts = [
-    startsAt ? `Termin: ${formatDateTime(String(startsAt))}` : '',
-    event.location ? `Ort: ${event.location}` : '',
-  ].filter(Boolean)
-
-  return parts.join(' · ')
-}
-
-function buildParticipantLine(registration: Record<string, unknown>) {
-  const participantCount = Number(registration.participant_count) || 1
-  return `Teamgröße: ${participantCount}`
-}
-
-function buildTeamLine(registration: Record<string, unknown>) {
-  return registration.team_name ? `Team: ${registration.team_name}` : ''
-}
-
-function formatDateTime(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-
-  return new Intl.DateTimeFormat('de-AT', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
-
-function escapeHtml(value: string) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;')
+async function readJsonBody(req: Request) {
+  try {
+    return await req.json()
+  } catch {
+    return null
+  }
 }
 
 async function markNotificationError(
@@ -390,8 +278,4 @@ function jsonResponse(body: Record<string, unknown>, status = 200) {
       'Content-Type': 'application/json',
     },
   })
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback
 }

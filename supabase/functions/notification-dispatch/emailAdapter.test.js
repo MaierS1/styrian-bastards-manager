@@ -77,6 +77,30 @@ test('critical system email bypasses optional email preference but not inactive 
   }).errorCode, 'inactive_recipient')
 })
 
+test('transactional event email bypasses optional email preference', () => {
+  assert.equal(shouldDeliverEmail({
+    payload: {
+      ...payload,
+      type: 'event_registration_confirmed',
+      category: 'event',
+      priority: 'high',
+    },
+    recipient: activeRecipient,
+    preference: { enabled: false },
+  }).deliver, true)
+
+  assert.equal(shouldDeliverEmail({
+    payload: {
+      ...payload,
+      type: 'event_reminder',
+      category: 'event',
+      priority: 'normal',
+    },
+    recipient: activeRecipient,
+    preference: { enabled: false },
+  }).errorCode, 'email_preference_disabled')
+})
+
 test('builds escaped html, plain text, and safe cta links', () => {
   const email = buildNotificationEmail({
     payload,
