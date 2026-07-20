@@ -57,6 +57,17 @@ Default fuer `email` ist bewusst deaktiviert. Normale E-Mail-Benachrichtigungen 
 
 Marketing-E-Mails sind nicht Teil der Engine und duerfen ohne separates Opt-in nicht ueber diesen Kanal abgebildet werden.
 
+Transaktionale Eventtypen und migrierte Mitgliedsbeitrags-Typen koennen als fachlich required behandelt werden, damit vorhandene Pflicht- und Bestaetigungsflows durch die konservative E-Mail-Default-Regel nicht verloren gehen.
+
+Migrierte Mitgliedsbeitrags-Typen:
+
+- `membership_fee_reminder`
+- `membership_fee_payment_confirmed`
+- `membership_fee_reminder_test`
+- `membership_fee_payment_confirmed_test`
+
+Diese Typen sind required, weil die bisherigen manuell ausgeloesten Beitragsmails direkt und ohne Preference-Gate per Resend versendet wurden. Der Fachadapter `membership-notifications` bleibt als rueckwaertskompatibler Einstiegspunkt bestehen.
+
 ## E-Mail-Adapter
 
 Der E-Mail-Adapter nutzt die bestehende Resend-Infrastruktur per `https://api.resend.com/emails`.
@@ -138,13 +149,12 @@ In-App und E-Mail:
 
 Nicht enthalten:
 
-- produktiver E-Mail-Versand
 - Web Push
-- Trigger aus Fachmodulen
+- weitere Trigger aus Fachmodulen
 - Admin-UI
 - Template-Platzhalter aus Clientdaten
 - komplexe Zielgruppenfilter
 
-`event-notifications` ist auf die zentrale Engine migriert und bleibt als schmaler fachlicher Adapter bestehen. Die produktiven Fach-Mail-Flows `membership-notifications`, `send-invoice-email` und deren Frontend-Aufrufer bleiben unveraendert.
+`event-notifications` und `membership-notifications` sind auf die zentrale Engine migriert und bleiben als schmale fachliche Adapter bestehen. `send-invoice-email` und dessen Frontend-Aufrufer bleiben unveraendert.
 
 Spaeter koennen Fachmodul-Trigger, Templateverwaltung, Retry-Worker und Push-Adapter hinter derselben Dispatch-Struktur ergaenzt werden.

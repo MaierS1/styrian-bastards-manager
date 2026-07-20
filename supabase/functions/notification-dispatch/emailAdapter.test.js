@@ -101,6 +101,30 @@ test('transactional event email bypasses optional email preference', () => {
   }).errorCode, 'email_preference_disabled')
 })
 
+test('transactional membership fee email bypasses optional email preference', () => {
+  assert.equal(shouldDeliverEmail({
+    payload: {
+      ...payload,
+      type: 'membership_fee_reminder',
+      category: 'membership_fee',
+      priority: 'high',
+    },
+    recipient: activeRecipient,
+    preference: { enabled: false },
+  }).deliver, true)
+
+  assert.equal(shouldDeliverEmail({
+    payload: {
+      ...payload,
+      type: 'membership_fee_payment_confirmed',
+      category: 'membership_fee',
+      priority: 'normal',
+    },
+    recipient: activeRecipient,
+    preference: null,
+  }).deliver, true)
+})
+
 test('builds escaped html, plain text, and safe cta links', () => {
   const email = buildNotificationEmail({
     payload,

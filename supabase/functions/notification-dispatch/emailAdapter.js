@@ -37,6 +37,15 @@ export function isRequiredEmailNotification(payload) {
         'event_cancelled',
       ].includes(payload.type)
     )
+    || (
+      payload.category === 'membership_fee'
+      && [
+        'membership_fee_reminder',
+        'membership_fee_payment_confirmed',
+        'membership_fee_reminder_test',
+        'membership_fee_payment_confirmed_test',
+      ].includes(payload.type)
+    )
 }
 
 export function shouldDeliverEmail({ payload, recipient, preference }) {
