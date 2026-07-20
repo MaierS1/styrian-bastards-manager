@@ -14,6 +14,14 @@ import {
   sanitizeLogErrorMessage,
   shouldDeliverInApp,
 } from './engineCore.js'
+import {
+  buildNotificationEmail,
+  maskEmail,
+  MAX_EMAIL_RECIPIENTS,
+  normalizeEmail,
+  sendEmailWithResend,
+  shouldDeliverEmail,
+} from './emailAdapter.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +34,9 @@ type SupabaseClientLike = {
   rpc: (fn: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: Error | null }>
   auth?: {
     getUser?: () => Promise<{ data: { user: { id: string; email?: string } | null }; error: Error | null }>
+    admin?: {
+      getUserById?: (id: string) => Promise<{ data: { user: { id: string; email?: string } | null }; error: Error | null }>
+    }
   }
 }
 
@@ -33,6 +44,7 @@ type Recipient = {
   input_id?: string
   auth_user_id: string | null
   member_id: string | null
+  email?: string | null
   status?: string | null
   source: 'auth_user' | 'member' | 'system'
 }
@@ -50,6 +62,12 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const emailConfig = {
+      resendApiKey: Deno.env.get('RESEND_API_KEY') || '',
+      fromEmail: Deno.env.get('FROM_EMAIL') || 'Styrian Bastards <mail@styrian-bastards.at>',
+      replyToEmail: Deno.env.get('REPLY_TO_EMAIL') || '',
+      appPublicUrl: Deno.env.get('APP_PUBLIC_URL') || '',
+    }
 
     if (!supabaseUrl || !anonKey || !serviceRoleKey) {
       console.error('notification-dispatch configuration missing', {
@@ -98,6 +116,9 @@ Deno.serve(async (req) => {
     }
 
     const recipients = resolvedRecipientsResult.recipients
+    if (payload.channels.includes('email') && recipients.length > MAX_EMAIL_RECIPIENTS) {
+      return jsonResponse({ error: 'Zu viele E-Mail-Empfaenger fuer synchronen Versand.' }, 429)
+    }
 
     if (requiresCommunicationCreate(payload) && !canCreateCommunication) {
       return jsonResponse({ error: 'Keine Berechtigung fuer administrative Kommunikation.' }, 403)
@@ -157,10 +178,11 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Benachrichtigungsjob konnte nicht erstellt werden.' }, 500)
     }
 
-    const deliveryResult = await deliverInApp(adminClient, {
+    const deliveryResult = await deliverNotifications(adminClient, {
       jobId: jobInsert.job.id,
       payload,
       recipients,
+      emailConfig,
     })
 
     const jobStatus = calculateJobStatus({
@@ -221,7 +243,7 @@ async function resolveRecipients(adminClient: SupabaseClientLike, payload: any) 
 
     const { data, error } = await adminClient
       .from('members')
-      .select('id, auth_user_id, status')
+      .select('id, auth_user_id, email, status')
       .eq('status', 'aktiv')
       .not('auth_user_id', 'is', null)
       .limit(MAX_SYSTEM_RECIPIENTS)
@@ -232,6 +254,7 @@ async function resolveRecipients(adminClient: SupabaseClientLike, payload: any) 
       recipients: dedupeRecipients((data || []).map((member: any) => ({
         auth_user_id: member.auth_user_id,
         member_id: member.id,
+        email: member.email || null,
         status: member.status,
         source: 'system',
       }))),
@@ -243,12 +266,14 @@ async function resolveRecipients(adminClient: SupabaseClientLike, payload: any) 
   if (payload.recipientUserIds.length > 0) {
     const { data, error } = await adminClient
       .from('members')
-      .select('id, auth_user_id, status')
+      .select('id, auth_user_id, email, status')
       .in('auth_user_id', payload.recipientUserIds)
 
     if (error) return { error: 'Empfaenger konnten nicht geladen werden.', status: 500, recipients: [] }
 
     const memberByAuthUserId = new Map((data || []).map((member: any) => [member.auth_user_id, member]))
+    const missingAuthUserIds = payload.recipientUserIds.filter((userId: string) => !memberByAuthUserId.has(userId))
+    const authEmailByUserId = await loadAuthEmails(adminClient, missingAuthUserIds)
 
     for (const userId of payload.recipientUserIds) {
       const member = memberByAuthUserId.get(userId)
@@ -256,6 +281,7 @@ async function resolveRecipients(adminClient: SupabaseClientLike, payload: any) 
         input_id: userId,
         auth_user_id: userId,
         member_id: member?.id || null,
+        email: member?.email || authEmailByUserId.get(userId) || null,
         status: member?.status || null,
         source: 'auth_user',
       })
@@ -265,7 +291,7 @@ async function resolveRecipients(adminClient: SupabaseClientLike, payload: any) 
   if (payload.recipientMemberIds.length > 0) {
     const { data, error } = await adminClient
       .from('members')
-      .select('id, auth_user_id, status')
+      .select('id, auth_user_id, email, status')
       .in('id', payload.recipientMemberIds)
 
     if (error) return { error: 'Empfaenger konnten nicht geladen werden.', status: 500, recipients: [] }
@@ -278,6 +304,7 @@ async function resolveRecipients(adminClient: SupabaseClientLike, payload: any) 
         input_id: memberId,
         auth_user_id: member?.auth_user_id || null,
         member_id: member?.id || memberId,
+        email: member?.email || null,
         status: member?.status || null,
         source: 'member',
       })
@@ -287,11 +314,68 @@ async function resolveRecipients(adminClient: SupabaseClientLike, payload: any) 
   return { recipients: dedupeRecipients(recipients) }
 }
 
+async function loadAuthEmails(adminClient: SupabaseClientLike, authUserIds: string[]) {
+  const result = new Map<string, string>()
+
+  for (const authUserId of authUserIds) {
+    const response = await adminClient.auth?.admin?.getUserById?.(authUserId)
+    if (!response) continue
+
+    const { data, error } = response
+    if (error) {
+      console.error('notification-dispatch auth email lookup failed', {
+        authUserId,
+        error: error.message,
+      })
+      continue
+    }
+
+    if (data?.user?.email) result.set(authUserId, data.user.email)
+  }
+
+  return result
+}
+
+async function deliverNotifications(adminClient: SupabaseClientLike, { jobId, payload, recipients, emailConfig }: {
+  jobId: string
+  payload: any
+  recipients: Recipient[]
+  emailConfig: {
+    resendApiKey: string
+    fromEmail: string
+    replyToEmail: string
+    appPublicUrl: string
+  }
+}) {
+  const totals = {
+    recipientCount: recipients.length * payload.channels.length,
+    deliveredCount: 0,
+    skippedCount: 0,
+    failedCount: 0,
+  }
+
+  if (payload.channels.includes('in_app')) {
+    const result = await deliverInApp(adminClient, { jobId, payload, recipients })
+    totals.deliveredCount += result.deliveredCount
+    totals.skippedCount += result.skippedCount
+    totals.failedCount += result.failedCount
+  }
+
+  if (payload.channels.includes('email')) {
+    const result = await deliverEmail(adminClient, { jobId, payload, recipients, emailConfig })
+    totals.deliveredCount += result.deliveredCount
+    totals.skippedCount += result.skippedCount
+    totals.failedCount += result.failedCount
+  }
+
+  return totals
+}
+
 async function deliverInApp(adminClient: SupabaseClientLike, { jobId, payload, recipients }: { jobId: string; payload: any; recipients: Recipient[] }) {
   let deliveredCount = 0
   let skippedCount = 0
   let failedCount = 0
-  const preferences = await loadPreferences(adminClient, payload, recipients)
+  const preferences = await loadPreferences(adminClient, payload, recipients, 'in_app')
 
   for (const recipient of recipients) {
     const preference = getPreferenceForRecipient(preferences, recipient)
@@ -301,6 +385,7 @@ async function deliverInApp(adminClient: SupabaseClientLike, { jobId, payload, r
       skippedCount += 1
       await writeLog(adminClient, {
         jobId,
+        channel: 'in_app',
         recipient,
         status: 'skipped',
         errorCode: decision.errorCode,
@@ -331,9 +416,10 @@ async function deliverInApp(adminClient: SupabaseClientLike, { jobId, payload, r
         skippedCount += 1
         await writeLog(adminClient, {
           jobId,
+          channel: 'in_app',
           recipient,
           status: 'skipped',
-          errorCode: 'duplicate',
+          errorCode: 'duplicate_delivery',
         })
         continue
       }
@@ -341,6 +427,7 @@ async function deliverInApp(adminClient: SupabaseClientLike, { jobId, payload, r
       failedCount += 1
       await writeLog(adminClient, {
         jobId,
+        channel: 'in_app',
         recipient,
         status: 'failed',
         errorCode: 'in_app_insert_failed',
@@ -352,6 +439,7 @@ async function deliverInApp(adminClient: SupabaseClientLike, { jobId, payload, r
     deliveredCount += 1
     await writeLog(adminClient, {
       jobId,
+      channel: 'in_app',
       recipient,
       status: 'delivered',
     })
@@ -365,7 +453,134 @@ async function deliverInApp(adminClient: SupabaseClientLike, { jobId, payload, r
   }
 }
 
-async function loadPreferences(adminClient: SupabaseClientLike, payload: any, recipients: Recipient[]) {
+async function deliverEmail(adminClient: SupabaseClientLike, { jobId, payload, recipients, emailConfig }: {
+  jobId: string
+  payload: any
+  recipients: Recipient[]
+  emailConfig: {
+    resendApiKey: string
+    fromEmail: string
+    replyToEmail: string
+    appPublicUrl: string
+  }
+}) {
+  let deliveredCount = 0
+  let skippedCount = 0
+  let failedCount = 0
+  const preferences = await loadPreferences(adminClient, payload, recipients, 'email')
+  const seenEmailAddresses = new Set<string>()
+
+  for (const recipient of recipients) {
+    const existingDelivered = await hasDeliveredLog(adminClient, jobId, recipient, 'email')
+    if (existingDelivered) {
+      skippedCount += 1
+      await writeLog(adminClient, {
+        jobId,
+        channel: 'email',
+        recipient,
+        status: 'skipped',
+        errorCode: 'duplicate_delivery',
+      })
+      continue
+    }
+
+    const normalizedEmail = normalizeEmail(recipient.email)
+    if (normalizedEmail && seenEmailAddresses.has(normalizedEmail)) {
+      skippedCount += 1
+      await writeLog(adminClient, {
+        jobId,
+        channel: 'email',
+        recipient,
+        status: 'skipped',
+        errorCode: 'duplicate_delivery',
+        emailMasked: maskEmail(normalizedEmail),
+      })
+      continue
+    }
+
+    if (normalizedEmail) seenEmailAddresses.add(normalizedEmail)
+
+    const preference = getPreferenceForRecipient(preferences, recipient)
+    const decision = shouldDeliverEmail({ payload, recipient, preference })
+
+    if (!decision.deliver) {
+      skippedCount += 1
+      await writeLog(adminClient, {
+        jobId,
+        channel: 'email',
+        recipient,
+        status: 'skipped',
+        errorCode: decision.errorCode,
+        emailMasked: maskEmail(recipient.email),
+      })
+      continue
+    }
+
+    const email = buildNotificationEmail({
+      payload,
+      appPublicUrl: emailConfig.appPublicUrl,
+    })
+
+    try {
+      const result = await sendEmailWithResend({
+        resendApiKey: emailConfig.resendApiKey,
+        fromEmail: emailConfig.fromEmail,
+        replyToEmail: emailConfig.replyToEmail,
+        to: normalizedEmail,
+        email,
+        idempotencyKey: `${jobId}:email:${recipient.auth_user_id || recipient.member_id || normalizedEmail}`,
+      })
+
+      if (!result.ok) {
+        failedCount += 1
+        await writeLog(adminClient, {
+          jobId,
+          channel: 'email',
+          recipient,
+          status: 'failed',
+          errorCode: result.errorCode,
+          errorMessage: result.errorMessage,
+          emailMasked: maskEmail(normalizedEmail),
+          httpStatus: result.status,
+          providerResponse: result.providerResponse,
+        })
+        continue
+      }
+
+      deliveredCount += 1
+      await writeLog(adminClient, {
+        jobId,
+        channel: 'email',
+        recipient,
+        status: 'delivered',
+        emailMasked: maskEmail(normalizedEmail),
+        providerResponse: {
+          resend_message_id: result.messageId,
+        },
+      })
+    } catch (error) {
+      failedCount += 1
+      await writeLog(adminClient, {
+        jobId,
+        channel: 'email',
+        recipient,
+        status: 'failed',
+        errorCode: 'email_send_failed',
+        errorMessage: error instanceof Error ? error.message : 'email_send_failed',
+        emailMasked: maskEmail(normalizedEmail),
+      })
+    }
+  }
+
+  return {
+    recipientCount: recipients.length,
+    deliveredCount,
+    skippedCount,
+    failedCount,
+  }
+}
+
+async function loadPreferences(adminClient: SupabaseClientLike, payload: any, recipients: Recipient[], channel: 'in_app' | 'email') {
   const authUserIds = recipients.map((recipient) => recipient.auth_user_id).filter(Boolean)
   const memberIds = recipients.map((recipient) => recipient.member_id).filter(Boolean)
 
@@ -375,7 +590,7 @@ async function loadPreferences(adminClient: SupabaseClientLike, payload: any, re
     .from('notification_preferences')
     .select('auth_user_id, member_id, notification_type, channel, enabled, required')
     .eq('notification_type', payload.type)
-    .eq('channel', 'in_app')
+    .eq('channel', channel)
 
   const filters = []
   if (authUserIds.length > 0) filters.push(`auth_user_id.in.(${authUserIds.join(',')})`)
@@ -397,21 +612,30 @@ function getPreferenceForRecipient(preferences: any[], recipient: Recipient) {
     || null
 }
 
-async function writeLog(adminClient: SupabaseClientLike, { jobId, recipient, status, errorCode, errorMessage }: {
+async function writeLog(adminClient: SupabaseClientLike, { jobId, channel, recipient, status, errorCode, errorMessage, emailMasked, httpStatus, providerResponse }: {
   jobId: string
+  channel: 'in_app' | 'email'
   recipient: Recipient
   status: 'delivered' | 'skipped' | 'failed'
   errorCode?: string | null
   errorMessage?: string | null
+  emailMasked?: string | null
+  httpStatus?: number | null
+  providerResponse?: Record<string, unknown> | null
 }) {
   const payload = {
     job_id: jobId,
-    channel: 'in_app',
+    channel,
     member_id: recipient.member_id,
     auth_user_id: recipient.auth_user_id,
+    email: emailMasked || null,
     status,
+    http_status: httpStatus || null,
     error_code: errorCode || null,
     error_message: sanitizeLogErrorMessage(errorMessage || errorCode || null),
+    provider_response: providerResponse || null,
+    attempt_count: 1,
+    last_attempt_at: new Date().toISOString(),
     sent_at: status === 'delivered' ? new Date().toISOString() : null,
   }
 
@@ -426,6 +650,36 @@ async function writeLog(adminClient: SupabaseClientLike, { jobId, recipient, sta
       error: error.message,
     })
   }
+}
+
+async function hasDeliveredLog(adminClient: SupabaseClientLike, jobId: string, recipient: Recipient, channel: 'in_app' | 'email') {
+  let query = adminClient
+    .from('notification_logs')
+    .select('id')
+    .eq('job_id', jobId)
+    .eq('channel', channel)
+    .eq('status', 'delivered')
+    .limit(1)
+
+  if (recipient.auth_user_id) {
+    query = query.eq('auth_user_id', recipient.auth_user_id)
+  } else if (recipient.member_id) {
+    query = query.eq('member_id', recipient.member_id)
+  } else {
+    return false
+  }
+
+  const { data, error } = await query.maybeSingle()
+  if (error) {
+    console.error('notification-dispatch delivered-log lookup failed', {
+      jobId,
+      channel,
+      error: error.message,
+    })
+    return false
+  }
+
+  return Boolean(data)
 }
 
 async function createJob(adminClient: SupabaseClientLike, { payload, userId, recipients, idempotencyKey }: {
@@ -460,7 +714,7 @@ async function createJob(adminClient: SupabaseClientLike, { payload, userId, rec
       scheduled_at: payload.scheduledAt,
       started_at: now,
       created_by: userId,
-      recipient_count: recipients.length,
+      recipient_count: recipients.length * payload.channels.length,
       idempotency_key: idempotencyKey,
     })
     .select('id, recipient_count, success_count, skipped_count, failure_count')

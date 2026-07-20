@@ -45,10 +45,21 @@ test('rejects missing required fields', () => {
   assert.equal(validateDispatchPayload(createPayload({ channels: [] })).status, 400)
 })
 
-test('rejects unsupported or unknown channels', () => {
-  assert.equal(validateDispatchPayload(createPayload({ channels: ['email'] })).status, 422)
+test('accepts email and combined in-app email dispatch channels', () => {
+  assert.deepEqual(validateDispatchPayload(createPayload({ channels: ['email'] })).value.channels, ['email'])
+  assert.deepEqual(validateDispatchPayload(createPayload({ channels: ['in_app', 'email'] })).value.channels, ['in_app', 'email'])
+})
+
+test('rejects unsupported push or unknown channels', () => {
   assert.equal(validateDispatchPayload(createPayload({ channels: ['push'] })).status, 422)
   assert.equal(validateDispatchPayload(createPayload({ channels: ['sms'] })).status, 422)
+})
+
+test('rejects free email transport fields from clients', () => {
+  assert.equal(validateDispatchPayload(createPayload({ to: 'test@example.com' })).status, 400)
+  assert.equal(validateDispatchPayload(createPayload({ html: '<p>Text</p>' })).status, 400)
+  assert.equal(validateDispatchPayload(createPayload({ subject: 'Betreff' })).status, 400)
+  assert.equal(validateDispatchPayload(createPayload({ from: 'sender@example.com' })).status, 400)
 })
 
 test('rejects unsafe urls and invalid uuids', () => {

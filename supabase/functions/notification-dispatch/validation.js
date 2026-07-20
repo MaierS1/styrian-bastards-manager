@@ -6,7 +6,7 @@ export const MAX_TYPE_LENGTH = 80
 export const MAX_METADATA_BYTES = 8192
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 180
 
-export const SUPPORTED_CHANNELS = ['in_app']
+export const SUPPORTED_CHANNELS = ['in_app', 'email']
 export const KNOWN_CHANNELS = ['in_app', 'email', 'push']
 export const ALLOWED_PRIORITIES = ['low', 'normal', 'high', 'critical']
 export const ALLOWED_CATEGORIES = ['event', 'membership_fee', 'invoice', 'document', 'club_news', 'board', 'system', 'backup']

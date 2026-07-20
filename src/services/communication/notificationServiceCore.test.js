@@ -33,6 +33,64 @@ test('dispatchNotification invokes the notification-dispatch Edge Function with 
   assert.deepEqual(result.data, { success: true, job_id: 'job-1' })
 })
 
+test('dispatchNotification supports email-only and combined channel payloads unchanged', async () => {
+  const payloads = [
+    {
+      type: 'system_notice',
+      title: 'Mail',
+      message: 'Text',
+      channels: ['email'],
+      recipient_user_id: '11111111-1111-4111-8111-111111111111',
+    },
+    {
+      type: 'system_notice',
+      title: 'Mail und App',
+      message: 'Text',
+      channels: ['in_app', 'email'],
+      recipient_user_ids: ['11111111-1111-4111-8111-111111111111'],
+    },
+  ]
+  const invokedBodies = []
+  const client = {
+    functions: {
+      async invoke(_functionName, options) {
+        invokedBodies.push(options.body)
+        return { data: { success: true }, error: null }
+      },
+    },
+  }
+  const dispatch = createNotificationDispatcher(client)
+
+  await dispatch(payloads[0])
+  await dispatch(payloads[1])
+
+  assert.deepEqual(invokedBodies, payloads)
+})
+
+test('dispatchNotification does not add free email transport fields', async () => {
+  const payload = {
+    type: 'system_notice',
+    title: 'Mail',
+    message: 'Text',
+    channels: ['email'],
+    recipient_user_id: '11111111-1111-4111-8111-111111111111',
+  }
+
+  const client = {
+    functions: {
+      async invoke(_functionName, options) {
+        assert.equal('to' in options.body, false)
+        assert.equal('html' in options.body, false)
+        assert.equal('subject' in options.body, false)
+        assert.equal('from' in options.body, false)
+        return { data: { success: true }, error: null }
+      },
+    },
+  }
+
+  await createNotificationDispatcher(client)(payload)
+})
+
 test('dispatchNotification normalizes Supabase invoke errors', async () => {
   const client = {
     functions: {
