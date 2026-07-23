@@ -1060,6 +1060,20 @@ export default function App() {
     return hasPermission(currentMember, module, 'view')
   }
 
+  function canOpenNotificationPage(pageKey) {
+    if (pageKey === 'notifications') return true
+
+    const navigationItem = navigationItems.find(([itemPageKey]) => itemPageKey === pageKey)
+    if (!navigationItem) return false
+
+    const [, , module] = navigationItem
+    if (module && !canViewModule(module)) return false
+    if (pageKey === 'parkedModules' && !canAccessParkedModules()) return false
+    if (pageKey === 'virtualBastardKnowledge' && !canManageVirtualBastardKnowledge()) return false
+
+    return true
+  }
+
   function canEditModule(module) {
     return hasPermission(currentMember, module, 'edit')
   }
@@ -5884,6 +5898,7 @@ export default function App() {
           user={user}
           currentMember={currentMember}
           onNavigate={setActivePage}
+          canOpenNotificationPage={canOpenNotificationPage}
         />
       </nav>
 
@@ -6731,6 +6746,7 @@ export default function App() {
           user={user}
           currentMember={currentMember}
           onNavigate={setActivePage}
+          canOpenNotificationPage={canOpenNotificationPage}
         />
       )}
 

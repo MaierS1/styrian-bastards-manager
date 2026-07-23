@@ -8,8 +8,12 @@ import {
 } from '../../services/repositories/notificationRepository'
 import { buttonStyle, cardStyle, colors, isMobile, secondaryButtonStyle } from '../../styles/appStyles'
 import {
+  applyOptimisticRead,
+  createNotificationCursor,
   formatUnreadBadge,
   getCategoryLabel,
+  getNotificationListState,
+  mergeNotificationPage,
   mergeNotificationList,
   resolveNotificationTarget,
 } from './notificationCenterCore'
@@ -50,7 +54,7 @@ function getMessage(notification) {
   return notification?.body || ''
 }
 
-export function NotificationCenter({ user, currentMember, onNavigate }) {
+export function NotificationCenter({ user, currentMember, onNavigate, canOpenNotificationPage }) {
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -124,9 +128,7 @@ export function NotificationCenter({ user, currentMember, onNavigate }) {
     const previousCount = unreadCount
     const readAt = new Date().toISOString()
 
-    setNotifications((items) => items.map((item) => (
-      item.id === notification.id ? { ...item, read_at: readAt } : item
-    )))
+    setNotifications((items) => applyOptimisticRead(items, notification.id, readAt))
     setUnreadCount((count) => Math.max(0, count - 1))
 
     const result = await markInAppNotificationRead(notification.id)
@@ -163,14 +165,17 @@ export function NotificationCenter({ user, currentMember, onNavigate }) {
 
   const openNotification = useCallback(async (notification) => {
     await markRead(notification)
-    const target = resolveNotificationTarget(notification)
+    const target = resolveNotificationTarget(notification, {
+      canOpenPage: canOpenNotificationPage,
+    })
     if (target.page && onNavigate) {
       onNavigate(target.page)
       setIsOpen(false)
     }
-  }, [markRead, onNavigate])
+  }, [canOpenNotificationPage, markRead, onNavigate])
 
   const badge = formatUnreadBadge(unreadCount)
+  const listState = getNotificationListState({ loading, error, items: notifications })
 
   return (
     <div style={styles.root} ref={popoverRef}>
@@ -199,8 +204,8 @@ export function NotificationCenter({ user, currentMember, onNavigate }) {
           </div>
 
           {error && <div style={styles.errorBox}>{error}</div>}
-          {loading && notifications.length === 0 && <div style={styles.emptyState}>Lade...</div>}
-          {!loading && notifications.length === 0 && <div style={styles.emptyState}>Keine Benachrichtigungen</div>}
+          {listState === 'loading' && <div style={styles.emptyState}>Lade...</div>}
+          {listState === 'empty' && <div style={styles.emptyState}>Keine Benachrichtigungen</div>}
 
           <div style={styles.popoverList}>
             {notifications.map((notification) => (
@@ -228,7 +233,7 @@ export function NotificationCenter({ user, currentMember, onNavigate }) {
   )
 }
 
-export function NotificationCenterPage({ user, currentMember, onNavigate }) {
+export function NotificationCenterPage({ user, currentMember, onNavigate, canOpenNotificationPage }) {
   const [items, setItems] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [filter, setFilter] = useState('all')
@@ -254,8 +259,8 @@ export function NotificationCenterPage({ user, currentMember, onNavigate }) {
     } else {
       const rows = listResult.data || []
       const visibleRows = rows.slice(0, PAGE_LIMIT)
-      setItems((current) => (reset ? visibleRows : [...current, ...visibleRows]))
-      setCursor(visibleRows[visibleRows.length - 1]?.created_at || null)
+      setItems((current) => mergeNotificationPage(current, visibleRows, { reset }))
+      setCursor(createNotificationCursor(visibleRows[visibleRows.length - 1]))
       setHasMore(rows.length > PAGE_LIMIT)
     }
 
@@ -297,9 +302,13 @@ export function NotificationCenterPage({ user, currentMember, onNavigate }) {
 
   const openNotification = useCallback(async (notification) => {
     await markRead(notification)
-    const target = resolveNotificationTarget(notification)
+    const target = resolveNotificationTarget(notification, {
+      canOpenPage: canOpenNotificationPage,
+    })
     if (target.page && onNavigate) onNavigate(target.page)
-  }, [markRead, onNavigate])
+  }, [canOpenNotificationPage, markRead, onNavigate])
+
+  const listState = getNotificationListState({ loading, error, items })
 
   return (
     <section style={styles.pageSection}>
@@ -323,8 +332,8 @@ export function NotificationCenterPage({ user, currentMember, onNavigate }) {
       </div>
 
       {error && <div style={styles.errorBox}>{error}</div>}
-      {loading && items.length === 0 && <div style={cardStyle}>Lade...</div>}
-      {!loading && items.length === 0 && <div style={cardStyle}>Keine Benachrichtigungen vorhanden.</div>}
+      {listState === 'loading' && <div style={cardStyle}>Lade...</div>}
+      {listState === 'empty' && <div style={cardStyle}>Keine Benachrichtigungen vorhanden.</div>}
 
       {items.map((notification) => (
         <NotificationCard
