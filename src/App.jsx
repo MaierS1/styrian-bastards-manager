@@ -28,6 +28,7 @@ import {
   ALLOWED_APP_ROLES,
 } from './utils/permissions'
 import { navigationItems } from './app/navigation'
+import { NotificationCenter, NotificationCenterPage } from './components/communication/NotificationCenter'
 import { formatCustomerAddressFromFields as buildFormatCustomerAddressFromFields } from './utils/formatters'
 import { normalizeRichTextHtml } from './utils/sanitizeHtml'
 import {
@@ -5879,6 +5880,11 @@ export default function App() {
               {label}
             </button>
           ))}
+        <NotificationCenter
+          user={user}
+          currentMember={currentMember}
+          onNavigate={setActivePage}
+        />
       </nav>
 
       {linkedMemberNotice && (
@@ -6718,6 +6724,14 @@ export default function App() {
 
       {activePage === 'parkedModules' && (
         <ParkedModulesPage canAccess={canAccessParkedModules()} onNavigate={setActivePage} />
+      )}
+
+      {activePage === 'notifications' && (
+        <NotificationCenterPage
+          user={user}
+          currentMember={currentMember}
+          onNavigate={setActivePage}
+        />
       )}
 
       {activePage === 'portal' && (

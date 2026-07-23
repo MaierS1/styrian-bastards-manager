@@ -47,7 +47,12 @@ function sanitizeNotificationPreference(preference) {
   }
 }
 
-export async function fetchInAppNotifications({ limit = 20, includeArchived = false } = {}) {
+export async function fetchInAppNotifications({
+  limit = 20,
+  cursor = null,
+  unreadOnly = false,
+  includeArchived = false,
+} = {}) {
   let query = supabase
     .from('in_app_notifications')
     .select(NOTIFICATION_SELECT)
@@ -57,6 +62,14 @@ export async function fetchInAppNotifications({ limit = 20, includeArchived = fa
 
   if (!includeArchived) {
     query = query.is('archived_at', null)
+  }
+
+  if (unreadOnly) {
+    query = query.is('read_at', null)
+  }
+
+  if (cursor) {
+    query = query.lt('created_at', cursor)
   }
 
   return query
@@ -169,6 +182,16 @@ export async function markInAppNotificationUnread(notificationId) {
     .eq('id', notificationId)
     .select(NOTIFICATION_SELECT)
     .single()
+}
+
+export async function markAllInAppNotificationsRead() {
+  return supabase
+    .from('in_app_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .is('read_at', null)
+    .is('archived_at', null)
+    .is('deleted_at', null)
+    .select(NOTIFICATION_SELECT)
 }
 
 export async function archiveInAppNotification(notificationId) {
