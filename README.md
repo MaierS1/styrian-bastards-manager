@@ -53,6 +53,11 @@ The seed is idempotent and can be run multiple times without creating duplicate 
 
 Auth users are not inserted into `auth.users` by the seed. For local or staging login tests, create the auth user through Supabase Auth and then link it manually by setting `public.members.auth_user_id` to the created auth user UUID. The seeded admin member is `admin.member@example.test`.
 
+## Roadmap
+
+- Vorfinanzierungen & Verbindlichkeiten MVP: in Umsetzung auf `staging`.
+- Spaetere Erweiterungen: Belegautomatisierung, Genehmigungsworkflow, Erinnerungen, PDF-Abrechnung, erweiterte Auswertungen.
+
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.

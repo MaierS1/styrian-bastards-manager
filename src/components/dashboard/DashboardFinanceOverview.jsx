@@ -7,6 +7,11 @@ export function DashboardFinanceOverview({ financeData, financeHealthStatus, get
   const categorySummaryResult = safeGetCategorySummary()
   const categorySummary = Array.isArray(categorySummaryResult) ? categorySummaryResult : []
   const safeFinanceHealthStatus = financeHealthStatus || { label: 'Unbekannt', color: colors.muted }
+  const liabilitiesSummary = safeFinanceData.financingLiabilitiesSummary || {
+    openCount: 0,
+    openTotal: 0,
+    partiallyPaidCount: 0,
+  }
 
   return (
     <div style={{ ...cardStyle, borderTop: `6px solid ${colors.blue}` }}>
@@ -37,6 +42,18 @@ export function DashboardFinanceOverview({ financeData, financeHealthStatus, get
           <br />
           <strong>{(safeFinanceData.balance || 0).toFixed(2)} EUR</strong>
         </div>
+
+        <button
+          type="button"
+          onClick={() => onNavigate?.('financingLiabilities')}
+          style={{ ...cardStyle, textAlign: 'left', cursor: 'pointer' }}
+        >
+          <strong>Offene Vorfinanzierungen</strong>
+          <br />
+          {liabilitiesSummary.openCount || 0} offen Â· {(liabilitiesSummary.openTotal || 0).toFixed(2)} EUR
+          <br />
+          <span style={mutedTextStyle}>{liabilitiesSummary.partiallyPaidCount || 0} teilweise bezahlt</span>
+        </button>
       </div>
 
       <h3 style={headingStyle}>Top Event-Ergebnisse</h3>

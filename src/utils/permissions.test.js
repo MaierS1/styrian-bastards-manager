@@ -13,6 +13,7 @@ const existingModules = [
   'mitglieder',
   'beitraege',
   'kassa',
+  'vorfinanzierungen',
   'rechnungen',
   'dokumente',
   'events',
@@ -61,6 +62,23 @@ test('blocks administrative communication access for users without communication
   assert.equal(hasPermission('mitglied', 'kommunikation', 'view'), false)
   assert.equal(hasPermission('rechnungspruefer', 'kommunikation', 'view'), false)
   assert.equal(hasPermission({ app_role: 'mitglied' }, 'kommunikation', 'view'), false)
+})
+
+test('mirrors financing liabilities role grants in the frontend permission matrix', () => {
+  for (const action of ['view', 'create', 'edit', 'delete']) {
+    assert.equal(hasPermission('super_admin', 'vorfinanzierungen', action), true)
+    assert.equal(hasPermission('administrator', 'vorfinanzierungen', action), true)
+    assert.equal(hasPermission('kassier', 'vorfinanzierungen', action), true)
+    assert.equal(hasPermission('cashier', 'vorfinanzierungen', action), true)
+  }
+
+  assert.equal(hasPermission('vorstand', 'vorfinanzierungen', 'view'), true)
+  assert.equal(hasPermission('vorstand', 'vorfinanzierungen', 'create'), true)
+  assert.equal(hasPermission('vorstand', 'vorfinanzierungen', 'edit'), false)
+  assert.equal(hasPermission('schriftfuehrer', 'vorfinanzierungen', 'view'), true)
+  assert.equal(hasPermission('schriftfuehrer', 'vorfinanzierungen', 'create'), false)
+  assert.equal(hasPermission('rechnungspruefer', 'vorfinanzierungen', 'view'), true)
+  assert.equal(hasPermission('mitglied', 'vorfinanzierungen', 'view'), false)
 })
 
 test('keeps own notification preferences independent from admin communication permissions', () => {
