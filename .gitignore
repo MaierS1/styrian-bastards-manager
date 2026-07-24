@@ -24,3 +24,9 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Lokale Datenbank-Backups
+backups/
+
+# Lokale Sicherungen
+*.backup
