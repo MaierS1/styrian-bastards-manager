@@ -1,90 +1,39 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  archiveInAppNotification,
   fetchInAppNotifications,
   fetchUnreadNotificationCount,
+  markAllInAppNotificationsRead,
   markInAppNotificationRead,
-  markInAppNotificationUnread,
-  softDeleteInAppNotification,
   subscribeToInAppNotifications,
 } from '../../services/repositories/notificationRepository'
-import { colors, isMobile } from '../../styles/appStyles'
+import { buttonStyle, cardStyle, colors, isMobile, secondaryButtonStyle } from '../../styles/appStyles'
+import {
+  applyOptimisticRead,
+  createNotificationCursor,
+  formatUnreadBadge,
+  getCategoryLabel,
+  getNotificationListState,
+  mergeNotificationPage,
+  mergeNotificationList,
+  resolveNotificationTarget,
+} from './notificationCenterCore'
 
-const POLLING_INTERVAL_MS = 60000
-
-const categoryLabels = {
-  event: 'Event',
-  membership_fee: 'Beitrag',
-  invoice: 'Rechnung',
-  document: 'Dokument',
-  club_news: 'News',
-  board: 'Vorstand',
-  system: 'System',
-  backup: 'Backup',
-}
+const POPOVER_LIMIT = 12
+const PAGE_LIMIT = 25
 
 function BellIcon() {
   return (
-    <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M10 21a2 2 0 0 0 4 0"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function ReloadIcon() {
-  return (
-    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M21 12a9 9 0 0 1-15.1 6.6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M3 12A9 9 0 0 1 18.1 5.4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M18 2v4h-4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M6 22v-4h4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+    <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none">
+      <path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 21a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
 
 function formatNotificationDate(value) {
   if (!value) return ''
-
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
-
   return new Intl.DateTimeFormat('de-AT', {
     day: '2-digit',
     month: '2-digit',
@@ -94,62 +43,41 @@ function formatNotificationDate(value) {
   }).format(date)
 }
 
-function getCategoryLabel(category) {
-  return categoryLabels[category] || category || 'Info'
+function getPriorityStyle(notification) {
+  const priority = notification?.data?.priority
+  if (priority === 'critical') return styles.priorityCritical
+  if (priority === 'high') return styles.priorityHigh
+  return styles.priorityNormal
 }
 
-function mergeNotification(currentItems, updatedItem) {
-  const nextItems = currentItems.filter((item) => item.id !== updatedItem.id)
-
-  if (!updatedItem.deleted_at && !updatedItem.archived_at) {
-    nextItems.unshift(updatedItem)
-  }
-
-  return nextItems.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+function getMessage(notification) {
+  return notification?.body || ''
 }
 
-export function NotificationCenter({ user, currentMember }) {
+export function NotificationCenter({ user, currentMember, onNavigate, canOpenNotificationPage }) {
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const [selectedId, setSelectedId] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [actionId, setActionId] = useState(null)
+  const [actionBusy, setActionBusy] = useState(false)
   const [error, setError] = useState('')
-  const panelRef = useRef(null)
+  const popoverRef = useRef(null)
 
-  const selectedNotification = useMemo(() => (
-    notifications.find((notification) => notification.id === selectedId) || notifications[0] || null
-  ), [notifications, selectedId])
-
-  const refreshNotifications = useCallback(async ({ silent = false } = {}) => {
+  const refresh = useCallback(async ({ silent = false } = {}) => {
     if (!user?.id) return
-
     if (!silent) setLoading(true)
     setError('')
 
-    const [notificationsResult, countResult] = await Promise.all([
-      fetchInAppNotifications({ limit: 20 }),
+    const [listResult, countResult] = await Promise.all([
+      fetchInAppNotifications({ limit: POPOVER_LIMIT }),
       fetchUnreadNotificationCount(),
     ])
 
-    if (notificationsResult.error) {
-      setError(notificationsResult.error.message)
-    } else {
-      const rows = notificationsResult.data || []
-      setNotifications(rows)
-      setSelectedId((currentSelectedId) => (
-        currentSelectedId && rows.some((item) => item.id === currentSelectedId)
-          ? currentSelectedId
-          : rows[0]?.id || null
-      ))
-    }
+    if (listResult.error) setError(listResult.error.message)
+    else setNotifications(listResult.data || [])
 
-    if (countResult.error) {
-      setError((currentError) => currentError || countResult.error.message)
-    } else {
-      setUnreadCount(countResult.count || 0)
-    }
+    if (countResult.error) setError((current) => current || countResult.error.message)
+    else setUnreadCount(countResult.count || 0)
 
     if (!silent) setLoading(false)
   }, [user?.id])
@@ -158,246 +86,311 @@ export function NotificationCenter({ user, currentMember }) {
     if (!user?.id) {
       setNotifications([])
       setUnreadCount(0)
-      setSelectedId(null)
       return undefined
     }
 
-    refreshNotifications()
-
-    const pollingId = window.setInterval(() => {
-      refreshNotifications({ silent: true })
-    }, POLLING_INTERVAL_MS)
-
+    refresh()
     const subscription = subscribeToInAppNotifications({
       authUserId: user.id,
       memberId: currentMember?.id,
-      onChange: () => {
-        refreshNotifications({ silent: true })
+      onChange: (payload) => {
+        if (payload.new?.id) {
+          setNotifications((items) => mergeNotificationList(items, payload.new, { limit: POPOVER_LIMIT }))
+        }
+        refresh({ silent: true })
       },
     })
 
-    return () => {
-      window.clearInterval(pollingId)
-      subscription.unsubscribe()
-    }
-  }, [currentMember?.id, refreshNotifications, user?.id])
+    return () => subscription.unsubscribe()
+  }, [currentMember?.id, refresh, user?.id])
 
   useEffect(() => {
     if (!isOpen) return undefined
 
     const handlePointerDown = (event) => {
-      if (!panelRef.current?.contains(event.target)) {
-        setIsOpen(false)
-      }
+      if (!popoverRef.current?.contains(event.target)) setIsOpen(false)
     }
-
     const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
+      if (event.key === 'Escape') setIsOpen(false)
     }
 
     document.addEventListener('mousedown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
-
     return () => {
       document.removeEventListener('mousedown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [isOpen])
 
-  const runNotificationAction = useCallback(async (notification, action) => {
-    if (!notification?.id) return
+  const markRead = useCallback(async (notification) => {
+    if (!notification?.id || notification.read_at) return
+    const previousItems = notifications
+    const previousCount = unreadCount
+    const readAt = new Date().toISOString()
 
-    setActionId(notification.id)
-    setError('')
+    setNotifications((items) => applyOptimisticRead(items, notification.id, readAt))
+    setUnreadCount((count) => Math.max(0, count - 1))
 
-    const result = await action(notification.id)
-
+    const result = await markInAppNotificationRead(notification.id)
     if (result.error) {
+      setNotifications(previousItems)
+      setUnreadCount(previousCount)
       setError(result.error.message)
     } else if (result.data) {
-      setNotifications((currentItems) => mergeNotification(currentItems, result.data))
-      setSelectedId((currentSelectedId) => (
-        result.data.deleted_at || result.data.archived_at
-          ? currentItemsFallbackId(notifications, notification.id)
-          : currentSelectedId
-      ))
-      await refreshNotifications({ silent: true })
+      setNotifications((items) => mergeNotificationList(items, result.data, { limit: POPOVER_LIMIT }))
+      refresh({ silent: true })
     }
+  }, [notifications, refresh, unreadCount])
 
-    setActionId(null)
-  }, [notifications, refreshNotifications])
+  const markAllRead = useCallback(async () => {
+    setActionBusy(true)
+    setError('')
+    const previousItems = notifications
+    const previousCount = unreadCount
+    const readAt = new Date().toISOString()
 
-  const handleToggleRead = useCallback((notification) => {
-    runNotificationAction(
-      notification,
-      notification.read_at ? markInAppNotificationUnread : markInAppNotificationRead
-    )
-  }, [runNotificationAction])
+    setNotifications((items) => items.map((item) => ({ ...item, read_at: item.read_at || readAt })))
+    setUnreadCount(0)
 
-  const handleArchive = useCallback((notification) => {
-    runNotificationAction(notification, archiveInAppNotification)
-  }, [runNotificationAction])
+    const result = await markAllInAppNotificationsRead()
+    if (result.error) {
+      setNotifications(previousItems)
+      setUnreadCount(previousCount)
+      setError(result.error.message)
+    } else {
+      refresh({ silent: true })
+    }
+    setActionBusy(false)
+  }, [notifications, refresh, unreadCount])
 
-  const handleSoftDelete = useCallback((notification) => {
-    runNotificationAction(notification, softDeleteInAppNotification)
-  }, [runNotificationAction])
+  const openNotification = useCallback(async (notification) => {
+    await markRead(notification)
+    const target = resolveNotificationTarget(notification, {
+      canOpenPage: canOpenNotificationPage,
+    })
+    if (target.page && onNavigate) {
+      onNavigate(target.page)
+      setIsOpen(false)
+    }
+  }, [canOpenNotificationPage, markRead, onNavigate])
+
+  const badge = formatUnreadBadge(unreadCount)
+  const listState = getNotificationListState({ loading, error, items: notifications })
 
   return (
-    <div style={styles.root} ref={panelRef}>
+    <div style={styles.root} ref={popoverRef}>
       <button
         type="button"
-        onClick={() => setIsOpen((currentValue) => !currentValue)}
+        onClick={() => setIsOpen((value) => !value)}
         style={styles.bellButton}
         aria-label={`Benachrichtigungen oeffnen, ${unreadCount} ungelesen`}
         aria-expanded={isOpen}
+        title="Benachrichtigungen"
       >
         <BellIcon />
-        {unreadCount > 0 && (
-          <span style={styles.badge}>
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
+        {badge && <span style={styles.badge}>{badge}</span>}
       </button>
 
       {isOpen && (
-        <section style={styles.panel} aria-label="Benachrichtigungen">
-          <header style={styles.panelHeader}>
+        <section style={styles.popover} aria-label="Neueste Benachrichtigungen">
+          <div style={styles.popoverHeader}>
             <div>
-              <h2 style={styles.panelTitle}>Benachrichtigungen</h2>
-              <p style={styles.panelMeta}>
-                {unreadCount} ungelesen
-              </p>
+              <strong>Benachrichtigungen</strong>
+              <div style={styles.metaText}>{unreadCount} ungelesen</div>
             </div>
-            <button
-              type="button"
-              onClick={() => refreshNotifications()}
-              style={styles.iconButton}
-              disabled={loading}
-              aria-label="Benachrichtigungen neu laden"
-              title="Neu laden"
-            >
-              <ReloadIcon />
+            <button type="button" onClick={markAllRead} style={styles.textButton} disabled={actionBusy || unreadCount === 0}>
+              Alle gelesen
             </button>
-          </header>
-
-          {error && (
-            <div style={styles.errorBox}>
-              {error}
-            </div>
-          )}
-
-          <div style={styles.contentGrid}>
-            <div style={styles.listPane}>
-              {loading && notifications.length === 0 && (
-                <div style={styles.emptyState}>Lade...</div>
-              )}
-
-              {!loading && notifications.length === 0 && (
-                <div style={styles.emptyState}>Keine Benachrichtigungen</div>
-              )}
-
-              {notifications.map((notification) => (
-                <button
-                  key={notification.id}
-                  type="button"
-                  onClick={() => setSelectedId(notification.id)}
-                  style={{
-                    ...styles.listItem,
-                    ...(notification.id === selectedNotification?.id ? styles.listItemActive : null),
-                    ...(!notification.read_at ? styles.listItemUnread : null),
-                  }}
-                >
-                  <span style={styles.listItemTopline}>
-                    <span style={styles.categoryPill}>{getCategoryLabel(notification.category)}</span>
-                    <span style={styles.dateText}>{formatNotificationDate(notification.created_at)}</span>
-                  </span>
-                  <span style={styles.listItemTitle}>{notification.title}</span>
-                  {notification.body && (
-                    <span style={styles.listItemBody}>{notification.body}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            <div style={styles.detailPane}>
-              {selectedNotification ? (
-                <NotificationDetail
-                  notification={selectedNotification}
-                  actionId={actionId}
-                  onToggleRead={handleToggleRead}
-                  onArchive={handleArchive}
-                  onSoftDelete={handleSoftDelete}
-                />
-              ) : (
-                <div style={styles.emptyState}>Keine Auswahl</div>
-              )}
-            </div>
           </div>
+
+          {error && <div style={styles.errorBox}>{error}</div>}
+          {listState === 'loading' && <div style={styles.emptyState}>Lade...</div>}
+          {listState === 'empty' && <div style={styles.emptyState}>Keine Benachrichtigungen</div>}
+
+          <div style={styles.popoverList}>
+            {notifications.map((notification) => (
+              <NotificationRow
+                key={notification.id}
+                notification={notification}
+                onOpen={openNotification}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate?.('notifications')
+              setIsOpen(false)
+            }}
+            style={styles.footerButton}
+          >
+            Alle Benachrichtigungen anzeigen
+          </button>
         </section>
       )}
     </div>
   )
 }
 
-function currentItemsFallbackId(items, removedId) {
-  return items.find((item) => item.id !== removedId && !item.deleted_at && !item.archived_at)?.id || null
-}
+export function NotificationCenterPage({ user, currentMember, onNavigate, canOpenNotificationPage }) {
+  const [items, setItems] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [filter, setFilter] = useState('all')
+  const [cursor, setCursor] = useState(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-function NotificationDetail({ notification, actionId, onToggleRead, onArchive, onSoftDelete }) {
-  const isBusy = actionId === notification.id
+  const loadPage = useCallback(async ({ reset = false, silent = false } = {}) => {
+    if (!user?.id) return
+    if (!silent) setLoading(true)
+    setError('')
+
+    const listResult = await fetchInAppNotifications({
+      limit: PAGE_LIMIT + 1,
+      cursor: reset ? null : cursor,
+      unreadOnly: filter === 'unread',
+    })
+    const countResult = await fetchUnreadNotificationCount()
+
+    if (listResult.error) {
+      setError(listResult.error.message)
+    } else {
+      const rows = listResult.data || []
+      const visibleRows = rows.slice(0, PAGE_LIMIT)
+      setItems((current) => mergeNotificationPage(current, visibleRows, { reset }))
+      setCursor(createNotificationCursor(visibleRows[visibleRows.length - 1]))
+      setHasMore(rows.length > PAGE_LIMIT)
+    }
+
+    if (countResult.error) setError((current) => current || countResult.error.message)
+    else setUnreadCount(countResult.count || 0)
+
+    if (!silent) setLoading(false)
+  }, [cursor, filter, user?.id])
+
+  useEffect(() => {
+    setCursor(null)
+    loadPage({ reset: true })
+  }, [filter, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!user?.id) return undefined
+
+    const subscription = subscribeToInAppNotifications({
+      authUserId: user.id,
+      memberId: currentMember?.id,
+      onChange: () => loadPage({ reset: true, silent: true }),
+    })
+
+    return () => subscription.unsubscribe()
+  }, [currentMember?.id, loadPage, user?.id])
+
+  const markRead = useCallback(async (notification) => {
+    if (!notification?.id || notification.read_at) return
+    const result = await markInAppNotificationRead(notification.id)
+    if (result.error) setError(result.error.message)
+    else loadPage({ reset: true, silent: true })
+  }, [loadPage])
+
+  const markAllRead = useCallback(async () => {
+    const result = await markAllInAppNotificationsRead()
+    if (result.error) setError(result.error.message)
+    else loadPage({ reset: true, silent: true })
+  }, [loadPage])
+
+  const openNotification = useCallback(async (notification) => {
+    await markRead(notification)
+    const target = resolveNotificationTarget(notification, {
+      canOpenPage: canOpenNotificationPage,
+    })
+    if (target.page && onNavigate) onNavigate(target.page)
+  }, [canOpenNotificationPage, markRead, onNavigate])
+
+  const listState = getNotificationListState({ loading, error, items })
 
   return (
-    <article style={styles.detail}>
-      <div style={styles.detailHeader}>
-        <span style={styles.categoryPill}>{getCategoryLabel(notification.category)}</span>
+    <section style={styles.pageSection}>
+      <div style={styles.pageHeader}>
+        <div>
+          <h2 style={styles.pageTitle}>Benachrichtigungen</h2>
+          <p style={styles.pageMeta}>{unreadCount} ungelesen</p>
+        </div>
+        <button type="button" onClick={markAllRead} style={secondaryButtonStyle} disabled={unreadCount === 0}>
+          Alle als gelesen markieren
+        </button>
+      </div>
+
+      <div style={styles.filterRow}>
+        <button type="button" onClick={() => setFilter('all')} style={filter === 'all' ? buttonStyle : secondaryButtonStyle}>
+          Alle
+        </button>
+        <button type="button" onClick={() => setFilter('unread')} style={filter === 'unread' ? buttonStyle : secondaryButtonStyle}>
+          Ungelesen
+        </button>
+      </div>
+
+      {error && <div style={styles.errorBox}>{error}</div>}
+      {listState === 'loading' && <div style={cardStyle}>Lade...</div>}
+      {listState === 'empty' && <div style={cardStyle}>Keine Benachrichtigungen vorhanden.</div>}
+
+      {items.map((notification) => (
+        <NotificationCard
+          key={notification.id}
+          notification={notification}
+          onOpen={openNotification}
+          onMarkRead={markRead}
+        />
+      ))}
+
+      {hasMore && (
+        <button type="button" onClick={() => loadPage()} style={secondaryButtonStyle} disabled={loading}>
+          Weitere laden
+        </button>
+      )}
+    </section>
+  )
+}
+
+function NotificationRow({ notification, onOpen }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(notification)}
+      style={{
+        ...styles.row,
+        ...(!notification.read_at ? styles.rowUnread : null),
+      }}
+    >
+      <span style={styles.rowTop}>
+        <span style={{ ...styles.categoryPill, ...getPriorityStyle(notification) }}>{getCategoryLabel(notification.category)}</span>
+        <span style={styles.dateText}>{formatNotificationDate(notification.created_at)}</span>
+      </span>
+      <span style={styles.rowTitle}>{notification.title}</span>
+      {getMessage(notification) && <span style={styles.rowBody}>{getMessage(notification)}</span>}
+    </button>
+  )
+}
+
+function NotificationCard({ notification, onOpen, onMarkRead }) {
+  return (
+    <article style={{ ...cardStyle, ...(!notification.read_at ? styles.cardUnread : null) }}>
+      <div style={styles.cardHeader}>
+        <span style={{ ...styles.categoryPill, ...getPriorityStyle(notification) }}>{getCategoryLabel(notification.category)}</span>
         <span style={styles.dateText}>{formatNotificationDate(notification.created_at)}</span>
       </div>
-
-      <h3 style={styles.detailTitle}>{notification.title}</h3>
-
-      {notification.body ? (
-        <p style={styles.detailBody}>{notification.body}</p>
-      ) : (
-        <p style={styles.detailBodyMuted}>Keine weiteren Details.</p>
-      )}
-
-      {notification.url && (
-        <a href={notification.url} style={styles.detailLink}>
-          Link oeffnen
-        </a>
-      )}
-
-      <div style={styles.detailState}>
-        Status: <strong>{notification.read_at ? 'gelesen' : 'ungelesen'}</strong>
-      </div>
-
-      <div style={styles.actionRow}>
-        <button
-          type="button"
-          onClick={() => onToggleRead(notification)}
-          style={styles.actionButton}
-          disabled={isBusy}
-        >
-          {notification.read_at ? 'Ungelesen' : 'Gelesen'}
+      <h3 style={styles.cardTitle}>{notification.title}</h3>
+      {getMessage(notification) && <p style={styles.cardBody}>{getMessage(notification)}</p>}
+      <div style={styles.cardActions}>
+        <button type="button" onClick={() => onOpen(notification)} style={buttonStyle}>
+          Oeffnen
         </button>
-        <button
-          type="button"
-          onClick={() => onArchive(notification)}
-          style={styles.actionButton}
-          disabled={isBusy}
-        >
-          Archivieren
-        </button>
-        <button
-          type="button"
-          onClick={() => onSoftDelete(notification)}
-          style={styles.dangerButton}
-          disabled={isBusy}
-        >
-          Entfernen
-        </button>
+        {!notification.read_at && (
+          <button type="button" onClick={() => onMarkRead(notification)} style={secondaryButtonStyle}>
+            Als gelesen markieren
+          </button>
+        )}
       </div>
     </article>
   )
@@ -406,16 +399,14 @@ function NotificationDetail({ notification, actionId, onToggleRead, onArchive, o
 const styles = {
   root: {
     position: 'relative',
+    marginLeft: 'auto',
     display: 'inline-flex',
     alignItems: 'center',
   },
   bellButton: {
     position: 'relative',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 46,
-    height: 46,
+    width: 44,
+    height: 44,
     borderRadius: 10,
     border: `2px solid ${colors.white}`,
     background: colors.black,
@@ -424,8 +415,8 @@ const styles = {
   },
   badge: {
     position: 'absolute',
-    top: -7,
-    right: -7,
+    top: -8,
+    right: -8,
     minWidth: 22,
     height: 22,
     padding: '0 6px',
@@ -438,50 +429,120 @@ const styles = {
     fontWeight: 900,
     boxSizing: 'border-box',
   },
-  panel: {
+  popover: {
     position: 'absolute',
-    top: 54,
+    top: 52,
     right: 0,
-    width: isMobile ? 'calc(100vw - 32px)' : 720,
+    width: isMobile ? 'calc(100vw - 32px)' : 420,
     maxWidth: 'calc(100vw - 32px)',
-    maxHeight: isMobile ? '78vh' : 620,
-    overflow: 'hidden',
+    maxHeight: '78vh',
     zIndex: 100,
+    overflow: 'hidden',
     background: colors.white,
     color: colors.text,
     border: `1px solid ${colors.border}`,
-    borderRadius: 12,
+    borderRadius: 10,
     boxShadow: '0 18px 45px rgba(0,0,0,0.35)',
   },
-  panelHeader: {
+  popoverHeader: {
     display: 'flex',
-    justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 16,
-    padding: 16,
-    borderBottom: `1px solid ${colors.border}`,
+    justifyContent: 'space-between',
+    gap: 12,
+    padding: 14,
     background: colors.offWhite,
+    borderBottom: `1px solid ${colors.border}`,
   },
-  panelTitle: {
-    margin: 0,
-    fontSize: 18,
-    lineHeight: 1.2,
-  },
-  panelMeta: {
-    margin: '4px 0 0',
+  metaText: {
+    marginTop: 3,
     color: colors.muted,
     fontSize: 13,
   },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    border: `1px solid ${colors.border}`,
+  textButton: {
+    border: 0,
+    background: 'transparent',
+    color: colors.blue,
+    fontWeight: 900,
+    cursor: 'pointer',
+    padding: 0,
+  },
+  popoverList: {
+    maxHeight: isMobile ? '55vh' : 430,
+    overflowY: 'auto',
+  },
+  row: {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '100%',
+    minHeight: 92,
+    padding: 13,
+    border: 0,
+    borderBottom: `1px solid ${colors.border}`,
     background: colors.white,
     color: colors.text,
+    textAlign: 'left',
     cursor: 'pointer',
-    fontSize: 20,
-    lineHeight: 1,
+  },
+  rowUnread: {
+    borderLeft: `5px solid ${colors.red}`,
+    paddingLeft: 8,
+    background: '#fffafa',
+  },
+  rowTop: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 7,
+  },
+  categoryPill: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    minHeight: 23,
+    padding: '2px 8px',
+    borderRadius: 999,
+    background: colors.infoBg,
+    color: colors.infoText,
+    fontSize: 12,
+    fontWeight: 900,
+  },
+  priorityHigh: {
+    background: '#fff7ed',
+    color: '#9a3412',
+  },
+  priorityCritical: {
+    background: colors.dangerBg,
+    color: colors.dangerText,
+  },
+  priorityNormal: {},
+  dateText: {
+    color: colors.muted,
+    fontSize: 12,
+    whiteSpace: 'nowrap',
+  },
+  rowTitle: {
+    fontWeight: 900,
+    lineHeight: 1.3,
+    marginBottom: 5,
+  },
+  rowBody: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 1.35,
+    overflow: 'hidden',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+  },
+  footerButton: {
+    width: '100%',
+    border: 0,
+    borderTop: `1px solid ${colors.border}`,
+    background: colors.offWhite,
+    color: colors.black,
+    fontWeight: 900,
+    padding: 13,
+    cursor: 'pointer',
   },
   errorBox: {
     margin: 12,
@@ -492,142 +553,65 @@ const styles = {
     border: `1px solid ${colors.red}`,
     fontSize: 13,
   },
-  contentGrid: {
-    display: 'grid',
-    gridTemplateColumns: isMobile ? '1fr' : 'minmax(240px, 320px) 1fr',
-    minHeight: isMobile ? 360 : 460,
-    maxHeight: isMobile ? 'calc(78vh - 74px)' : 546,
-  },
-  listPane: {
-    overflowY: 'auto',
-    borderRight: isMobile ? 'none' : `1px solid ${colors.border}`,
-    borderBottom: isMobile ? `1px solid ${colors.border}` : 'none',
-    maxHeight: isMobile ? 260 : 'none',
-  },
-  detailPane: {
-    overflowY: 'auto',
-    minHeight: 240,
-  },
-  listItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    width: '100%',
-    minHeight: 104,
-    padding: 14,
-    border: 0,
-    borderBottom: `1px solid ${colors.border}`,
-    background: colors.white,
-    color: colors.text,
-    textAlign: 'left',
-    cursor: 'pointer',
-  },
-  listItemActive: {
-    background: '#f3f4f6',
-  },
-  listItemUnread: {
-    borderLeft: `5px solid ${colors.red}`,
-    paddingLeft: 9,
-  },
-  listItemTopline: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 8,
-  },
-  categoryPill: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    minHeight: 24,
-    padding: '2px 8px',
-    borderRadius: 999,
-    background: colors.infoBg,
-    color: colors.infoText,
-    fontSize: 12,
-    fontWeight: 900,
-  },
-  dateText: {
-    color: colors.muted,
-    fontSize: 12,
-    whiteSpace: 'nowrap',
-  },
-  listItemTitle: {
-    fontWeight: 900,
-    lineHeight: 1.3,
-    marginBottom: 5,
-  },
-  listItemBody: {
-    color: colors.muted,
-    fontSize: 13,
-    lineHeight: 1.35,
-    overflow: 'hidden',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-  },
-  detail: {
-    padding: 18,
-  },
-  detailHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 12,
-  },
-  detailTitle: {
-    margin: '0 0 12px',
-    fontSize: 22,
-    lineHeight: 1.25,
-  },
-  detailBody: {
-    margin: '0 0 16px',
-    whiteSpace: 'pre-wrap',
-    color: colors.text,
-  },
-  detailBodyMuted: {
-    margin: '0 0 16px',
-    color: colors.muted,
-  },
-  detailLink: {
-    display: 'inline-flex',
-    marginBottom: 16,
-    color: colors.blue,
-    fontWeight: 900,
-  },
-  detailState: {
-    marginBottom: 16,
-    color: colors.muted,
-  },
-  actionRow: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  actionButton: {
-    minHeight: 38,
-    padding: '8px 12px',
-    borderRadius: 8,
-    border: `1px solid ${colors.black}`,
-    background: colors.white,
-    color: colors.black,
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
-  dangerButton: {
-    minHeight: 38,
-    padding: '8px 12px',
-    borderRadius: 8,
-    border: `1px solid ${colors.red}`,
-    background: colors.white,
-    color: colors.red,
-    fontWeight: 900,
-    cursor: 'pointer',
-  },
   emptyState: {
     padding: 18,
     color: colors.muted,
     textAlign: 'center',
+  },
+  pageSection: {
+    width: '100%',
+    boxSizing: 'border-box',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 16,
+    padding: isMobile ? 16 : 24,
+    marginBottom: 28,
+    background: colors.offWhite,
+    color: colors.text,
+  },
+  pageHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 16,
+    flexWrap: 'wrap',
+    marginBottom: 16,
+  },
+  pageTitle: {
+    margin: 0,
+    fontSize: 28,
+    color: colors.black,
+  },
+  pageMeta: {
+    margin: '4px 0 0',
+    color: colors.muted,
+  },
+  filterRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  cardUnread: {
+    borderLeft: `6px solid ${colors.red}`,
+  },
+  cardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: 10,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  cardTitle: {
+    margin: '0 0 8px',
+    fontSize: 20,
+  },
+  cardBody: {
+    whiteSpace: 'pre-wrap',
+    marginTop: 0,
+  },
+  cardActions: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 }

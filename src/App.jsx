@@ -28,6 +28,7 @@ import {
   ALLOWED_APP_ROLES,
 } from './utils/permissions'
 import { navigationItems } from './app/navigation'
+import { NotificationCenter, NotificationCenterPage } from './components/communication/NotificationCenter'
 import { formatCustomerAddressFromFields as buildFormatCustomerAddressFromFields } from './utils/formatters'
 import { normalizeRichTextHtml } from './utils/sanitizeHtml'
 import {
@@ -1057,6 +1058,20 @@ export default function App() {
 
   function canViewModule(module) {
     return hasPermission(currentMember, module, 'view')
+  }
+
+  function canOpenNotificationPage(pageKey) {
+    if (pageKey === 'notifications') return true
+
+    const navigationItem = navigationItems.find(([itemPageKey]) => itemPageKey === pageKey)
+    if (!navigationItem) return false
+
+    const [, , module] = navigationItem
+    if (module && !canViewModule(module)) return false
+    if (pageKey === 'parkedModules' && !canAccessParkedModules()) return false
+    if (pageKey === 'virtualBastardKnowledge' && !canManageVirtualBastardKnowledge()) return false
+
+    return true
   }
 
   function canEditModule(module) {
@@ -5879,6 +5894,12 @@ export default function App() {
               {label}
             </button>
           ))}
+        <NotificationCenter
+          user={user}
+          currentMember={currentMember}
+          onNavigate={setActivePage}
+          canOpenNotificationPage={canOpenNotificationPage}
+        />
       </nav>
 
       {linkedMemberNotice && (
@@ -6718,6 +6739,15 @@ export default function App() {
 
       {activePage === 'parkedModules' && (
         <ParkedModulesPage canAccess={canAccessParkedModules()} onNavigate={setActivePage} />
+      )}
+
+      {activePage === 'notifications' && (
+        <NotificationCenterPage
+          user={user}
+          currentMember={currentMember}
+          onNavigate={setActivePage}
+          canOpenNotificationPage={canOpenNotificationPage}
+        />
       )}
 
       {activePage === 'portal' && (

@@ -30,6 +30,7 @@ export const MODULES = [
   'inventar',
   'einkauf',
   'backup',
+  'kommunikation',
   'systemeinstellungen',
 ]
 
@@ -76,6 +77,7 @@ export const MODULE_LABELS = {
   inventar: 'Inventar',
   einkauf: 'Einkauf & Preisvergleich',
   backup: 'Backup',
+  kommunikation: 'Kommunikation',
   systemeinstellungen: 'Systemeinstellungen',
 }
 
@@ -99,6 +101,7 @@ const ROLE_PERMISSIONS = {
     homepage: ['view', 'create', 'edit'],
     inventar: ['view', 'create', 'edit'],
     einkauf: ['view', 'create', 'edit'],
+    kommunikation: ['view', 'create', 'edit'],
   },
   kassier: {
     mitglieder: ['view'],
@@ -107,6 +110,7 @@ const ROLE_PERMISSIONS = {
     rechnungen: ['view', 'create', 'edit'],
     shop: ['view', 'create', 'edit'],
     einkauf: ['view', 'create', 'edit'],
+    kommunikation: ['view', 'create', 'edit'],
   },
   schriftfuehrer: {
     mitglieder: ['view', 'create', 'edit'],
@@ -116,6 +120,7 @@ const ROLE_PERMISSIONS = {
     medien_presse: ['view', 'create', 'edit'],
     homepage: ['view', 'create', 'edit'],
     inventar: ['view', 'create', 'edit'],
+    kommunikation: ['view', 'create', 'edit'],
   },
   rechnungspruefer: {
     beitraege: ['view'],
@@ -138,6 +143,7 @@ const LEGACY_ROLE_PERMISSIONS = {
     medien_presse: ['view', 'create', 'edit', 'delete'],
     shop: ['view', 'create', 'edit', 'delete'],
     inventar: ['view', 'create', 'edit'],
+    kommunikation: ['view', 'create', 'edit'],
   },
   cashier: {
     mitglieder: ['view'],
@@ -146,9 +152,11 @@ const LEGACY_ROLE_PERMISSIONS = {
     rechnungen: ['view', 'create', 'edit'],
     shop: ['view', 'create', 'edit'],
     einkauf: ['view', 'create', 'edit'],
+    kommunikation: ['view', 'create', 'edit'],
   },
   checkin: {
     events: ['view', 'create', 'edit'],
+    kommunikation: ['view', 'create', 'edit'],
   },
   readonly: {
     events: ['view'],
