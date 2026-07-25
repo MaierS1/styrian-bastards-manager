@@ -83,6 +83,7 @@ import {
   loadEventCheckins as loadEventCheckinsService,
   loadEvents as loadEventsService,
   loadFees as loadFeesService,
+  loadFinancingLiabilities as loadFinancingLiabilitiesService,
   loadMediaItems as loadMediaItemsService,
   loadInventoryItems as loadInventoryItemsService,
   loadInvoiceCustomers as loadInvoiceCustomersService,
@@ -221,6 +222,7 @@ import { AdminPage } from './components/admin/AdminPage'
 import { ParkedModulesPage } from './components/admin/ParkedModulesPage'
 import { InventoryPage } from './components/inventory/InventoryPage'
 import { InvoicesPage } from './components/invoices/InvoicesPage'
+import { FinancingLiabilitiesPage } from './components/financing/FinancingLiabilitiesPage'
 import { DashboardPage } from './components/dashboard/DashboardPage'
 import { PortalPage } from './components/portal/PortalPage'
 import { MobileScannerPage } from './components/scanner/MobileScannerPage'
@@ -365,6 +367,7 @@ export default function App() {
   const [clubPaymentSettings, setClubPaymentSettings] = useState(defaultClubPaymentSettings)
   const [cashEntries, setCashEntries] = useState([])
   const [cashMonthClosings, setCashMonthClosings] = useState([])
+  const [financingLiabilities, setFinancingLiabilities] = useState([])
   const [auditLogs, setAuditLogs] = useState([])
   const [eventCheckins, setEventCheckins] = useState([])
   const [events, setEvents] = useState([])
@@ -750,6 +753,9 @@ export default function App() {
         : undefined,
       loadCashEntriesFn: () => loadCashEntriesService({ setCashEntries }),
       loadCashMonthClosingsFn: () => loadCashMonthClosingsService({ setCashMonthClosings }),
+      loadFinancingLiabilitiesFn: hasPermission(currentMemberRef.current, 'vorfinanzierungen', 'view')
+        ? () => loadFinancingLiabilitiesService({ setFinancingLiabilities })
+        : undefined,
       loadAuditLogsFn: () => loadAuditLogsService({ setAuditLogs }),
       loadEventCheckinsFn: () => loadEventCheckinsService({ setEventCheckins }),
       loadEventsFn: () => loadEventsService({
@@ -1092,6 +1098,7 @@ export default function App() {
     setFees([])
     setCashEntries([])
     setCashMonthClosings([])
+    setFinancingLiabilities([])
     setAuditLogs([])
     setEventCheckins([])
     setEvents([])
@@ -1124,6 +1131,12 @@ export default function App() {
   async function loadCashMonthClosings() {
     return loadCashMonthClosingsService({
       setCashMonthClosings,
+    })
+  }
+
+  async function loadFinancingLiabilities() {
+    return loadFinancingLiabilitiesService({
+      setFinancingLiabilities,
     })
   }
 
@@ -2393,6 +2406,7 @@ export default function App() {
       getEventIncomeTotal,
       getEventExpenseTotal,
       getEventBalance,
+      financingLiabilities,
     })
   }
 
@@ -6269,6 +6283,25 @@ export default function App() {
             editCashEntry,
             deleteCashEntry,
           }}
+        />
+      )}
+
+      {activePage === 'financingLiabilities' && !canViewModule('vorfinanzierungen') && (
+        <section style={sectionStyle}>
+          <h2 style={headingStyle}>Vorfinanzierungen & Verbindlichkeiten</h2>
+          <p>Für diesen Bereich hast du keine Berechtigung.</p>
+        </section>
+      )}
+
+      {activePage === 'financingLiabilities' && canViewModule('vorfinanzierungen') && (
+        <FinancingLiabilitiesPage
+          members={members}
+          currentMember={currentMember}
+          canCreate={canEditModule('vorfinanzierungen') || hasPermission(currentMember, 'vorfinanzierungen', 'create')}
+          canEdit={canEditModule('vorfinanzierungen')}
+          canDelete={hasPermission(currentMember, 'vorfinanzierungen', 'delete')}
+          onLoaded={setFinancingLiabilities}
+          reloadSummary={loadFinancingLiabilities}
         />
       )}
 

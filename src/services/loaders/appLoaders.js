@@ -6,6 +6,7 @@ import {
 } from '../repositories/membershipFeesRepository'
 import { fetchCurrentMemberByAuthUserId } from '../repositories/currentMemberRepository'
 import { fetchCashEntries, fetchCashMonthClosings } from '../repositories/cashRepository'
+import { fetchFinancingLiabilityBalances } from '../repositories/financingLiabilitiesRepository'
 import { fetchAuditLogs } from '../repositories/auditLogsRepository'
 import { fetchEventCheckins, fetchEventRegistrationCounts, fetchEvents } from '../repositories/eventsRepository'
 import { fetchDocuments } from '../repositories/documentsRepository'
@@ -83,6 +84,17 @@ export async function loadCashMonthClosings({ setCashMonthClosings, alertFn = al
 
   if (error) return alertFn(error.message)
   setCashMonthClosings(data || [])
+}
+
+export async function loadFinancingLiabilities({ setFinancingLiabilities, alertFn = alert }) {
+  const { data, error } = await fetchFinancingLiabilityBalances()
+
+  if (error) {
+    alertFn(error.message)
+    return
+  }
+
+  setFinancingLiabilities(data || [])
 }
 
 export async function loadAuditLogs({ setAuditLogs }) {
@@ -320,6 +332,7 @@ export async function loadAll({
   loadFeesFn,
   loadCashEntriesFn,
   loadCashMonthClosingsFn,
+  loadFinancingLiabilitiesFn,
   loadAuditLogsFn,
   loadMembershipFeeDataFn,
   loadEventCheckinsFn,
@@ -364,6 +377,7 @@ export async function loadAll({
   if (loadMerchSaleItemsFn) loaders.push(loadMerchSaleItemsFn())
   if (loadShopOrdersFn) loaders.push(loadShopOrdersFn())
   if (loadShopOrderItemsFn) loaders.push(loadShopOrderItemsFn())
+  if (loadFinancingLiabilitiesFn) loaders.push(loadFinancingLiabilitiesFn())
 
   await Promise.all(loaders)
 }

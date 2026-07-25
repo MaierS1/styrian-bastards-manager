@@ -1283,6 +1283,7 @@ export function getFinanceDashboardData({
   getEventIncomeTotal,
   getEventExpenseTotal,
   getEventBalance,
+  financingLiabilities = [],
 }) {
   const entries = cashEntriesForSelectedYear.filter((entry) => isValidCashEntry(entry))
   const incomeEntries = entries.filter((entry) => entry.type === 'einnahme' && !entry.is_opening)
@@ -1317,6 +1318,29 @@ export function getFinanceDashboardData({
     openFeesCount: openFees.length,
     openFeesTotal,
     eventSummaries,
+    financingLiabilitiesSummary: financingLiabilities.reduce((summary, liability) => {
+      const status = liability?.computed_status || liability?.status
+      const openAmount = Number(liability?.open_amount || 0)
+
+      if (status === 'open') {
+        summary.openCount += 1
+        summary.openTotal += openAmount
+      }
+
+      if (status === 'partially_paid') {
+        summary.partiallyPaidCount += 1
+        summary.openTotal += openAmount
+      }
+
+      if (status === 'paid') summary.paidCount += 1
+
+      return summary
+    }, {
+      openCount: 0,
+      openTotal: 0,
+      partiallyPaidCount: 0,
+      paidCount: 0,
+    }),
   }
 }
 

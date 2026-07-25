@@ -5,6 +5,7 @@ export const navigationItems = [
   ['members', 'Mitglieder', 'mitglieder'],
   ['fees', 'Beitraege', 'beitraege'],
   ['cash', 'Kassa', 'kassa'],
+  ['financingLiabilities', 'Vorfinanzierungen', 'vorfinanzierungen'],
   ['invoices', 'Rechnungen', 'rechnungen'],
   ['events', 'Events', 'events'],
   ['documents', 'Dokumente', 'dokumente'],
