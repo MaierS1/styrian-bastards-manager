@@ -26,8 +26,8 @@ import {
   requiredNotificationTypes,
 } from './notificationPreferenceConfig'
 
-const ACTIVE_CHANNEL = 'in_app'
-const PREPARED_CHANNELS = ['push', 'email']
+const ACTIVE_CHANNELS = ['in_app', 'email', 'push']
+const PREPARED_CHANNELS = ['push']
 
 const channelLabels = {
   in_app: 'In-App',
@@ -41,6 +41,7 @@ function buildPreferenceKey(notificationType, channel) {
 
 function createDefaultPreference(configItem, channel, currentMember) {
   const isRequired = requiredNotificationTypes.has(configItem.notification_type)
+  const isPrepared = PREPARED_CHANNELS.includes(channel)
 
   return {
     auth_user_id: currentMember?.auth_user_id || null,
@@ -48,8 +49,8 @@ function createDefaultPreference(configItem, channel, currentMember) {
     notification_type: configItem.notification_type,
     category: configItem.category,
     channel,
-    enabled: channel === ACTIVE_CHANNEL ? true : false,
-    required: isRequired,
+    enabled: isPrepared ? false : true,
+    required: isPrepared ? false : isRequired,
     opted_in_at: null,
     opted_out_at: null,
   }
@@ -57,6 +58,7 @@ function createDefaultPreference(configItem, channel, currentMember) {
 
 function normalizePreference(configItem, channel, currentMember, existingPreference) {
   const isRequired = requiredNotificationTypes.has(configItem.notification_type)
+  const isPrepared = PREPARED_CHANNELS.includes(channel)
   const defaultPreference = createDefaultPreference(configItem, channel, currentMember)
 
   if (!existingPreference) return defaultPreference
@@ -68,8 +70,8 @@ function normalizePreference(configItem, channel, currentMember, existingPrefere
     member_id: existingPreference.member_id || currentMember?.id || null,
     category: configItem.category,
     channel,
-    required: isRequired,
-    enabled: isRequired ? true : Boolean(existingPreference.enabled),
+    required: isPrepared ? false : isRequired,
+    enabled: isPrepared ? false : (isRequired ? true : Boolean(existingPreference.enabled)),
   }
 }
 
@@ -82,21 +84,13 @@ function buildPreferenceState(rows, currentMember) {
   )
 
   return notificationPreferenceConfig.reduce((state, configItem) => {
-    const activeKey = buildPreferenceKey(configItem.notification_type, ACTIVE_CHANNEL)
-    state[activeKey] = normalizePreference(
-      configItem,
-      ACTIVE_CHANNEL,
-      currentMember,
-      preferencesByKey.get(activeKey)
-    )
-
-    PREPARED_CHANNELS.forEach((channel) => {
-      const preparedKey = buildPreferenceKey(configItem.notification_type, channel)
-      state[preparedKey] = normalizePreference(
+    ACTIVE_CHANNELS.forEach((channel) => {
+      const preferenceKey = buildPreferenceKey(configItem.notification_type, channel)
+      state[preferenceKey] = normalizePreference(
         configItem,
         channel,
         currentMember,
-        preferencesByKey.get(preparedKey)
+        preferencesByKey.get(preferenceKey)
       )
     })
 
@@ -202,10 +196,11 @@ export function PortalNotificationPreferences({ currentMember }) {
     loadPreferences()
   }, [loadPreferences])
 
-  const toggleInAppPreference = useCallback((configItem) => {
+  const togglePreference = useCallback((configItem, channel) => {
+    if (PREPARED_CHANNELS.includes(channel)) return
     if (requiredNotificationTypes.has(configItem.notification_type)) return
 
-    const key = buildPreferenceKey(configItem.notification_type, ACTIVE_CHANNEL)
+    const key = buildPreferenceKey(configItem.notification_type, channel)
 
     setPreferencesByKey((currentPreferences) => ({
       ...currentPreferences,
@@ -227,26 +222,29 @@ export function PortalNotificationPreferences({ currentMember }) {
     setError('')
     setSuccessMessage('')
 
-    const activePreferences = notificationPreferenceConfig.map((configItem) => {
-      const key = buildPreferenceKey(configItem.notification_type, ACTIVE_CHANNEL)
-      const currentPreference = preferencesByKey[key] || createDefaultPreference(configItem, ACTIVE_CHANNEL, currentMember)
-      const isRequired = requiredNotificationTypes.has(configItem.notification_type)
-      const enabled = isRequired ? true : Boolean(currentPreference.enabled)
-      const changedAt = new Date().toISOString()
+    const activePreferences = notificationPreferenceConfig.flatMap((configItem) => (
+      ACTIVE_CHANNELS.map((channel) => {
+        const key = buildPreferenceKey(configItem.notification_type, channel)
+        const currentPreference = preferencesByKey[key] || createDefaultPreference(configItem, channel, currentMember)
+        const isRequired = requiredNotificationTypes.has(configItem.notification_type)
+        const isPrepared = PREPARED_CHANNELS.includes(channel)
+        const enabled = isPrepared ? false : (isRequired ? true : Boolean(currentPreference.enabled))
+        const changedAt = new Date().toISOString()
 
-      return {
-        ...currentPreference,
-        auth_user_id: currentPreference.auth_user_id || currentMember.auth_user_id || null,
-        member_id: currentPreference.member_id || currentMember.id || null,
-        notification_type: configItem.notification_type,
-        category: configItem.category,
-        channel: ACTIVE_CHANNEL,
-        enabled,
-        required: isRequired,
-        opted_in_at: enabled ? (currentPreference.opted_in_at || changedAt) : currentPreference.opted_in_at,
-        opted_out_at: enabled ? null : changedAt,
-      }
-    })
+        return {
+          ...currentPreference,
+          auth_user_id: currentPreference.auth_user_id || currentMember.auth_user_id || null,
+          member_id: currentPreference.member_id || currentMember.id || null,
+          notification_type: configItem.notification_type,
+          category: configItem.category,
+          channel,
+          enabled,
+          required: isPrepared ? false : isRequired,
+          opted_in_at: enabled ? (currentPreference.opted_in_at || changedAt) : currentPreference.opted_in_at,
+          opted_out_at: enabled ? null : changedAt,
+        }
+      })
+    ))
 
     const result = await saveNotificationPreferences(activePreferences)
 
@@ -265,11 +263,13 @@ export function PortalNotificationPreferences({ currentMember }) {
 
   const hasChanges = useMemo(() => {
     return notificationPreferenceConfig.some((configItem) => {
-      const key = buildPreferenceKey(configItem.notification_type, ACTIVE_CHANNEL)
-      return (
-        !preferencesByKey[key]?.id
-        || Boolean(preferencesByKey[key]?.enabled) !== Boolean(initialPreferencesByKey[key]?.enabled)
-      )
+      return ACTIVE_CHANNELS.some((channel) => {
+        const key = buildPreferenceKey(configItem.notification_type, channel)
+        return (
+          !preferencesByKey[key]?.id
+          || Boolean(preferencesByKey[key]?.enabled) !== Boolean(initialPreferencesByKey[key]?.enabled)
+        )
+      })
     })
   }, [initialPreferencesByKey, preferencesByKey])
 
@@ -278,7 +278,7 @@ export function PortalNotificationPreferences({ currentMember }) {
       <h3 style={headingStyle}>Benachrichtigungseinstellungen</h3>
 
       <p style={mutedTextStyle}>
-        In-App Benachrichtigungen sind aktiv. Push und E-Mail sind vorbereitet und werden noch nicht verwendet.
+        In-App und E-Mail sind aktiv. Push ist vorbereitet.
       </p>
 
       {loading && (
@@ -301,8 +301,6 @@ export function PortalNotificationPreferences({ currentMember }) {
 
           <div style={styles.preferenceList}>
             {items.map((item) => {
-              const activeKey = buildPreferenceKey(item.notification_type, ACTIVE_CHANNEL)
-              const inAppPreference = preferencesByKey[activeKey] || createDefaultPreference(item, ACTIVE_CHANNEL, currentMember)
               const isRequired = requiredNotificationTypes.has(item.notification_type)
 
               return (
@@ -316,31 +314,31 @@ export function PortalNotificationPreferences({ currentMember }) {
                   </div>
 
                   <div style={styles.channelGrid}>
-                    <label style={styles.channelToggle}>
-                      <input
-                        type="checkbox"
-                        checked={isRequired || Boolean(inAppPreference.enabled)}
-                        disabled={isRequired || saving}
-                        onChange={() => toggleInAppPreference(item)}
-                        style={styles.checkbox}
-                      />
-                      <span>
-                        <strong>{channelLabels.in_app}</strong>
-                        <small style={styles.channelHint}>
-                          {isRequired ? 'immer aktiv' : 'aktiv nutzbar'}
-                        </small>
-                      </span>
-                    </label>
+                    {ACTIVE_CHANNELS.map((channel) => {
+                      const preferenceKey = buildPreferenceKey(item.notification_type, channel)
+                      const channelPreference = preferencesByKey[preferenceKey] || createDefaultPreference(item, channel, currentMember)
+                      const isPrepared = PREPARED_CHANNELS.includes(channel)
+                      const disabled = isPrepared || isRequired || saving
+                      const checked = isPrepared ? false : (isRequired || Boolean(channelPreference.enabled))
 
-                    {PREPARED_CHANNELS.map((channel) => (
-                      <div key={channel} style={styles.preparedChannel} aria-disabled="true">
-                        <span style={styles.disabledBox} />
+                      return (
+                        <label key={channel} style={isPrepared ? styles.preparedChannel : styles.channelToggle}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={disabled}
+                            onChange={() => togglePreference(item, channel)}
+                            style={styles.checkbox}
+                          />
                         <span>
                           <strong>{channelLabels[channel]}</strong>
-                          <small style={styles.channelHint}>vorbereitet</small>
+                          <small style={styles.channelHint}>
+                            {isPrepared ? 'noch nicht verfuegbar' : isRequired ? 'immer aktiv' : 'aktiv'}
+                          </small>
                         </span>
-                      </div>
-                    ))}
+                        </label>
+                      )
+                    })}
                   </div>
                 </article>
               )

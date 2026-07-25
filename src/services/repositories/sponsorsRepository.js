@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export async function fetchPublicSponsors() {
   return supabase.rpc('get_public_sponsors')
@@ -26,6 +27,7 @@ export async function saveSponsorRecord({
   createAuditLog,
   loadSponsors,
   resetSponsorForm,
+  notificationContext,
   alertFn = alert,
 }) {
   if (sponsorEditingId) {
@@ -50,6 +52,17 @@ export async function saveSponsorRecord({
     if (error) return { error }
 
     await createAuditLog('insert', 'sponsors', data?.id, null, data)
+    await notifyDomainEvent({
+      type: 'sponsor_created',
+      targetId: data?.id,
+      targetType: 'sponsor',
+      variables: {
+        sponsor_name: data?.name || payload.name,
+        created_at: data?.created_at,
+      },
+      metadata: { sponsor_id: data?.id },
+      ...notificationContext,
+    })
     alertFn('Sponsor wurde angelegt.')
   }
 
@@ -85,6 +98,7 @@ export async function saveSponsorContractRecord({
   createAuditLog,
   loadSponsorContracts,
   resetSponsorContractForm,
+  notificationContext,
   alertFn = alert,
 }) {
   if (sponsorContractEditingId) {
@@ -98,6 +112,38 @@ export async function saveSponsorContractRecord({
     if (error) return { error }
 
     await createAuditLog('update', 'sponsor_contracts', sponsorContractEditingId, oldContract, payload)
+    if (
+      oldContract
+      && payload.ends_on
+      && oldContract.ends_on
+      && payload.ends_on > oldContract.ends_on
+    ) {
+      await notifyDomainEvent({
+        type: 'sponsorship_renewed',
+        targetId: sponsorContractEditingId,
+        targetType: 'sponsor_contract',
+        variables: {
+          contract_title: payload.title || oldContract.title,
+          updated_at: new Date().toISOString(),
+        },
+        metadata: { sponsor_contract_id: sponsorContractEditingId },
+        ...notificationContext,
+      })
+    }
+
+    if (oldContract?.payment_status !== 'paid' && payload.payment_status === 'paid') {
+      await notifyDomainEvent({
+        type: 'sponsorship_payment_received',
+        targetId: sponsorContractEditingId,
+        targetType: 'sponsor_contract',
+        variables: {
+          contract_title: payload.title || oldContract?.title,
+          payment_status: payload.payment_status,
+        },
+        metadata: { sponsor_contract_id: sponsorContractEditingId },
+        ...notificationContext,
+      })
+    }
     alertFn('Sponsor-Vertrag wurde aktualisiert.')
   } else {
     const { data, error } = await supabase
@@ -109,6 +155,19 @@ export async function saveSponsorContractRecord({
     if (error) return { error }
 
     await createAuditLog('insert', 'sponsor_contracts', data?.id, null, data)
+    if (data?.payment_status === 'paid') {
+      await notifyDomainEvent({
+        type: 'sponsorship_payment_received',
+        targetId: data.id,
+        targetType: 'sponsor_contract',
+        variables: {
+          contract_title: data.title,
+          payment_status: data.payment_status,
+        },
+        metadata: { sponsor_contract_id: data.id },
+        ...notificationContext,
+      })
+    }
     alertFn('Sponsor-Vertrag wurde angelegt.')
   }
 

@@ -1,4 +1,8 @@
 import { supabase } from '../../lib/supabase'
+import {
+  formatNotificationAmount,
+  notifyDomainEvent,
+} from '../notifications/domainNotificationService'
 
 export async function fetchFinancingLiabilityBalances() {
   return supabase
@@ -24,13 +28,32 @@ export async function createFinancingLiability(payload) {
     .single()
 }
 
-export async function updateFinancingLiability(id, payload) {
-  return supabase
+export async function updateFinancingLiability(id, payload, notificationContext = null) {
+  const result = await supabase
     .from('financing_liabilities')
     .update(payload)
     .eq('id', id)
     .select()
     .single()
+
+  if (!result.error && notificationContext) {
+    await notifyDomainEvent({
+      type: 'financing_liability_updated',
+      targetId: id,
+      targetType: 'financing_liability',
+      variables: {
+        description: result.data?.description || payload.description || 'Vorfinanzierung',
+        amount: formatNotificationAmount(result.data?.original_amount || payload.original_amount),
+        updated_at: result.data?.updated_at,
+      },
+      metadata: {
+        financing_liability_id: id,
+      },
+      ...notificationContext,
+    })
+  }
+
+  return result
 }
 
 export async function createFinancingLiabilityRepayment(payload) {

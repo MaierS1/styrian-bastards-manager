@@ -32,7 +32,7 @@ export function buildInvoiceNotificationPayload({
       category: 'invoice',
       title: message.title,
       message: message.message,
-      channels: ['email'],
+      channels: ['in_app', 'email'],
       recipient_invoice_id: invoice.id,
       source: {
         module: 'invoices',

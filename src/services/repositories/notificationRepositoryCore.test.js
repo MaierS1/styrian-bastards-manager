@@ -74,6 +74,11 @@ class FakeQuery {
     return this
   }
 
+  in(column, values) {
+    this.operations.push({ type: 'in', column, values })
+    return this
+  }
+
   lt(column, value) {
     this.operations.push({ type: 'lt', column, value })
     return this
@@ -157,6 +162,9 @@ class FakeQuery {
       if (operation.type === 'eq') {
         return items.filter((item) => item[operation.column] === operation.value)
       }
+      if (operation.type === 'in') {
+        return items.filter((item) => operation.values.includes(item[operation.column]))
+      }
       if (operation.type === 'lt') {
         return items.filter((item) => String(item[operation.column] || '') < operation.value)
       }
@@ -230,6 +238,24 @@ test('fetchInAppNotifications applies unreadOnly and archived filters', async ()
   assert.deepEqual(result.data.map((item) => item.id), ['unread'])
 })
 
+test('fetchInAppNotifications applies category and search query filters', async () => {
+  const client = createFakeClient({
+    rows: [
+      notification('invoice', '2026-07-20T10:00:00Z', { category: 'invoice', title: 'Rechnung 1', body: 'Offen' }),
+      notification('event', '2026-07-20T09:00:00Z', { category: 'event', title: 'Training', body: 'Heute' }),
+    ],
+  })
+  const repository = createNotificationRepository(client)
+
+  await repository.fetchInAppNotifications({ category: 'invoice', search: 'Rechnung' })
+  const query = client.state.queries[0]
+
+  assert.deepEqual(query.operations.filter((operation) => operation.type === 'eq'), [
+    { type: 'eq', column: 'category', value: 'invoice' },
+  ])
+  assert.equal(query.operations.some((operation) => operation.type === 'or' && operation.filter.includes('title.ilike')), true)
+})
+
 test('repository returns Supabase errors unchanged', async () => {
   const error = { message: 'permission denied' }
   const client = createFakeClient({ error })
@@ -266,6 +292,25 @@ test('markAllInAppNotificationsRead updates only active unread notifications', a
 
   assert.deepEqual(result.data.map((item) => item.id), ['one'])
   assert.equal(result.data[0].read_at, FIXED_NOW)
+})
+
+test('bulk archive and delete update selected notifications only', async () => {
+  const client = createFakeClient({
+    rows: [
+      notification('one', '2026-07-20T10:00:00Z'),
+      notification('two', '2026-07-20T09:00:00Z'),
+      notification('three', '2026-07-20T08:00:00Z'),
+    ],
+  })
+  const repository = createNotificationRepository(client, { now: () => FIXED_NOW })
+
+  const archiveResult = await repository.bulkArchiveInAppNotifications(['one', 'three'])
+  const deleteResult = await repository.bulkSoftDeleteInAppNotifications(['two'])
+
+  assert.deepEqual(archiveResult.data.map((item) => item.id).sort(), ['one', 'three'])
+  assert.equal(archiveResult.data.every((item) => item.archived_at === FIXED_NOW), true)
+  assert.deepEqual(deleteResult.data.map((item) => item.id), ['two'])
+  assert.equal(deleteResult.data[0].deleted_at, FIXED_NOW)
 })
 
 test('subscribeToInAppNotifications registers auth and member realtime filters', () => {

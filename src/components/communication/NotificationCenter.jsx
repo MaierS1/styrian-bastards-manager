@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchInAppNotifications,
   fetchUnreadNotificationCount,
+  bulkArchiveInAppNotifications,
+  bulkSoftDeleteInAppNotifications,
   markAllInAppNotificationsRead,
   markInAppNotificationRead,
   subscribeToInAppNotifications,
@@ -20,6 +22,21 @@ import {
 
 const POPOVER_LIMIT = 12
 const PAGE_LIMIT = 25
+const categoryFilterOptions = [
+  ['all', 'Alle Kategorien'],
+  ['event', 'Events'],
+  ['invoice', 'Rechnungen'],
+  ['membership_fee', 'Mitgliedsbeitraege'],
+  ['shop', 'Shop'],
+  ['sponsor', 'Sponsoren'],
+  ['document', 'Dokumente'],
+  ['press', 'Presse'],
+  ['news', 'News'],
+  ['financing', 'Vorfinanzierungen'],
+  ['cash', 'Kassa'],
+  ['member', 'Mitglieder'],
+  ['system', 'System'],
+]
 
 function BellIcon() {
   return (
@@ -237,6 +254,10 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
   const [items, setItems] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [filter, setFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [includeArchived, setIncludeArchived] = useState(false)
+  const [selectedIds, setSelectedIds] = useState([])
   const [cursor, setCursor] = useState(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -251,6 +272,9 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
       limit: PAGE_LIMIT + 1,
       cursor: reset ? null : cursor,
       unreadOnly: filter === 'unread',
+      includeArchived,
+      category: categoryFilter,
+      search,
     })
     const countResult = await fetchUnreadNotificationCount()
 
@@ -268,12 +292,13 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
     else setUnreadCount(countResult.count || 0)
 
     if (!silent) setLoading(false)
-  }, [cursor, filter, user?.id])
+  }, [categoryFilter, cursor, filter, includeArchived, search, user?.id])
 
   useEffect(() => {
     setCursor(null)
+    setSelectedIds([])
     loadPage({ reset: true })
-  }, [filter, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [categoryFilter, filter, includeArchived, search, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user?.id) return undefined
@@ -299,6 +324,42 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
     if (result.error) setError(result.error.message)
     else loadPage({ reset: true, silent: true })
   }, [loadPage])
+
+  const toggleSelection = useCallback((notificationId) => {
+    setSelectedIds((currentIds) => (
+      currentIds.includes(notificationId)
+        ? currentIds.filter((id) => id !== notificationId)
+        : [...currentIds, notificationId]
+    ))
+  }, [])
+
+  const toggleSelectVisible = useCallback(() => {
+    setSelectedIds((currentIds) => {
+      const visibleIds = items.map((item) => item.id).filter(Boolean)
+      const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => currentIds.includes(id))
+      return allVisibleSelected
+        ? currentIds.filter((id) => !visibleIds.includes(id))
+        : [...new Set([...currentIds, ...visibleIds])]
+    })
+  }, [items])
+
+  const archiveSelected = useCallback(async () => {
+    const result = await bulkArchiveInAppNotifications(selectedIds)
+    if (result.error) setError(result.error.message)
+    else {
+      setSelectedIds([])
+      loadPage({ reset: true, silent: true })
+    }
+  }, [loadPage, selectedIds])
+
+  const deleteSelected = useCallback(async () => {
+    const result = await bulkSoftDeleteInAppNotifications(selectedIds)
+    if (result.error) setError(result.error.message)
+    else {
+      setSelectedIds([])
+      loadPage({ reset: true, silent: true })
+    }
+  }, [loadPage, selectedIds])
 
   const openNotification = useCallback(async (notification) => {
     await markRead(notification)
@@ -329,6 +390,33 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
         <button type="button" onClick={() => setFilter('unread')} style={filter === 'unread' ? buttonStyle : secondaryButtonStyle}>
           Ungelesen
         </button>
+        <button type="button" onClick={() => setIncludeArchived((value) => !value)} style={includeArchived ? buttonStyle : secondaryButtonStyle}>
+          Archiv
+        </button>
+        <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} style={styles.filterSelect}>
+          {categoryFilterOptions.map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Suche"
+          style={styles.searchInput}
+        />
+      </div>
+
+      <div style={styles.bulkRow}>
+        <button type="button" onClick={toggleSelectVisible} style={secondaryButtonStyle} disabled={items.length === 0}>
+          Sichtbare auswaehlen
+        </button>
+        <button type="button" onClick={archiveSelected} style={secondaryButtonStyle} disabled={selectedIds.length === 0}>
+          Archivieren
+        </button>
+        <button type="button" onClick={deleteSelected} style={secondaryButtonStyle} disabled={selectedIds.length === 0}>
+          Loeschen
+        </button>
+        <span style={styles.selectionMeta}>{selectedIds.length} ausgewaehlt</span>
       </div>
 
       {error && <div style={styles.errorBox}>{error}</div>}
@@ -341,6 +429,8 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
           notification={notification}
           onOpen={openNotification}
           onMarkRead={markRead}
+          selected={selectedIds.includes(notification.id)}
+          onToggleSelection={toggleSelection}
         />
       ))}
 
@@ -373,11 +463,18 @@ function NotificationRow({ notification, onOpen }) {
   )
 }
 
-function NotificationCard({ notification, onOpen, onMarkRead }) {
+function NotificationCard({ notification, onOpen, onMarkRead, selected = false, onToggleSelection }) {
   return (
     <article style={{ ...cardStyle, ...(!notification.read_at ? styles.cardUnread : null) }}>
       <div style={styles.cardHeader}>
-        <span style={{ ...styles.categoryPill, ...getPriorityStyle(notification) }}>{getCategoryLabel(notification.category)}</span>
+        <label style={styles.selectLabel}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelection?.(notification.id)}
+          />
+          <span style={{ ...styles.categoryPill, ...getPriorityStyle(notification) }}>{getCategoryLabel(notification.category)}</span>
+        </label>
         <span style={styles.dateText}>{formatNotificationDate(notification.created_at)}</span>
       </div>
       <h3 style={styles.cardTitle}>{notification.title}</h3>
@@ -590,6 +687,37 @@ const styles = {
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 16,
+  },
+  bulkRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  filterSelect: {
+    minHeight: 42,
+    padding: '0 10px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    background: colors.white,
+  },
+  searchInput: {
+    minHeight: 42,
+    minWidth: 180,
+    padding: '0 10px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    background: colors.white,
+  },
+  selectionMeta: {
+    color: colors.muted,
+    fontSize: 13,
+  },
+  selectLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
   },
   cardUnread: {
     borderLeft: `6px solid ${colors.red}`,

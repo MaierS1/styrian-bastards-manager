@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { getMemberDisplayName, notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export async function fetchMembers() {
   return supabase
@@ -16,6 +17,7 @@ export async function saveMemberRecord({
   getAmountByType,
   memberType,
   resetForm,
+  notificationContext,
 }) {
   if (editingId) {
     const oldMember = members.find((member) => member.id === editingId)
@@ -36,6 +38,18 @@ export async function saveMemberRecord({
     })
 
     if (feeError) return { error: feeError }
+
+    await notifyDomainEvent({
+      type: 'member_accepted',
+      targetId: data.id,
+      targetType: 'member',
+      variables: {
+        member_name: getMemberDisplayName(data),
+        created_at: data.created_at,
+      },
+      metadata: { member_id: data.id },
+      ...notificationContext,
+    })
   }
 
   resetForm()
@@ -49,11 +63,35 @@ export async function changeMemberStatusRecord({
   members,
   createAuditLog,
   loadMembers,
+  notificationContext,
 }) {
   const oldMember = members.find((member) => member.id === id)
   const { error } = await supabase.from('members').update({ status }).eq('id', id)
   if (error) return { error }
   await createAuditLog('status_change', 'members', id, oldMember, { status })
+
+  const notificationType = status === 'aktiv'
+    ? 'member_accepted'
+    : ['abgelehnt', 'rejected'].includes(status)
+      ? 'member_rejected'
+      : ['inaktiv', 'deaktiviert', 'inactive'].includes(status)
+        ? 'member_deactivated'
+        : null
+
+  if (notificationType) {
+    await notifyDomainEvent({
+      type: notificationType,
+      targetId: id,
+      targetType: 'member',
+      variables: {
+        member_name: getMemberDisplayName(oldMember),
+        status,
+      },
+      metadata: { member_id: id, status },
+      ...notificationContext,
+    })
+  }
+
   await loadMembers()
   return { ok: true }
 }

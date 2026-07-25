@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { getMemberDisplayName, notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export async function fetchMembershipFees(year) {
   let query = supabase
@@ -50,13 +51,36 @@ export async function markMembershipFeeItemPaid({
   paidAt,
   paymentMethod = 'bar',
   createCashEntry = true,
+  feeItem = null,
+  member = null,
+  notificationContext,
 }) {
-  return supabase.rpc('mark_membership_fee_item_paid', {
+  const result = await supabase.rpc('mark_membership_fee_item_paid', {
     p_fee_item_id: feeItemId,
     p_paid_at: paidAt || null,
     p_payment_method: paymentMethod,
     p_create_cash_entry: createCashEntry,
   })
+
+  if (!result.error) {
+    await notifyDomainEvent({
+      type: 'membership_fee_paid',
+      targetId: feeItemId,
+      targetType: 'membership_fee_item',
+      variables: {
+        member_name: getMemberDisplayName(member),
+        period: feeItem?.year || feeItem?.period_id || 'Beitrag',
+        payment_status: 'paid',
+      },
+      metadata: {
+        membership_fee_item_id: feeItemId,
+        member_id: member?.id || feeItem?.member_id || null,
+      },
+      ...notificationContext,
+    })
+  }
+
+  return result
 }
 
 export async function reopenMembershipFeeItem({

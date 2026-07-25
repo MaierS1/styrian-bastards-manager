@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export const MEDIA_CHANNELS = ['homepage', 'facebook', 'instagram', 'member_area']
 
@@ -116,8 +117,11 @@ export async function saveMediaItemRecord({
   createAuditLog,
   loadMediaItems,
   resetMediaForm,
+  notificationContext,
   alertFn = alert,
 }) {
+  let savedMediaId = mediaEditingId
+
   if (mediaEditingId) {
     const oldMediaItem = mediaItems.find((item) => item.id === mediaEditingId)
 
@@ -139,9 +143,36 @@ export async function saveMediaItemRecord({
     })
 
     if (error) return { error }
+    savedMediaId = data?.id || null
 
     await createAuditLog('insert', 'media_items', data?.id, null, { ...data, channels })
     alertFn('Medienbeitrag wurde angelegt.')
+  }
+
+  if (payload.status === 'published' && savedMediaId) {
+    const notificationType = payload.category === 'presseartikel'
+      ? 'press_article_published'
+      : payload.category === 'vereinsnews'
+        ? 'news_published'
+        : null
+
+    if (notificationType) {
+      await notifyDomainEvent({
+        type: notificationType,
+        targetId: savedMediaId,
+        targetType: 'media_item',
+        variables: {
+          title: payload.title,
+          category: payload.category,
+          updated_at: payload.published_at || payload.publication_date,
+        },
+        metadata: {
+          media_item_id: savedMediaId,
+          media_category: payload.category,
+        },
+        ...notificationContext,
+      })
+    }
   }
 
   resetMediaForm()

@@ -17,5 +17,7 @@ export const {
   archiveInAppNotification,
   unarchiveInAppNotification,
   softDeleteInAppNotification,
+  bulkArchiveInAppNotifications,
+  bulkSoftDeleteInAppNotifications,
   subscribeToInAppNotifications,
 } = defaultNotificationRepository

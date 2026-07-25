@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export async function fetchMerchItems() {
   return supabase
@@ -283,6 +284,7 @@ export async function createShopOrderRecord({
   loadMerchVariants,
   loadCashEntries,
   resetShopOrderForm,
+  notificationContext,
   alertFn = alert,
 }) {
   const { data, error } = await supabase
@@ -295,6 +297,37 @@ export async function createShopOrderRecord({
     rpc: 'create_shop_order',
     result: data,
   })
+
+  await notifyDomainEvent({
+    type: 'shop_order_received',
+    targetId: data?.shop_order_id,
+    targetType: 'shop_order',
+    variables: {
+      order_number: data?.order_number || data?.shop_order_id,
+      buyer_name: rpcPayload.p_buyer_name || 'Kunde',
+      created_at: data?.created_at,
+    },
+    metadata: {
+      shop_order_id: data?.shop_order_id,
+      payment_status: rpcPayload.p_payment_status,
+      status: rpcPayload.p_status,
+    },
+    ...notificationContext,
+  })
+
+  if (rpcPayload.p_payment_status === 'paid') {
+    await notifyDomainEvent({
+      type: 'shop_order_paid',
+      targetId: data?.shop_order_id,
+      targetType: 'shop_order',
+      variables: {
+        order_number: data?.order_number || data?.shop_order_id,
+        payment_status: 'paid',
+      },
+      metadata: { shop_order_id: data?.shop_order_id },
+      ...notificationContext,
+    })
+  }
 
   resetShopOrderForm()
   await loadShopOrders()
@@ -317,6 +350,7 @@ export async function updateShopOrderRecord({
   loadShopOrders,
   loadCashEntries,
   resetShopOrderForm,
+  notificationContext,
   alertFn = alert,
 }) {
   const oldOrder = shopOrders.find((order) => order.id === rpcPayload.p_shop_order_id)
@@ -331,6 +365,48 @@ export async function updateShopOrderRecord({
     rpc: 'update_shop_order',
     result: data,
   })
+
+  if (oldOrder?.payment_status !== 'paid' && rpcPayload.p_payment_status === 'paid') {
+    await notifyDomainEvent({
+      type: 'shop_order_paid',
+      targetId: data?.shop_order_id,
+      targetType: 'shop_order',
+      variables: {
+        order_number: oldOrder?.order_number || data?.order_number || data?.shop_order_id,
+        payment_status: 'paid',
+      },
+      metadata: { shop_order_id: data?.shop_order_id },
+      ...notificationContext,
+    })
+  }
+
+  if (oldOrder?.status !== 'shipped' && rpcPayload.p_status === 'shipped') {
+    await notifyDomainEvent({
+      type: 'shop_order_shipped',
+      targetId: data?.shop_order_id,
+      targetType: 'shop_order',
+      variables: {
+        order_number: oldOrder?.order_number || data?.order_number || data?.shop_order_id,
+        status: 'shipped',
+      },
+      metadata: { shop_order_id: data?.shop_order_id },
+      ...notificationContext,
+    })
+  }
+
+  if (oldOrder?.status !== 'cancelled' && rpcPayload.p_status === 'cancelled') {
+    await notifyDomainEvent({
+      type: 'shop_order_cancelled',
+      targetId: data?.shop_order_id,
+      targetType: 'shop_order',
+      variables: {
+        order_number: oldOrder?.order_number || data?.order_number || data?.shop_order_id,
+        status: 'cancelled',
+      },
+      metadata: { shop_order_id: data?.shop_order_id },
+      ...notificationContext,
+    })
+  }
 
   resetShopOrderForm()
   await loadShopOrders()
@@ -350,6 +426,7 @@ export async function deleteOpenMerchOrderRecord({
   createAuditLog,
   loadShopOrders,
   loadShopOrderItems,
+  notificationContext,
   alertFn = alert,
 }) {
   const oldOrder = shopOrders.find((item) => item.id === order.id) || order
@@ -363,6 +440,18 @@ export async function deleteOpenMerchOrderRecord({
   await createAuditLog('delete', 'shop_orders', data?.shop_order_id || order.id, oldOrder, {
     rpc: 'delete_open_merch_order',
     result: data,
+  })
+
+  await notifyDomainEvent({
+    type: 'shop_order_cancelled',
+    targetId: data?.shop_order_id || order.id,
+    targetType: 'shop_order',
+    variables: {
+      order_number: oldOrder?.order_number || order.id,
+      status: 'cancelled',
+    },
+    metadata: { shop_order_id: data?.shop_order_id || order.id },
+    ...notificationContext,
   })
 
   await loadShopOrders()

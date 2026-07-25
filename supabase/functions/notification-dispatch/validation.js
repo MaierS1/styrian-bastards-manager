@@ -10,7 +10,23 @@ export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
 export const SUPPORTED_CHANNELS = ['in_app', 'email']
 export const KNOWN_CHANNELS = ['in_app', 'email', 'push']
 export const ALLOWED_PRIORITIES = ['low', 'normal', 'high', 'critical']
-export const ALLOWED_CATEGORIES = ['event', 'membership_fee', 'invoice', 'document', 'club_news', 'board', 'system', 'backup']
+export const ALLOWED_CATEGORIES = [
+  'event',
+  'membership_fee',
+  'invoice',
+  'shop',
+  'sponsor',
+  'document',
+  'press',
+  'news',
+  'financing',
+  'cash',
+  'member',
+  'club_news',
+  'board',
+  'system',
+  'backup',
+]
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SAFE_PATH_PATTERN = /^\/[A-Za-z0-9/_?=&.#%:-]*$/

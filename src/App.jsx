@@ -1084,6 +1084,14 @@ export default function App() {
     return hasPermission(currentMember, module, 'edit')
   }
 
+  function getNotificationContext() {
+    return {
+      members,
+      currentMember,
+      createdBy: user?.id || currentMember?.auth_user_id || null,
+    }
+  }
+
   async function login() {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) return alert(error.message)
@@ -1441,10 +1449,14 @@ export default function App() {
 
     setMembershipFeeActionLoadingId(feeItemId)
     try {
+      const feeItem = membershipFeeItems.find((item) => item.id === feeItemId)
       const { error } = await markMembershipFeeItemPaidRecord({
         feeItemId,
         paymentMethod,
         createCashEntry,
+        feeItem,
+        member: members.find((member) => member.id === feeItem?.member_id),
+        notificationContext: getNotificationContext(),
       })
 
       if (error) {
@@ -2988,6 +3000,7 @@ export default function App() {
           loadShopOrders,
           loadCashEntries,
           resetShopOrderForm,
+          notificationContext: getNotificationContext(),
         })
         : await createShopOrderRecord({
           rpcPayload: {
@@ -3005,6 +3018,7 @@ export default function App() {
           loadMerchVariants,
           loadCashEntries,
           resetShopOrderForm,
+          notificationContext: getNotificationContext(),
         })
 
       if (result?.error) {
@@ -3036,6 +3050,7 @@ export default function App() {
         createAuditLog,
         loadShopOrders,
         loadShopOrderItems,
+        notificationContext: getNotificationContext(),
       })
 
       if (result?.error) {
@@ -3629,6 +3644,7 @@ export default function App() {
         createAuditLog,
         loadSponsors,
         resetSponsorForm,
+        notificationContext: getNotificationContext(),
       })
 
       if (result?.error) alert(result.error.message)
@@ -3717,6 +3733,7 @@ export default function App() {
         createAuditLog,
         loadSponsorContracts,
         resetSponsorContractForm,
+        notificationContext: getNotificationContext(),
       })
 
       if (result?.error) alert(result.error.message)
@@ -3963,6 +3980,7 @@ export default function App() {
         createAuditLog,
         loadMediaItems,
         resetMediaForm,
+        notificationContext: getNotificationContext(),
       })
 
       if (result?.error) alert(result.error.message)
@@ -4440,6 +4458,7 @@ export default function App() {
       requestedData,
       createAuditLog,
       loadMemberChangeRequests,
+      notificationContext: getNotificationContext(),
     })
   }
 
@@ -4807,6 +4826,7 @@ export default function App() {
       resetInvoiceForm,
       loadInvoices,
       loadInvoiceItems,
+      notificationContext: getNotificationContext(),
     })
   }
 
@@ -4820,6 +4840,7 @@ export default function App() {
       loadInvoices,
       loadCashEntries,
       loadFees,
+      notificationContext: getNotificationContext(),
     })
   }
 
@@ -4829,6 +4850,7 @@ export default function App() {
       isAdmin,
       createAuditLog,
       loadInvoices,
+      notificationContext: getNotificationContext(),
     })
   }
 
@@ -5095,6 +5117,7 @@ export default function App() {
       resetEventForm,
       setSelectedEventId,
       setEventName,
+      notificationContext: getNotificationContext(),
     })
   }
 
@@ -5137,6 +5160,7 @@ export default function App() {
       resetEventForm,
       selectedEventId,
       setEventName,
+      notificationContext: getNotificationContext(),
     })
   }
 
@@ -5149,6 +5173,7 @@ export default function App() {
       events,
       createAuditLog,
       loadEvents,
+      notificationContext: getNotificationContext(),
     })
   }
 
@@ -5272,6 +5297,7 @@ export default function App() {
         getAmountByType,
         memberType,
         resetForm,
+        notificationContext: getNotificationContext(),
       })
 
       if (error) {
@@ -5299,6 +5325,7 @@ export default function App() {
       members,
       createAuditLog,
       loadMembers,
+      notificationContext: getNotificationContext(),
     })
   }
 
@@ -5311,6 +5338,7 @@ export default function App() {
       members,
       createAuditLog,
       loadAll,
+      notificationContext: getNotificationContext(),
     })
   }
 
@@ -5730,6 +5758,7 @@ export default function App() {
       createAuditLog,
       loadDocuments,
       resetDocumentForm,
+      notificationContext: getNotificationContext(),
     })
 
     if (error) alert(error.message)
@@ -5746,6 +5775,7 @@ export default function App() {
       settings,
       createAuditLog,
       loadDocuments,
+      notificationContext: getNotificationContext(),
     })
 
     if (error) alert(error.message)
@@ -6168,6 +6198,7 @@ export default function App() {
           exportCheckinsPdf={exportCheckinsPdf}
           getTodayCheckins={getTodayCheckins}
           getMemberName={getMemberName}
+          notificationContext={getNotificationContext()}
         />
       )}
 

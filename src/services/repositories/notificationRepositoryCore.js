@@ -63,6 +63,8 @@ export function createNotificationRepository(client, { now = () => new Date().to
     cursor = null,
     unreadOnly = false,
     includeArchived = false,
+    category = 'all',
+    search = '',
   } = {}) {
     const normalizedCursor = normalizeNotificationCursor(cursor)
     let query = client
@@ -79,6 +81,15 @@ export function createNotificationRepository(client, { now = () => new Date().to
 
     if (unreadOnly) {
       query = query.is('read_at', null)
+    }
+
+    if (category && category !== 'all') {
+      query = query.eq('category', category)
+    }
+
+    if (String(search || '').trim()) {
+      const term = String(search).trim().replaceAll('%', '').replaceAll(',', ' ')
+      query = query.or(`title.ilike.%${term}%,body.ilike.%${term}%`)
     }
 
     if (normalizedCursor?.created_at && normalizedCursor.id) {
@@ -236,6 +247,28 @@ export function createNotificationRepository(client, { now = () => new Date().to
       .single()
   }
 
+  async function bulkArchiveInAppNotifications(notificationIds) {
+    const ids = Array.isArray(notificationIds) ? notificationIds.filter(Boolean) : []
+    if (ids.length === 0) return { data: [], error: null }
+
+    return client
+      .from('in_app_notifications')
+      .update({ archived_at: now() })
+      .in('id', ids)
+      .select(NOTIFICATION_SELECT)
+  }
+
+  async function bulkSoftDeleteInAppNotifications(notificationIds) {
+    const ids = Array.isArray(notificationIds) ? notificationIds.filter(Boolean) : []
+    if (ids.length === 0) return { data: [], error: null }
+
+    return client
+      .from('in_app_notifications')
+      .update({ deleted_at: now() })
+      .in('id', ids)
+      .select(NOTIFICATION_SELECT)
+  }
+
   function subscribeToInAppNotifications({ authUserId, memberId, onChange }) {
     if (!authUserId && !memberId) {
       return { unsubscribe: () => {} }
@@ -290,6 +323,8 @@ export function createNotificationRepository(client, { now = () => new Date().to
     archiveInAppNotification,
     unarchiveInAppNotification,
     softDeleteInAppNotification,
+    bulkArchiveInAppNotifications,
+    bulkSoftDeleteInAppNotifications,
     subscribeToInAppNotifications,
   }
 }
