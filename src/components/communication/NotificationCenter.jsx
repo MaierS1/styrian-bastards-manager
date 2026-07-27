@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchInAppNotifications,
   fetchUnreadNotificationCount,
@@ -17,7 +17,8 @@ import {
   getNotificationListState,
   mergeNotificationPage,
   mergeNotificationList,
-  resolveNotificationTarget,
+  normalizeNotificationItems,
+  openNotificationAndNavigate,
 } from './notificationCenterCore'
 
 const POPOVER_LIMIT = 12
@@ -181,12 +182,14 @@ export function NotificationCenter({ user, currentMember, onNavigate, canOpenNot
   }, [notifications, refresh, unreadCount])
 
   const openNotification = useCallback(async (notification) => {
-    await markRead(notification)
-    const target = resolveNotificationTarget(notification, {
+    const result = await openNotificationAndNavigate({
+      notification,
+      markRead,
+      onNavigate,
       canOpenPage: canOpenNotificationPage,
+      onError: (openError) => setError(openError?.message || 'Benachrichtigung konnte nicht vollstaendig geoeffnet werden.'),
     })
-    if (target.page && onNavigate) {
-      onNavigate(target.page)
+    if (result.navigated) {
       setIsOpen(false)
     }
   }, [canOpenNotificationPage, markRead, onNavigate])
@@ -250,7 +253,41 @@ export function NotificationCenter({ user, currentMember, onNavigate, canOpenNot
   )
 }
 
-export function NotificationCenterPage({ user, currentMember, onNavigate, canOpenNotificationPage }) {
+export class NotificationCenterPageErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <section style={styles.pageSection}>
+          <h2 style={styles.pageTitle}>Benachrichtigungen</h2>
+          <div style={styles.errorBox}>
+            Benachrichtigungen konnten nicht angezeigt werden: {this.state.error.message}
+          </div>
+        </section>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
+export function NotificationCenterPage(props) {
+  return (
+    <NotificationCenterPageErrorBoundary>
+      <NotificationCenterPageContent {...props} />
+    </NotificationCenterPageErrorBoundary>
+  )
+}
+
+function NotificationCenterPageContent({ user, currentMember, onNavigate, canOpenNotificationPage }) {
   const [items, setItems] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [filter, setFilter] = useState('all')
@@ -268,30 +305,42 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
     if (!silent) setLoading(true)
     setError('')
 
-    const listResult = await fetchInAppNotifications({
-      limit: PAGE_LIMIT + 1,
-      cursor: reset ? null : cursor,
-      unreadOnly: filter === 'unread',
-      includeArchived,
-      category: categoryFilter,
-      search,
-    })
-    const countResult = await fetchUnreadNotificationCount()
+    try {
+      const listResult = await fetchInAppNotifications({
+        limit: PAGE_LIMIT + 1,
+        cursor: reset ? null : cursor,
+        unreadOnly: filter === 'unread',
+        includeArchived,
+        category: categoryFilter,
+        search,
+      })
+      const countResult = await fetchUnreadNotificationCount()
 
-    if (listResult.error) {
-      setError(listResult.error.message)
-    } else {
-      const rows = listResult.data || []
-      const visibleRows = rows.slice(0, PAGE_LIMIT)
-      setItems((current) => mergeNotificationPage(current, visibleRows, { reset }))
-      setCursor(createNotificationCursor(visibleRows[visibleRows.length - 1]))
-      setHasMore(rows.length > PAGE_LIMIT)
+      if (listResult.error) {
+        setError(listResult.error.message)
+        setItems((current) => (reset ? [] : normalizeNotificationItems(current)))
+        setCursor(null)
+        setHasMore(false)
+      } else {
+        const rows = normalizeNotificationItems(listResult.data)
+        const visibleRows = rows.slice(0, PAGE_LIMIT)
+        setItems((current) => mergeNotificationPage(current, visibleRows, { reset }))
+        setCursor(createNotificationCursor(visibleRows[visibleRows.length - 1]))
+        setHasMore(rows.length > PAGE_LIMIT)
+      }
+
+      if (countResult.error) setError((current) => current || countResult.error.message)
+      else setUnreadCount(countResult.count || 0)
+    } catch (loadError) {
+      setError(loadError?.message || 'Benachrichtigungen konnten nicht geladen werden.')
+      if (reset) {
+        setItems([])
+        setCursor(null)
+        setHasMore(false)
+      }
+    } finally {
+      if (!silent) setLoading(false)
     }
-
-    if (countResult.error) setError((current) => current || countResult.error.message)
-    else setUnreadCount(countResult.count || 0)
-
-    if (!silent) setLoading(false)
   }, [categoryFilter, cursor, filter, includeArchived, search, user?.id])
 
   useEffect(() => {
@@ -335,7 +384,7 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
 
   const toggleSelectVisible = useCallback(() => {
     setSelectedIds((currentIds) => {
-      const visibleIds = items.map((item) => item.id).filter(Boolean)
+      const visibleIds = normalizeNotificationItems(items).map((item) => item.id).filter(Boolean)
       const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => currentIds.includes(id))
       return allVisibleSelected
         ? currentIds.filter((id) => !visibleIds.includes(id))
@@ -362,14 +411,17 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
   }, [loadPage, selectedIds])
 
   const openNotification = useCallback(async (notification) => {
-    await markRead(notification)
-    const target = resolveNotificationTarget(notification, {
+    await openNotificationAndNavigate({
+      notification,
+      markRead,
+      onNavigate,
       canOpenPage: canOpenNotificationPage,
+      onError: (openError) => setError(openError?.message || 'Benachrichtigung konnte nicht vollstaendig geoeffnet werden.'),
     })
-    if (target.page && onNavigate) onNavigate(target.page)
   }, [canOpenNotificationPage, markRead, onNavigate])
 
-  const listState = getNotificationListState({ loading, error, items })
+  const visibleItems = normalizeNotificationItems(items)
+  const listState = getNotificationListState({ loading, error, items: visibleItems })
 
   return (
     <section style={styles.pageSection}>
@@ -407,7 +459,7 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
       </div>
 
       <div style={styles.bulkRow}>
-        <button type="button" onClick={toggleSelectVisible} style={secondaryButtonStyle} disabled={items.length === 0}>
+        <button type="button" onClick={toggleSelectVisible} style={secondaryButtonStyle} disabled={visibleItems.length === 0}>
           Sichtbare auswaehlen
         </button>
         <button type="button" onClick={archiveSelected} style={secondaryButtonStyle} disabled={selectedIds.length === 0}>
@@ -423,7 +475,7 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
       {listState === 'loading' && <div style={cardStyle}>Lade...</div>}
       {listState === 'empty' && <div style={cardStyle}>Keine Benachrichtigungen vorhanden.</div>}
 
-      {items.map((notification) => (
+      {visibleItems.map((notification) => (
         <NotificationCard
           key={notification.id}
           notification={notification}

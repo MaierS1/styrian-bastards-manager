@@ -9,6 +9,8 @@ import {
   isSafeInternalPath,
   mergeNotificationPage,
   mergeNotificationList,
+  normalizeNotificationItems,
+  openNotificationAndNavigate,
   paginateNotifications,
   resolveNotificationTarget,
 } from './notificationCenterCore.js'
@@ -42,6 +44,7 @@ test('resolves notification targets from safe paths or source modules', () => {
     kind: 'path',
     path: '/events/123',
     page: 'events',
+    entityId: null,
   })
 
   assert.deepEqual(resolveNotificationTarget({
@@ -51,31 +54,89 @@ test('resolves notification targets from safe paths or source modules', () => {
     kind: 'page',
     page: 'fees',
     path: null,
+    entityId: null,
   })
+})
+
+test('resolves member notification deep links with query ids', () => {
+  const target = resolveNotificationTarget({
+    type: 'member_accepted',
+    category: 'member',
+    url: '/members?id=member-1',
+    data: {
+      source: { module: 'mitglieder', entity_id: 'member-1' },
+      metadata: { member_id: 'member-1' },
+    },
+  }, { canOpenPage: (page) => page === 'members' })
+
+  assert.deepEqual(target, {
+    kind: 'path',
+    page: 'members',
+    path: '/members?id=member-1',
+    entityId: 'member-1',
+  })
+})
+
+test('falls back safely for member notifications without ids', () => {
+  assert.deepEqual(resolveNotificationTarget({
+    type: 'member_accepted',
+    category: 'member',
+    url: '',
+  }, { canOpenPage: (page) => page === 'members' }), {
+    kind: 'fallback',
+    page: 'members',
+    path: null,
+    entityId: null,
+  })
+})
+
+test('resolves all integrated notification categories to existing pages', () => {
+  const expectedPages = {
+    event: 'events',
+    invoice: 'invoices',
+    financing: 'financingLiabilities',
+    member: 'members',
+    membership_fee: 'fees',
+    shop: 'merch',
+    sponsor: 'sponsors',
+    document: 'documents',
+    press: 'media',
+    news: 'media',
+  }
+
+  for (const [category, page] of Object.entries(expectedPages)) {
+    assert.equal(resolveNotificationTarget({
+      category,
+      url: `/${page === 'financingLiabilities' ? 'financing' : page}?id=target-1`,
+    }, { canOpenPage: () => true }).page, page)
+  }
 })
 
 test('rejects notification targets that are unknown or not permitted', () => {
   assert.deepEqual(resolveNotificationTarget({ url: '/unknown' }, { canOpenPage: () => true }), {
-    kind: 'none',
-    page: null,
+    kind: 'fallback',
+    page: 'dashboard',
     path: null,
+    entityId: null,
   })
 
   assert.deepEqual(resolveNotificationTarget({ url: '/admin' }, { canOpenPage: () => false }), {
     kind: 'none',
     page: null,
     path: null,
+    entityId: null,
   })
 
   assert.deepEqual(resolveNotificationTarget({ url: '/admin' }, { canOpenPage: (page) => page === 'admin' }), {
     kind: 'path',
     page: 'admin',
     path: '/admin',
+    entityId: null,
   })
 })
 
 test('rejects external, protocol-relative, javascript, missing, and manipulated targets', () => {
-  const canOpenPage = () => true
+  const canOpenPage = (page) => page === 'dashboard'
   const rejectedTargets = [
     { url: 'https://example.com' },
     { url: '//example.com' },
@@ -87,11 +148,53 @@ test('rejects external, protocol-relative, javascript, missing, and manipulated 
 
   for (const notification of rejectedTargets) {
     assert.deepEqual(resolveNotificationTarget(notification, { canOpenPage }), {
-      kind: 'none',
-      page: null,
+      kind: 'fallback',
+      page: 'dashboard',
       path: null,
+      entityId: null,
     })
   }
+})
+
+test('keeps blocked invalid deep links on none when fallback is not permitted', () => {
+  assert.deepEqual(resolveNotificationTarget({ url: 'javascript:alert(1)' }, { canOpenPage: () => false }), {
+    kind: 'none',
+    page: null,
+    path: null,
+    entityId: null,
+  })
+})
+
+test('marks a notification as read and navigates once', async () => {
+  const calls = []
+  const result = await openNotificationAndNavigate({
+    notification: { id: 'n1', url: '/members?id=member-1', category: 'member' },
+    markRead: async (notification) => calls.push(['read', notification.id]),
+    onNavigate: (page, target) => calls.push(['navigate', page, target.entityId]),
+    canOpenPage: (page) => page === 'members',
+  })
+
+  assert.equal(result.navigated, true)
+  assert.deepEqual(calls, [
+    ['read', 'n1'],
+    ['navigate', 'members', 'member-1'],
+  ])
+})
+
+test('navigates even when marking read fails and does not navigate twice', async () => {
+  const calls = []
+  const result = await openNotificationAndNavigate({
+    notification: { id: 'n1', url: '/members?id=member-1', category: 'member' },
+    markRead: async () => {
+      throw new Error('read failed')
+    },
+    onNavigate: (page) => calls.push(page),
+    onError: (error) => calls.push(error.message),
+    canOpenPage: (page) => page === 'members',
+  })
+
+  assert.equal(result.navigated, true)
+  assert.deepEqual(calls, ['read failed', 'members'])
 })
 
 test('merges realtime notification changes without duplicates', () => {
@@ -175,6 +278,23 @@ test('reports list states for popover and full page rendering', () => {
   assert.equal(getNotificationListState({ loading: false, items: [] }), 'empty')
   assert.equal(getNotificationListState({ error: 'Fehler', items: [] }), 'error')
   assert.equal(getNotificationListState({ items: [{ id: '1' }] }), 'ready')
+  assert.equal(getNotificationListState({ loading: false, items: null }), 'empty')
+  assert.equal(getNotificationListState({ loading: true, items: null }), 'loading')
+})
+
+test('normalizes missing notification page rows and keeps archived rows renderable', () => {
+  assert.deepEqual(normalizeNotificationItems(null), [])
+  assert.deepEqual(normalizeNotificationItems(undefined), [])
+  assert.deepEqual(normalizeNotificationItems([null, { id: 'archived', archived_at: '2026-07-20T10:00:00Z' }]), [
+    { id: 'archived', archived_at: '2026-07-20T10:00:00Z' },
+  ])
+})
+
+test('merges empty, error, and null pagination rows without crashing', () => {
+  assert.deepEqual(mergeNotificationPage(null, null, { reset: true }), [])
+  assert.deepEqual(mergeNotificationPage([{ id: 'a', created_at: '2026-07-20T10:00:00Z' }], null), [
+    { id: 'a', created_at: '2026-07-20T10:00:00Z' },
+  ])
 })
 
 test('applies optimistic read state without mutating previous items', () => {

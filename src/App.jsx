@@ -1080,6 +1080,28 @@ export default function App() {
     return true
   }
 
+  function handleNotificationNavigate(pageKey, target = {}) {
+    const entityId = target?.entityId
+
+    if (pageKey === 'members' && entityId) {
+      const member = members.find((item) => item.id === entityId)
+      if (member) {
+        setMemberSearch(member.member_number || `${member.first_name || ''} ${member.last_name || ''}`.trim())
+        if (canManageMembers() || isAdmin()) editMember(member)
+      }
+    }
+
+    if (pageKey === 'events' && entityId) {
+      const event = events.find((item) => item.id === entityId)
+      if (event) {
+        setSelectedEventId(event.id)
+        setEventName(event.name || event.title || '')
+      }
+    }
+
+    setActivePage(pageKey)
+  }
+
   function canEditModule(module) {
     return hasPermission(currentMember, module, 'edit')
   }
@@ -5941,7 +5963,7 @@ export default function App() {
         <NotificationCenter
           user={user}
           currentMember={currentMember}
-          onNavigate={setActivePage}
+          onNavigate={handleNotificationNavigate}
           canOpenNotificationPage={canOpenNotificationPage}
         />
       </nav>
@@ -6809,7 +6831,7 @@ export default function App() {
         <NotificationCenterPage
           user={user}
           currentMember={currentMember}
-          onNavigate={setActivePage}
+          onNavigate={handleNotificationNavigate}
           canOpenNotificationPage={canOpenNotificationPage}
         />
       )}
