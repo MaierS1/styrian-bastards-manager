@@ -216,8 +216,8 @@ export function FinancingLiabilitiesPage({ members = [], currentMember, canCreat
       const normalizedAmount = Number(String(amount).replace(',', '.'))
       await notifyDomainEvent({
         type: normalizedAmount >= Number(selectedLiability.open_amount || 0)
-          ? 'financing_liability_paid'
-          : 'financing_repayment_recorded',
+          ? 'financing_liability_repaid'
+          : 'financing_liability_partial_repayment',
         targetId: selectedLiability.id,
         targetType: 'financing_liability',
         variables: {

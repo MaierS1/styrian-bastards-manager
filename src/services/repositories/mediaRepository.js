@@ -151,7 +151,7 @@ export async function saveMediaItemRecord({
 
   if (payload.status === 'published' && savedMediaId) {
     const notificationType = payload.category === 'presseartikel'
-      ? 'press_article_published'
+      ? 'press_published'
       : payload.category === 'vereinsnews'
         ? 'news_published'
         : null

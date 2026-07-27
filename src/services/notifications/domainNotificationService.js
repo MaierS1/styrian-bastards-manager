@@ -162,7 +162,7 @@ export const DOMAIN_NOTIFICATION_TEMPLATES = {
     action: 'view',
     defaultChannels: ['in_app'],
   }),
-  financing_repayment_recorded: template({
+  financing_liability_partial_repayment: template({
     category: NOTIFICATION_CATEGORIES.financing,
     title: 'Teilrueckzahlung verbucht',
     message: 'Fuer {description} wurde eine Rueckzahlung ueber {amount} verbucht.',
@@ -173,7 +173,7 @@ export const DOMAIN_NOTIFICATION_TEMPLATES = {
     action: 'view',
     defaultChannels: ['in_app'],
   }),
-  financing_liability_paid: template({
+  financing_liability_repaid: template({
     category: NOTIFICATION_CATEGORIES.financing,
     title: 'Vorfinanzierung vollstaendig zurueckbezahlt',
     message: '{description} ist vollstaendig zurueckbezahlt.',
@@ -382,7 +382,7 @@ export const DOMAIN_NOTIFICATION_TEMPLATES = {
     action: 'view',
     defaultChannels: ['in_app', 'email'],
   }),
-  press_article_published: template({
+  press_published: template({
     category: NOTIFICATION_CATEGORIES.press,
     title: 'Presseartikel veroeffentlicht',
     message: 'Der Presseartikel {title} wurde veroeffentlicht.',
