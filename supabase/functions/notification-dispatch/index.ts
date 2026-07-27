@@ -1,3 +1,4 @@
+import * as webpush from 'jsr:@negrel/webpush@0.5.0'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import {
   buildStableIdempotencyKey,
@@ -23,7 +24,6 @@ import {
   shouldDeliverEmail,
 } from './emailAdapter.js'
 import {
-  WEB_PUSH_MODULE_SPECIFIER,
   buildPushPayload,
   sendWebPushNotification,
   shouldDeliverPush,
@@ -548,7 +548,6 @@ async function deliverPush(adminClient: SupabaseClientLike, { jobId, payload, re
   let recipientCount = 0
   const preferences = await loadPreferences(adminClient, payload, recipients, 'push')
   const subscriptionsByRecipient = await loadActivePushSubscriptions(adminClient, recipients)
-  const webpush = await loadWebPushModule()
 
   for (const recipient of recipients) {
     const subscriptions = getSubscriptionsForRecipient(subscriptionsByRecipient, recipient)
@@ -987,10 +986,6 @@ async function updatePushSubscriptionFailure(adminClient: SupabaseClientLike, su
       error: countError.message,
     })
   }
-}
-
-async function loadWebPushModule() {
-  return await import(WEB_PUSH_MODULE_SPECIFIER)
 }
 
 async function loadPreferences(adminClient: SupabaseClientLike, payload: any, recipients: Recipient[], channel: 'in_app' | 'email' | 'push') {

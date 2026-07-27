@@ -560,7 +560,8 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
     })
 
     if (dispatchError || data?.error) {
-      setError(dispatchError?.message || data?.error || 'Test-Push konnte nicht gesendet werden.')
+      const safeMessage = await getSafeFunctionErrorMessage(dispatchError, data)
+      setError(safeMessage || 'Test-Push konnte nicht gesendet werden.')
       setActionLoading(false)
       return
     }
@@ -718,6 +719,28 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
       </div>
     </section>
   )
+}
+
+async function getSafeFunctionErrorMessage(error, data) {
+  if (data?.error) return data.error
+
+  const status = error?.context?.status || error?.status || null
+  const response = error?.context
+  let responseMessage = ''
+
+  if (response?.json) {
+    try {
+      const body = await response.json()
+      responseMessage = body?.error || body?.message || ''
+    } catch {
+      responseMessage = ''
+    }
+  }
+
+  const detail = responseMessage || error?.message || ''
+  if (status && detail) return `Test-Push fehlgeschlagen (${status}): ${detail}`
+  if (status) return `Test-Push fehlgeschlagen (${status}).`
+  return detail
 }
 
 function StatusItem({ label, value }) {

@@ -4,7 +4,6 @@ const ROOT_PATH = '/'
 export const DEFAULT_PUSH_ICON = `${ROOT_PATH}favicon.svg`
 export const DEFAULT_PUSH_BADGE = `${ROOT_PATH}favicon.svg`
 export const DEFAULT_PUSH_URL = '/notifications'
-export const WEB_PUSH_MODULE_SPECIFIER = 'jsr:@negrel/webpush@0.5.0'
 
 const SAFE_PATH_PATTERN = /^\/[A-Za-z0-9/_?=&.#%:-]*$/
 
