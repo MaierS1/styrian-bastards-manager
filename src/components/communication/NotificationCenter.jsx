@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchInAppNotifications,
   fetchUnreadNotificationCount,
+  bulkArchiveInAppNotifications,
+  bulkSoftDeleteInAppNotifications,
   markAllInAppNotificationsRead,
   markInAppNotificationRead,
   subscribeToInAppNotifications,
@@ -15,11 +17,27 @@ import {
   getNotificationListState,
   mergeNotificationPage,
   mergeNotificationList,
-  resolveNotificationTarget,
+  normalizeNotificationItems,
+  openNotificationAndNavigate,
 } from './notificationCenterCore'
 
 const POPOVER_LIMIT = 12
 const PAGE_LIMIT = 25
+const categoryFilterOptions = [
+  ['all', 'Alle Kategorien'],
+  ['event', 'Events'],
+  ['invoice', 'Rechnungen'],
+  ['membership_fee', 'Mitgliedsbeitraege'],
+  ['shop', 'Shop'],
+  ['sponsor', 'Sponsoren'],
+  ['document', 'Dokumente'],
+  ['press', 'Presse'],
+  ['news', 'News'],
+  ['financing', 'Vorfinanzierungen'],
+  ['cash', 'Kassa'],
+  ['member', 'Mitglieder'],
+  ['system', 'System'],
+]
 
 function BellIcon() {
   return (
@@ -164,12 +182,14 @@ export function NotificationCenter({ user, currentMember, onNavigate, canOpenNot
   }, [notifications, refresh, unreadCount])
 
   const openNotification = useCallback(async (notification) => {
-    await markRead(notification)
-    const target = resolveNotificationTarget(notification, {
+    const result = await openNotificationAndNavigate({
+      notification,
+      markRead,
+      onNavigate,
       canOpenPage: canOpenNotificationPage,
+      onError: (openError) => setError(openError?.message || 'Benachrichtigung konnte nicht vollstaendig geoeffnet werden.'),
     })
-    if (target.page && onNavigate) {
-      onNavigate(target.page)
+    if (result.navigated) {
       setIsOpen(false)
     }
   }, [canOpenNotificationPage, markRead, onNavigate])
@@ -233,10 +253,48 @@ export function NotificationCenter({ user, currentMember, onNavigate, canOpenNot
   )
 }
 
-export function NotificationCenterPage({ user, currentMember, onNavigate, canOpenNotificationPage }) {
+export class NotificationCenterPageErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <section style={styles.pageSection}>
+          <h2 style={styles.pageTitle}>Benachrichtigungen</h2>
+          <div style={styles.errorBox}>
+            Benachrichtigungen konnten nicht angezeigt werden: {this.state.error.message}
+          </div>
+        </section>
+      )
+    }
+
+    return this.props.children
+  }
+}
+
+export function NotificationCenterPage(props) {
+  return (
+    <NotificationCenterPageErrorBoundary>
+      <NotificationCenterPageContent {...props} />
+    </NotificationCenterPageErrorBoundary>
+  )
+}
+
+function NotificationCenterPageContent({ user, currentMember, onNavigate, canOpenNotificationPage }) {
   const [items, setItems] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [filter, setFilter] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [includeArchived, setIncludeArchived] = useState(false)
+  const [selectedIds, setSelectedIds] = useState([])
   const [cursor, setCursor] = useState(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -247,33 +305,49 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
     if (!silent) setLoading(true)
     setError('')
 
-    const listResult = await fetchInAppNotifications({
-      limit: PAGE_LIMIT + 1,
-      cursor: reset ? null : cursor,
-      unreadOnly: filter === 'unread',
-    })
-    const countResult = await fetchUnreadNotificationCount()
+    try {
+      const listResult = await fetchInAppNotifications({
+        limit: PAGE_LIMIT + 1,
+        cursor: reset ? null : cursor,
+        unreadOnly: filter === 'unread',
+        includeArchived,
+        category: categoryFilter,
+        search,
+      })
+      const countResult = await fetchUnreadNotificationCount()
 
-    if (listResult.error) {
-      setError(listResult.error.message)
-    } else {
-      const rows = listResult.data || []
-      const visibleRows = rows.slice(0, PAGE_LIMIT)
-      setItems((current) => mergeNotificationPage(current, visibleRows, { reset }))
-      setCursor(createNotificationCursor(visibleRows[visibleRows.length - 1]))
-      setHasMore(rows.length > PAGE_LIMIT)
+      if (listResult.error) {
+        setError(listResult.error.message)
+        setItems((current) => (reset ? [] : normalizeNotificationItems(current)))
+        setCursor(null)
+        setHasMore(false)
+      } else {
+        const rows = normalizeNotificationItems(listResult.data)
+        const visibleRows = rows.slice(0, PAGE_LIMIT)
+        setItems((current) => mergeNotificationPage(current, visibleRows, { reset }))
+        setCursor(createNotificationCursor(visibleRows[visibleRows.length - 1]))
+        setHasMore(rows.length > PAGE_LIMIT)
+      }
+
+      if (countResult.error) setError((current) => current || countResult.error.message)
+      else setUnreadCount(countResult.count || 0)
+    } catch (loadError) {
+      setError(loadError?.message || 'Benachrichtigungen konnten nicht geladen werden.')
+      if (reset) {
+        setItems([])
+        setCursor(null)
+        setHasMore(false)
+      }
+    } finally {
+      if (!silent) setLoading(false)
     }
-
-    if (countResult.error) setError((current) => current || countResult.error.message)
-    else setUnreadCount(countResult.count || 0)
-
-    if (!silent) setLoading(false)
-  }, [cursor, filter, user?.id])
+  }, [categoryFilter, cursor, filter, includeArchived, search, user?.id])
 
   useEffect(() => {
     setCursor(null)
+    setSelectedIds([])
     loadPage({ reset: true })
-  }, [filter, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [categoryFilter, filter, includeArchived, search, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user?.id) return undefined
@@ -300,15 +374,54 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
     else loadPage({ reset: true, silent: true })
   }, [loadPage])
 
-  const openNotification = useCallback(async (notification) => {
-    await markRead(notification)
-    const target = resolveNotificationTarget(notification, {
-      canOpenPage: canOpenNotificationPage,
+  const toggleSelection = useCallback((notificationId) => {
+    setSelectedIds((currentIds) => (
+      currentIds.includes(notificationId)
+        ? currentIds.filter((id) => id !== notificationId)
+        : [...currentIds, notificationId]
+    ))
+  }, [])
+
+  const toggleSelectVisible = useCallback(() => {
+    setSelectedIds((currentIds) => {
+      const visibleIds = normalizeNotificationItems(items).map((item) => item.id).filter(Boolean)
+      const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => currentIds.includes(id))
+      return allVisibleSelected
+        ? currentIds.filter((id) => !visibleIds.includes(id))
+        : [...new Set([...currentIds, ...visibleIds])]
     })
-    if (target.page && onNavigate) onNavigate(target.page)
+  }, [items])
+
+  const archiveSelected = useCallback(async () => {
+    const result = await bulkArchiveInAppNotifications(selectedIds)
+    if (result.error) setError(result.error.message)
+    else {
+      setSelectedIds([])
+      loadPage({ reset: true, silent: true })
+    }
+  }, [loadPage, selectedIds])
+
+  const deleteSelected = useCallback(async () => {
+    const result = await bulkSoftDeleteInAppNotifications(selectedIds)
+    if (result.error) setError(result.error.message)
+    else {
+      setSelectedIds([])
+      loadPage({ reset: true, silent: true })
+    }
+  }, [loadPage, selectedIds])
+
+  const openNotification = useCallback(async (notification) => {
+    await openNotificationAndNavigate({
+      notification,
+      markRead,
+      onNavigate,
+      canOpenPage: canOpenNotificationPage,
+      onError: (openError) => setError(openError?.message || 'Benachrichtigung konnte nicht vollstaendig geoeffnet werden.'),
+    })
   }, [canOpenNotificationPage, markRead, onNavigate])
 
-  const listState = getNotificationListState({ loading, error, items })
+  const visibleItems = normalizeNotificationItems(items)
+  const listState = getNotificationListState({ loading, error, items: visibleItems })
 
   return (
     <section style={styles.pageSection}>
@@ -329,18 +442,47 @@ export function NotificationCenterPage({ user, currentMember, onNavigate, canOpe
         <button type="button" onClick={() => setFilter('unread')} style={filter === 'unread' ? buttonStyle : secondaryButtonStyle}>
           Ungelesen
         </button>
+        <button type="button" onClick={() => setIncludeArchived((value) => !value)} style={includeArchived ? buttonStyle : secondaryButtonStyle}>
+          Archiv
+        </button>
+        <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} style={styles.filterSelect}>
+          {categoryFilterOptions.map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Suche"
+          style={styles.searchInput}
+        />
+      </div>
+
+      <div style={styles.bulkRow}>
+        <button type="button" onClick={toggleSelectVisible} style={secondaryButtonStyle} disabled={visibleItems.length === 0}>
+          Sichtbare auswaehlen
+        </button>
+        <button type="button" onClick={archiveSelected} style={secondaryButtonStyle} disabled={selectedIds.length === 0}>
+          Archivieren
+        </button>
+        <button type="button" onClick={deleteSelected} style={secondaryButtonStyle} disabled={selectedIds.length === 0}>
+          Loeschen
+        </button>
+        <span style={styles.selectionMeta}>{selectedIds.length} ausgewaehlt</span>
       </div>
 
       {error && <div style={styles.errorBox}>{error}</div>}
       {listState === 'loading' && <div style={cardStyle}>Lade...</div>}
       {listState === 'empty' && <div style={cardStyle}>Keine Benachrichtigungen vorhanden.</div>}
 
-      {items.map((notification) => (
+      {visibleItems.map((notification) => (
         <NotificationCard
           key={notification.id}
           notification={notification}
           onOpen={openNotification}
           onMarkRead={markRead}
+          selected={selectedIds.includes(notification.id)}
+          onToggleSelection={toggleSelection}
         />
       ))}
 
@@ -373,11 +515,18 @@ function NotificationRow({ notification, onOpen }) {
   )
 }
 
-function NotificationCard({ notification, onOpen, onMarkRead }) {
+function NotificationCard({ notification, onOpen, onMarkRead, selected = false, onToggleSelection }) {
   return (
     <article style={{ ...cardStyle, ...(!notification.read_at ? styles.cardUnread : null) }}>
       <div style={styles.cardHeader}>
-        <span style={{ ...styles.categoryPill, ...getPriorityStyle(notification) }}>{getCategoryLabel(notification.category)}</span>
+        <label style={styles.selectLabel}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelection?.(notification.id)}
+          />
+          <span style={{ ...styles.categoryPill, ...getPriorityStyle(notification) }}>{getCategoryLabel(notification.category)}</span>
+        </label>
         <span style={styles.dateText}>{formatNotificationDate(notification.created_at)}</span>
       </div>
       <h3 style={styles.cardTitle}>{notification.title}</h3>
@@ -590,6 +739,37 @@ const styles = {
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 16,
+  },
+  bulkRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  filterSelect: {
+    minHeight: 42,
+    padding: '0 10px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    background: colors.white,
+  },
+  searchInput: {
+    minHeight: 42,
+    minWidth: 180,
+    padding: '0 10px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 8,
+    background: colors.white,
+  },
+  selectionMeta: {
+    color: colors.muted,
+    fontSize: 13,
+  },
+  selectLabel: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
   },
   cardUnread: {
     borderLeft: `6px solid ${colors.red}`,

@@ -35,7 +35,7 @@ test('builds invoice issued payload for notification-dispatch', () => {
   assert.equal(result.ok, true)
   assert.equal(result.value.type, 'invoice_issued')
   assert.equal(result.value.category, 'invoice')
-  assert.deepEqual(result.value.channels, ['email'])
+  assert.deepEqual(result.value.channels, ['in_app', 'email'])
   assert.equal(result.value.recipient_invoice_id, invoice.id)
   assert.equal(result.value.source.entity_id, invoice.id)
   assert.equal(result.value.attachments[0].filename, 'Rechnung_2026_001.pdf')

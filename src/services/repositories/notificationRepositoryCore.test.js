@@ -39,6 +39,9 @@ class FakeChannel {
   }
 
   on(event, filter, handler) {
+    if (this.subscribed) {
+      throw new Error('cannot add postgres_changes callbacks after subscribe()')
+    }
     this.handlers.push({ event, filter, handler })
     return this
   }
@@ -71,6 +74,11 @@ class FakeQuery {
 
   eq(column, value) {
     this.operations.push({ type: 'eq', column, value })
+    return this
+  }
+
+  in(column, values) {
+    this.operations.push({ type: 'in', column, values })
     return this
   }
 
@@ -157,6 +165,9 @@ class FakeQuery {
       if (operation.type === 'eq') {
         return items.filter((item) => item[operation.column] === operation.value)
       }
+      if (operation.type === 'in') {
+        return items.filter((item) => operation.values.includes(item[operation.column]))
+      }
       if (operation.type === 'lt') {
         return items.filter((item) => String(item[operation.column] || '') < operation.value)
       }
@@ -230,6 +241,24 @@ test('fetchInAppNotifications applies unreadOnly and archived filters', async ()
   assert.deepEqual(result.data.map((item) => item.id), ['unread'])
 })
 
+test('fetchInAppNotifications applies category and search query filters', async () => {
+  const client = createFakeClient({
+    rows: [
+      notification('invoice', '2026-07-20T10:00:00Z', { category: 'invoice', title: 'Rechnung 1', body: 'Offen' }),
+      notification('event', '2026-07-20T09:00:00Z', { category: 'event', title: 'Training', body: 'Heute' }),
+    ],
+  })
+  const repository = createNotificationRepository(client)
+
+  await repository.fetchInAppNotifications({ category: 'invoice', search: 'Rechnung' })
+  const query = client.state.queries[0]
+
+  assert.deepEqual(query.operations.filter((operation) => operation.type === 'eq'), [
+    { type: 'eq', column: 'category', value: 'invoice' },
+  ])
+  assert.equal(query.operations.some((operation) => operation.type === 'or' && operation.filter.includes('title.ilike')), true)
+})
+
 test('repository returns Supabase errors unchanged', async () => {
   const error = { message: 'permission denied' }
   const client = createFakeClient({ error })
@@ -268,6 +297,25 @@ test('markAllInAppNotificationsRead updates only active unread notifications', a
   assert.equal(result.data[0].read_at, FIXED_NOW)
 })
 
+test('bulk archive and delete update selected notifications only', async () => {
+  const client = createFakeClient({
+    rows: [
+      notification('one', '2026-07-20T10:00:00Z'),
+      notification('two', '2026-07-20T09:00:00Z'),
+      notification('three', '2026-07-20T08:00:00Z'),
+    ],
+  })
+  const repository = createNotificationRepository(client, { now: () => FIXED_NOW })
+
+  const archiveResult = await repository.bulkArchiveInAppNotifications(['one', 'three'])
+  const deleteResult = await repository.bulkSoftDeleteInAppNotifications(['two'])
+
+  assert.deepEqual(archiveResult.data.map((item) => item.id).sort(), ['one', 'three'])
+  assert.equal(archiveResult.data.every((item) => item.archived_at === FIXED_NOW), true)
+  assert.deepEqual(deleteResult.data.map((item) => item.id), ['two'])
+  assert.equal(deleteResult.data[0].deleted_at, FIXED_NOW)
+})
+
 test('subscribeToInAppNotifications registers auth and member realtime filters', () => {
   const client = createFakeClient()
   const repository = createNotificationRepository(client)
@@ -286,6 +334,46 @@ test('subscribeToInAppNotifications registers auth and member realtime filters',
 
   subscription.unsubscribe()
   assert.equal(client.state.removedChannels.length, 1)
+})
+
+test('subscribeToInAppNotifications creates isolated channels for popup and page subscriptions', () => {
+  const client = createFakeClient()
+  const repository = createNotificationRepository(client)
+
+  const popupSubscription = repository.subscribeToInAppNotifications({
+    authUserId: 'auth-1',
+    memberId: 'member-1',
+    onChange: () => {},
+  })
+  const pageSubscription = repository.subscribeToInAppNotifications({
+    authUserId: 'auth-1',
+    memberId: 'member-1',
+    onChange: () => {},
+  })
+
+  assert.equal(client.state.channels.length, 2)
+  assert.notEqual(client.state.channels[0].name, client.state.channels[1].name)
+  assert.equal(client.state.channels.every((channel) => channel.subscribed), true)
+  assert.deepEqual(client.state.channels.map((channel) => channel.handlers.length), [2, 2])
+
+  popupSubscription.unsubscribe()
+  pageSubscription.unsubscribe()
+
+  assert.deepEqual(client.state.removedChannels, client.state.channels)
+})
+
+test('subscribeToInAppNotifications registers all postgres_changes callbacks before subscribe', () => {
+  const client = createFakeClient()
+  const repository = createNotificationRepository(client)
+
+  repository.subscribeToInAppNotifications({
+    authUserId: 'auth-1',
+    memberId: 'member-1',
+    onChange: () => {},
+  })
+
+  assert.equal(client.state.channels[0].handlers.length, 2)
+  assert.equal(client.state.channels[0].subscribed, true)
 })
 
 function notification(id, createdAt, overrides = {}) {

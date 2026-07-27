@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export async function archiveInvoicePdfService({
   invoice,
@@ -348,6 +349,7 @@ export async function createInvoiceService({
   resetInvoiceForm,
   loadInvoices,
   loadInvoiceItems,
+  notificationContext,
   alertFn = alert,
 }) {
   if (!canManageCash() && !isAdmin()) return alertFn('Keine Berechtigung für Rechnungen.')
@@ -425,6 +427,23 @@ export async function createInvoiceService({
     items: rowsToInsert,
   })
 
+  await notifyDomainEvent({
+    type: 'invoice_created',
+    targetId: invoice.id,
+    targetType: 'invoice',
+    variables: {
+      invoice_number: invoice.invoice_number,
+      customer_name: invoice.customer_name,
+      amount: invoice.total_amount,
+      created_at: invoice.created_at,
+    },
+    metadata: {
+      invoice_id: invoice.id,
+      invoice_number: invoice.invoice_number,
+    },
+    ...notificationContext,
+  })
+
   resetInvoiceForm()
   await loadInvoices()
   await loadInvoiceItems()
@@ -441,6 +460,7 @@ export async function markInvoicePaidService({
   loadInvoices,
   loadCashEntries,
   loadFees,
+  notificationContext,
   alertFn = alert,
   confirmFn = window.confirm,
 }) {
@@ -511,6 +531,23 @@ export async function markInvoicePaidService({
     paid_at: today,
   })
 
+  await notifyDomainEvent({
+    type: 'invoice_paid',
+    targetId: invoice.id,
+    targetType: 'invoice',
+    variables: {
+      invoice_number: invoice.invoice_number,
+      customer_name: invoice.customer_name,
+      amount: invoice.total_amount,
+      status: 'bezahlt',
+    },
+    metadata: {
+      invoice_id: invoice.id,
+      invoice_number: invoice.invoice_number,
+    },
+    ...notificationContext,
+  })
+
   await loadInvoices()
   await loadCashEntries()
   await loadFees()
@@ -523,6 +560,7 @@ export async function cancelInvoiceService({
   isAdmin,
   createAuditLog,
   loadInvoices,
+  notificationContext,
   alertFn = alert,
   promptFn = window.prompt,
 }) {
@@ -551,6 +589,23 @@ export async function cancelInvoiceService({
   await createAuditLog('cancel', 'invoices', invoice.id, invoice, {
     status: 'storniert',
     cancellation_reason: reason.trim(),
+  })
+
+  await notifyDomainEvent({
+    type: 'invoice_cancelled',
+    targetId: invoice.id,
+    targetType: 'invoice',
+    variables: {
+      invoice_number: invoice.invoice_number,
+      customer_name: invoice.customer_name,
+      status: 'storniert',
+    },
+    metadata: {
+      invoice_id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      cancellation_reason: reason.trim(),
+    },
+    ...notificationContext,
   })
 
   await loadInvoices()

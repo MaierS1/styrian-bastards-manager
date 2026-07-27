@@ -85,7 +85,7 @@ test('keeps own notification preferences independent from admin communication pe
   assert.equal(hasPermission('mitglied', 'kommunikation', 'view'), false)
   assert.equal(notificationPreferenceConfig.length > 0, true)
   assert.equal(
-    notificationPreferenceConfig.some((item) => item.notification_type === 'system_account'),
+    notificationPreferenceConfig.some((item) => item.notification_type === 'system' && item.required === true),
     true
   )
 })

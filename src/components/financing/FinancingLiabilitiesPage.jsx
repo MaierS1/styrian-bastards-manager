@@ -27,6 +27,10 @@ import {
   fetchFinancingLiabilityBalances,
   fetchFinancingLiabilityRepayments,
 } from '../../services/repositories/financingLiabilitiesRepository'
+import {
+  formatNotificationAmount,
+  notifyDomainEvent,
+} from '../../services/notifications/domainNotificationService'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -151,8 +155,23 @@ export function FinancingLiabilitiesPage({ members = [], currentMember, canCreat
 
     setSaving(true)
     try {
-      const { error } = await createFinancingLiability(payload)
+      const { data: liability, error } = await createFinancingLiability(payload)
       if (error) throw error
+      await notifyDomainEvent({
+        type: 'financing_liability_created',
+        targetId: liability?.id || null,
+        targetType: 'financing_liability',
+        variables: {
+          creditor_name: payload.creditor_name,
+          amount: formatNotificationAmount(payload.original_amount),
+          description: payload.description,
+          created_at: new Date().toISOString(),
+        },
+        metadata: { financing_category: payload.category },
+        members,
+        currentMember,
+        createdBy: currentMember?.auth_user_id || null,
+      })
       resetForm()
       await loadFinancingLiabilities()
     } catch (error) {
@@ -194,6 +213,27 @@ export function FinancingLiabilitiesPage({ members = [], currentMember, canCreat
       })
       if (error) throw error
 
+      const normalizedAmount = Number(String(amount).replace(',', '.'))
+      await notifyDomainEvent({
+        type: normalizedAmount >= Number(selectedLiability.open_amount || 0)
+          ? 'financing_liability_repaid'
+          : 'financing_liability_partial_repayment',
+        targetId: selectedLiability.id,
+        targetType: 'financing_liability',
+        variables: {
+          amount: formatNotificationAmount(normalizedAmount),
+          description: selectedLiability.description,
+          payment_status: normalizedAmount >= Number(selectedLiability.open_amount || 0) ? 'paid' : 'partially_paid',
+        },
+        metadata: {
+          financing_liability_id: selectedLiability.id,
+          repayment_amount: normalizedAmount,
+        },
+        members,
+        currentMember,
+        createdBy: currentMember?.auth_user_id || null,
+      })
+
       setRepaymentForm({
         amount: '',
         paidAt: today(),
@@ -218,6 +258,22 @@ export function FinancingLiabilitiesPage({ members = [], currentMember, canCreat
     try {
       const { error } = await cancelFinancingLiability(liability.id, reason.trim())
       if (error) throw error
+      await notifyDomainEvent({
+        type: 'financing_liability_cancelled',
+        targetId: liability.id,
+        targetType: 'financing_liability',
+        variables: {
+          description: liability.description,
+          status: 'cancelled',
+        },
+        metadata: {
+          financing_liability_id: liability.id,
+          cancellation_reason: reason.trim(),
+        },
+        members,
+        currentMember,
+        createdBy: currentMember?.auth_user_id || null,
+      })
       await loadFinancingLiabilities()
     } catch (error) {
       alert(`Vorfinanzierung konnte nicht storniert werden: ${error.message}`)

@@ -509,7 +509,7 @@ async function deliverInApp(adminClient: SupabaseClientLike, { jobId, payload, r
   const preferences = await loadPreferences(adminClient, payload, recipients, 'in_app')
 
   for (const recipient of recipients) {
-    const preference = getPreferenceForRecipient(preferences, recipient)
+    const preference = getPreferenceForRecipient(preferences, recipient, payload)
     const decision = shouldDeliverInApp({ payload, recipient, preference })
 
     if (!decision.deliver) {
@@ -631,7 +631,7 @@ async function deliverEmail(adminClient: SupabaseClientLike, { jobId, payload, r
 
     if (normalizedEmail) seenEmailAddresses.add(normalizedEmail)
 
-    const preference = getPreferenceForRecipient(preferences, recipient)
+    const preference = getPreferenceForRecipient(preferences, recipient, payload)
     const decision = shouldDeliverEmail({ payload, recipient, preference })
 
     if (!decision.deliver) {
@@ -721,8 +721,8 @@ async function loadPreferences(adminClient: SupabaseClientLike, payload: any, re
   let query = adminClient
     .from('notification_preferences')
     .select('auth_user_id, member_id, notification_type, channel, enabled, required')
-    .eq('notification_type', payload.type)
     .eq('channel', channel)
+    .or(`notification_type.eq.${payload.type},category.eq.${payload.category}`)
 
   const filters = []
   if (authUserIds.length > 0) filters.push(`auth_user_id.in.(${authUserIds.join(',')})`)
@@ -738,8 +738,10 @@ async function loadPreferences(adminClient: SupabaseClientLike, payload: any, re
   return data || []
 }
 
-function getPreferenceForRecipient(preferences: any[], recipient: Recipient) {
-  return preferences.find((item) => item.auth_user_id && item.auth_user_id === recipient.auth_user_id)
+function getPreferenceForRecipient(preferences: any[], recipient: Recipient, payload: any) {
+  return preferences.find((item) => item.notification_type === payload.type && item.auth_user_id && item.auth_user_id === recipient.auth_user_id)
+    || preferences.find((item) => item.notification_type === payload.type && item.member_id && item.member_id === recipient.member_id)
+    || preferences.find((item) => item.auth_user_id && item.auth_user_id === recipient.auth_user_id)
     || preferences.find((item) => item.member_id && item.member_id === recipient.member_id)
     || null
 }

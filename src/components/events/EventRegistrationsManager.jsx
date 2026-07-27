@@ -15,6 +15,7 @@ import {
   buildRegistrationConfirmationEmail,
   buildWaitlistEmail,
 } from '../../services/notifications/eventNotifications'
+import { notifyDomainEvent } from '../../services/notifications/domainNotificationService'
 
 const emptyForm = {
   team_name: '',
@@ -45,7 +46,7 @@ const checkinStatusLabels = {
   no_show: 'Nicht erschienen',
 }
 
-export function EventRegistrationsManager({ event, events = [], onRegistrationsChanged }) {
+export function EventRegistrationsManager({ event, events = [], onRegistrationsChanged, notificationContext }) {
   const [registrations, setRegistrations] = useState([])
   const [allRegistrations, setAllRegistrations] = useState([])
   const [form, setForm] = useState(emptyForm)
@@ -377,6 +378,12 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
 
     if (error) return alert(error.message)
 
+    await notifyEventFullIfNeeded({
+      targetEvent: event,
+      registeredCountBefore: stats.registered,
+      nextStatus: resolvedStatus,
+    })
+
     setForm(emptyForm)
     setSendConfirmationOnCreate(false)
     await reloadAfterChange()
@@ -399,6 +406,20 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
     setSaving(false)
 
     if (error) return alert(error.message)
+
+    const previousRegistration = registrations.find((registration) => registration.id === registrationId)
+    const registeredCountBefore = registrations
+      .filter((registration) => registration.status === 'registered' && registration.id !== registrationId)
+      .length
+      + (previousRegistration?.status === 'registered' ? 1 : 0)
+
+    await notifyEventFullIfNeeded({
+      targetEvent: event,
+      registeredCountBefore: previousRegistration?.status === 'registered'
+        ? Math.max(0, registeredCountBefore - 1)
+        : registeredCountBefore,
+      nextStatus: resolvedStatus,
+    })
 
     cancelEdit(registrationId)
     await reloadAfterChange()
@@ -464,11 +485,13 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
     }
 
     let nextStatus = currentRegistration.status
+    let targetRegistrations = []
 
     if (currentRegistration.status === 'registered' && targetEvent.max_participants) {
-      const { data: targetRegistrations, error } = await fetchEventRegistrations(targetEvent.id)
+      const { data, error } = await fetchEventRegistrations(targetEvent.id)
       if (error) return alert(error.message || 'Ziel-Event konnte nicht geprüft werden.')
 
+      targetRegistrations = data || []
       const registeredCount = (targetRegistrations || []).filter((candidate) => candidate.status === 'registered').length
 
       if (registeredCount + 1 > targetEvent.max_participants) {
@@ -518,6 +541,12 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
       return
     }
 
+    await notifyEventFullIfNeeded({
+      targetEvent,
+      registeredCountBefore: (targetRegistrations || []).filter((candidate) => candidate.status === 'registered').length,
+      nextStatus,
+    })
+
     cancelAssign(registration.id)
     await reloadAfterChange()
     alert(`Team wurde erfolgreich dem Event „${targetEventTitle}“ zugewiesen.`)
@@ -529,6 +558,29 @@ export function EventRegistrationsManager({ event, events = [], onRegistrationsC
       loadAllRegistrations(),
     ])
     await onRegistrationsChanged?.()
+  }
+
+  async function notifyEventFullIfNeeded({ targetEvent, registeredCountBefore, nextStatus }) {
+    const maxParticipants = Number(targetEvent?.max_participants || 0)
+    if (!targetEvent?.id || !maxParticipants || nextStatus !== 'registered') return
+    if (registeredCountBefore >= maxParticipants) return
+    if (registeredCountBefore + 1 < maxParticipants) return
+
+    await notifyDomainEvent({
+      type: 'event_full',
+      targetId: targetEvent.id,
+      targetType: 'event',
+      variables: {
+        name: getEventTitle(targetEvent),
+        status: 'full',
+      },
+      metadata: {
+        event_id: targetEvent.id,
+        max_participants: maxParticipants,
+        registered_count: registeredCountBefore + 1,
+      },
+      ...notificationContext,
+    })
   }
 
   function exportCsv() {

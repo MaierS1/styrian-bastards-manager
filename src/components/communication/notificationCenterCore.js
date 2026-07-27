@@ -2,7 +2,14 @@ export const categoryLabels = {
   event: 'Event',
   membership_fee: 'Beitrag',
   invoice: 'Rechnung',
+  shop: 'Shop',
+  sponsor: 'Sponsor',
   document: 'Dokument',
+  press: 'Presse',
+  news: 'News',
+  financing: 'Vorfinanzierung',
+  cash: 'Kassa',
+  member: 'Mitglied',
   club_news: 'News',
   board: 'Vorstand',
   system: 'System',
@@ -11,8 +18,24 @@ export const categoryLabels = {
 
 const PAGE_BY_MODULE = {
   events: 'events',
+  beitraege: 'fees',
+  rechnungen: 'invoices',
+  dokumente: 'documents',
+  medien_presse: 'media',
+  vorfinanzierungen: 'financingLiabilities',
+  kassa: 'cash',
+  mitglieder: 'members',
+  sponsoren: 'sponsors',
   membership_fees: 'fees',
   invoices: 'invoices',
+  shop: 'merch',
+  sponsors: 'sponsors',
+  financing: 'financingLiabilities',
+  financing_liabilities: 'financingLiabilities',
+  cash: 'cash',
+  members: 'members',
+  press: 'media',
+  news: 'media',
   documents: 'documents',
   club_news: 'media',
   system: 'dashboard',
@@ -31,8 +54,25 @@ export const notificationTargetPages = {
   media: { module: 'medien_presse' },
   sponsors: { module: 'sponsoren' },
   merch: { module: 'shop' },
+  financingLiabilities: { module: 'vorfinanzierungen' },
   inventory: { module: 'inventar' },
   admin: { module: 'backup' },
+}
+
+const PAGE_BY_CATEGORY = {
+  event: 'events',
+  membership_fee: 'fees',
+  invoice: 'invoices',
+  shop: 'merch',
+  sponsor: 'sponsors',
+  document: 'documents',
+  press: 'media',
+  news: 'media',
+  financing: 'financingLiabilities',
+  cash: 'cash',
+  member: 'members',
+  club_news: 'media',
+  system: 'dashboard',
 }
 
 export function getCategoryLabel(category) {
@@ -58,9 +98,9 @@ export function mergeNotificationList(currentItems, changedItem, { limit = 20 } 
 
 export function mergeNotificationPage(currentItems, nextItems, { reset = false } = {}) {
   const itemsById = new Map()
-  const sourceItems = reset ? [] : currentItems
+  const sourceItems = reset ? [] : normalizeNotificationItems(currentItems)
 
-  for (const item of [...sourceItems, ...nextItems]) {
+  for (const item of [...sourceItems, ...normalizeNotificationItems(nextItems)]) {
     if (item?.id && !itemsById.has(item.id)) {
       itemsById.set(item.id, item)
     }
@@ -108,14 +148,19 @@ export function paginateNotifications(items, { cursor = null, limit = 20 } = {})
 }
 
 export function getNotificationListState({ loading = false, error = '', items = [] } = {}) {
+  const normalizedItems = normalizeNotificationItems(items)
   if (error) return 'error'
-  if (loading && items.length === 0) return 'loading'
-  if (!loading && items.length === 0) return 'empty'
+  if (loading && normalizedItems.length === 0) return 'loading'
+  if (!loading && normalizedItems.length === 0) return 'empty'
   return 'ready'
 }
 
+export function normalizeNotificationItems(items) {
+  return Array.isArray(items) ? items.filter(Boolean) : []
+}
+
 export function applyOptimisticRead(items, notificationId, readAt) {
-  return items.map((item) => (
+  return normalizeNotificationItems(items).map((item) => (
     item.id === notificationId ? { ...item, read_at: item.read_at || readAt } : item
   ))
 }
@@ -123,15 +168,57 @@ export function applyOptimisticRead(items, notificationId, readAt) {
 export function resolveNotificationTarget(notification, { canOpenPage = () => false } = {}) {
   const url = String(notification?.url || '').trim()
   if (isSafeInternalPath(url)) {
-    return buildAllowedTarget({ kind: 'path', path: url, page: pageFromPath(url), canOpenPage })
+    const pathTarget = buildAllowedTarget({
+      kind: 'path',
+      path: url,
+      page: pageFromPath(url),
+      entityId: entityIdFromPath(url),
+      canOpenPage,
+    })
+    if (pathTarget.page) return pathTarget
   }
 
   const module = notification?.data?.source?.module
   if (module && PAGE_BY_MODULE[module]) {
-    return buildAllowedTarget({ kind: 'page', page: PAGE_BY_MODULE[module], canOpenPage })
+    const moduleTarget = buildAllowedTarget({
+      kind: 'page',
+      page: PAGE_BY_MODULE[module],
+      entityId: entityIdFromNotification(notification),
+      canOpenPage,
+    })
+    if (moduleTarget.page) return moduleTarget
   }
 
-  return { kind: 'none', page: null, path: null }
+  const fallbackPage = PAGE_BY_CATEGORY[notification?.category] || 'dashboard'
+  return buildAllowedTarget({
+    kind: 'fallback',
+    page: fallbackPage,
+    entityId: entityIdFromNotification(notification),
+    canOpenPage,
+  })
+}
+
+export async function openNotificationAndNavigate({
+  notification,
+  markRead,
+  onNavigate,
+  canOpenPage = () => false,
+  onError = () => {},
+} = {}) {
+  const target = resolveNotificationTarget(notification, { canOpenPage })
+
+  try {
+    if (markRead) await markRead(notification)
+  } catch (error) {
+    onError(error)
+  }
+
+  if (target.page && onNavigate) {
+    onNavigate(target.page, target)
+    return { navigated: true, target }
+  }
+
+  return { navigated: false, target }
 }
 
 export function isSafeInternalPath(value) {
@@ -144,16 +231,40 @@ export function isSafeInternalPath(value) {
 }
 
 function pageFromPath(path) {
-  const firstSegment = String(path || '').split('/').filter(Boolean)[0]
+  const cleanPath = String(path || '').split(/[?#]/)[0]
+  const firstSegment = cleanPath.split('/').filter(Boolean)[0]
   return PAGE_BY_MODULE[firstSegment] || firstSegment || null
 }
 
-function buildAllowedTarget({ kind, page, path = null, canOpenPage }) {
+function entityIdFromPath(path) {
+  const query = String(path || '').split('?')[1]?.split('#')[0]
+  if (!query) return null
+
+  try {
+    return new URLSearchParams(query).get('id')
+  } catch {
+    return null
+  }
+}
+
+function entityIdFromNotification(notification) {
+  return notification?.data?.metadata?.target_id
+    || notification?.data?.metadata?.member_id
+    || notification?.data?.metadata?.event_id
+    || notification?.data?.metadata?.invoice_id
+    || notification?.data?.metadata?.financing_liability_id
+    || notification?.data?.metadata?.document_id
+    || notification?.data?.metadata?.sponsor_id
+    || notification?.data?.source?.entity_id
+    || null
+}
+
+function buildAllowedTarget({ kind, page, path = null, entityId = null, canOpenPage }) {
   if (!page || !notificationTargetPages[page] || !canOpenPage(page)) {
-    return { kind: 'none', page: null, path: null }
+    return { kind: 'none', page: null, path: null, entityId: null }
   }
 
-  return { kind, page, path }
+  return { kind, page, path, entityId }
 }
 
 function isNotificationAfterCursor(notification, cursor) {

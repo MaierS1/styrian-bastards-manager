@@ -1,66 +1,47 @@
 export const notificationCategoryLabels = {
   event: 'Events',
-  membership_fee: 'Mitgliedsbeitraege',
   invoice: 'Rechnungen',
+  membership_fee: 'Mitgliedsbeitraege',
+  shop: 'Shop',
+  sponsor: 'Sponsoren',
   document: 'Dokumente',
+  press: 'Presse',
+  news: 'News',
+  financing: 'Vorfinanzierungen',
+  cash: 'Kassa',
+  member: 'Mitglieder',
   club_news: 'Vereinsinfos',
   system: 'System',
 }
 
 export const notificationPreferenceConfig = [
-  {
-    notification_type: 'event_updates',
-    category: 'event',
-    label: 'Event-Updates',
-    description: 'Hinweise zu Terminaenderungen, Treffpunkten und wichtigen Event-Infos.',
-    required: false,
-  },
-  {
-    notification_type: 'event_reminder',
-    category: 'event',
-    label: 'Event-Erinnerungen',
-    description: 'Erinnerungen an kommende Termine im Mitgliederportal.',
-    required: false,
-  },
-  {
-    notification_type: 'membership_fee_due',
-    category: 'membership_fee',
-    label: 'Faellige Mitgliedsbeitraege',
-    description: 'Pflichthinweise zu offenen oder faelligen Mitgliedsbeitraegen.',
-    required: true,
-  },
-  {
-    notification_type: 'invoice_available',
-    category: 'invoice',
-    label: 'Rechnungen und Zahlungen',
-    description: 'Pflichthinweise zu bereitgestellten Rechnungen und zahlungsrelevanten Informationen.',
-    required: true,
-  },
-  {
-    notification_type: 'document_available',
-    category: 'document',
-    label: 'Neue Dokumente',
-    description: 'Informationen zu neuen Dokumenten im Mitgliederbereich.',
-    required: false,
-  },
-  {
-    notification_type: 'club_news',
-    category: 'club_news',
-    label: 'Vereinsinfos',
-    description: 'Allgemeine Informationen aus dem Verein.',
-    required: false,
-  },
-  {
-    notification_type: 'system_account',
-    category: 'system',
-    label: 'Konto und Sicherheit',
-    description: 'Pflichthinweise zu Portalzugang, Konto und sicherheitsrelevanten Aenderungen.',
-    required: true,
-  },
+  preference('event', 'Events', 'Benachrichtigungen zu Events, Aenderungen, Warteliste und Erinnerungen.'),
+  preference('invoice', 'Rechnungen', 'Benachrichtigungen zu Rechnungen, Zahlungen, Storno und Faelligkeit.', true),
+  preference('membership_fee', 'Mitgliedsbeitraege', 'Benachrichtigungen zu faelligen, bezahlten und gemahnten Beitraegen.', true),
+  preference('shop', 'Shop', 'Benachrichtigungen zu Shop-Bestellungen und Statusaenderungen.'),
+  preference('sponsor', 'Sponsoren', 'Benachrichtigungen zu Sponsoren, Vertraegen und Zahlungen.'),
+  preference('document', 'Dokumente', 'Benachrichtigungen zu veroeffentlichten Dokumenten.'),
+  preference('press', 'Presse', 'Benachrichtigungen zu veroeffentlichten Presseartikeln.'),
+  preference('news', 'News', 'Benachrichtigungen zu neuen Vereinsnews.'),
+  preference('financing', 'Vorfinanzierungen', 'Benachrichtigungen zu Vorfinanzierungen und Rueckzahlungen.', true),
+  preference('cash', 'Kassa', 'Benachrichtigungen zu vorbereiteten Kassa-Grenzwertmeldungen.', true),
+  preference('member', 'Mitglieder', 'Benachrichtigungen zu Mitgliedsantraegen und Statusaenderungen.', true),
+  preference('club_news', 'Vereinsinfos', 'Allgemeine Informationen aus dem Verein.'),
+  preference('system', 'Konto und Sicherheit', 'Pflichthinweise zu Portalzugang, Konto und Sicherheit.', true),
 ]
 
 export const requiredNotificationTypes = new Set(
   notificationPreferenceConfig
-    .filter((preference) => preference.required)
-    .map((preference) => preference.notification_type)
+    .filter((preferenceItem) => preferenceItem.required)
+    .map((preferenceItem) => preferenceItem.notification_type)
 )
+
+function preference(category, label, description, required = false) {
+  return {
+    notification_type: category,
+    category,
+    label,
+    description,
+    required,
+  }
+}

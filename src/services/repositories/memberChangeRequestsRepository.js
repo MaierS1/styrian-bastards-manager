@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { getMemberDisplayName, notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export async function fetchMemberChangeRequests() {
   return supabase
@@ -13,18 +14,34 @@ export async function submitMemberChangeRequestRecord({
   requestedData,
   createAuditLog,
   loadMemberChangeRequests,
+  notificationContext,
   alertFn = alert,
 }) {
-  const { error } = await supabase.from('member_change_requests').insert({
+  const { data: request, error } = await supabase.from('member_change_requests').insert({
     member_id: currentMember.id,
     requested_by: user?.id || null,
     requested_data: requestedData,
     status: 'offen',
-  })
+  }).select().single()
 
   if (error) return { error }
 
   await createAuditLog('request_member_change', 'members', currentMember.id, currentMember, requestedData)
+  await notifyDomainEvent({
+    type: 'member_application_received',
+    targetId: request?.id || currentMember.id,
+    targetType: 'member_change_request',
+    variables: {
+      member_name: getMemberDisplayName(currentMember),
+      created_at: request?.created_at,
+    },
+    metadata: {
+      member_id: currentMember.id,
+      member_change_request_id: request?.id || null,
+    },
+    ...notificationContext,
+  })
+
   await loadMemberChangeRequests()
   alertFn('Änderungsantrag wurde eingereicht.')
 

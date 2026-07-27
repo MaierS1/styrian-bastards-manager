@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { getMemberDisplayName, notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export async function fetchCashEntries() {
   return supabase
@@ -103,6 +104,7 @@ export async function saveMembershipFee({
   members,
   createAuditLog,
   loadAll,
+  notificationContext,
 }) {
   const today = new Date().toISOString().slice(0, 10)
 
@@ -135,6 +137,23 @@ export async function saveMembershipFee({
       cash_entry: 'already_exists',
     })
 
+    await notifyDomainEvent({
+      type: 'membership_fee_paid',
+      targetId: fee.id,
+      targetType: 'membership_fee',
+      variables: {
+        member_name: getMemberDisplayName(member),
+        period: fee.year || today.slice(0, 4),
+        payment_status: 'paid',
+      },
+      metadata: {
+        membership_fee_id: fee.id,
+        member_id: fee.member_id,
+        cash_entry: 'already_exists',
+      },
+      ...notificationContext,
+    })
+
     await loadAll()
     return { ok: true }
   }
@@ -160,6 +179,22 @@ export async function saveMembershipFee({
     paid: true,
     paid_at: today,
     payment_method: paymentMethod,
+  })
+
+  await notifyDomainEvent({
+    type: 'membership_fee_paid',
+    targetId: fee.id,
+    targetType: 'membership_fee',
+    variables: {
+      member_name: getMemberDisplayName(member),
+      period: fee.year || today.slice(0, 4),
+      payment_status: 'paid',
+    },
+    metadata: {
+      membership_fee_id: fee.id,
+      member_id: fee.member_id,
+    },
+    ...notificationContext,
   })
 
   await loadAll()

@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export async function fetchDocuments() {
   return supabase
@@ -22,6 +23,7 @@ export async function uploadDocumentRecord({
   createAuditLog,
   loadDocuments,
   resetDocumentForm,
+  notificationContext,
   alertFn = alert,
 }) {
   const safeName = documentFile.name.replace(/[^a-zA-Z0-9_.-]/g, '-')
@@ -33,7 +35,7 @@ export async function uploadDocumentRecord({
 
   if (uploadError) return { error: uploadError }
 
-  const { error } = await supabase.from('documents').insert({
+  const { data: document, error } = await supabase.from('documents').insert({
     title: documentTitle,
     category: documentCategory,
     document_date: documentDate || null,
@@ -46,7 +48,7 @@ export async function uploadDocumentRecord({
     member_area_category: documentMemberAreaCategory || null,
     sort_order: documentSortOrder,
     is_active: documentIsActive,
-  })
+  }).select().single()
 
   if (error) return { error }
 
@@ -56,6 +58,23 @@ export async function uploadDocumentRecord({
     file_path: filePath,
     file_name: documentFile.name,
   })
+
+  if (documentShowInMemberArea && documentIsActive && document?.id) {
+    await notifyDomainEvent({
+      type: 'document_published',
+      targetId: document.id,
+      targetType: 'document',
+      variables: {
+        title: documentTitle,
+        created_at: document.created_at,
+      },
+      metadata: {
+        document_id: document.id,
+        member_area: true,
+      },
+      ...notificationContext,
+    })
+  }
 
   resetDocumentForm()
   await loadDocuments()
@@ -69,6 +88,7 @@ export async function updateDocumentMemberAreaSettings({
   settings,
   createAuditLog,
   loadDocuments,
+  notificationContext,
   alertFn = alert,
 }) {
   const { data: updatedDocument, error } = await supabase
@@ -81,6 +101,24 @@ export async function updateDocumentMemberAreaSettings({
   if (error) return { error }
 
   await createAuditLog('update', 'documents', documentId, null, settings)
+
+  if (settings?.show_in_member_area === true && settings?.is_active !== false) {
+    await notifyDomainEvent({
+      type: 'document_published',
+      targetId: documentId,
+      targetType: 'document',
+      variables: {
+        title: updatedDocument?.title || 'Dokument',
+        updated_at: updatedDocument?.updated_at,
+      },
+      metadata: {
+        document_id: documentId,
+        member_area: true,
+      },
+      ...notificationContext,
+    })
+  }
+
   await loadDocuments()
   alertFn('Dokument-Einstellungen wurden gespeichert.')
 

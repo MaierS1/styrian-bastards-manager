@@ -96,6 +96,7 @@ export function EventsPage({
   exportCheckinsPdf,
   getTodayCheckins,
   getMemberName,
+  notificationContext,
 }) {
   const registrationEvent = events.find((event) => event.id === (editingEventId || selectedEventId))
 
@@ -216,6 +217,7 @@ export function EventsPage({
           event={registrationEvent}
           events={events}
           onRegistrationsChanged={loadEvents}
+          notificationContext={notificationContext}
         />
 
         <EventsList

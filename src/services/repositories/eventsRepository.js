@@ -1,4 +1,5 @@
 import { supabase } from '../../lib/supabase'
+import { notifyDomainEvent } from '../notifications/domainNotificationService'
 
 export async function fetchPublicEvents() {
   return supabase.rpc('get_public_events')
@@ -118,6 +119,7 @@ export async function createEventRecord({
   resetEventForm,
   setSelectedEventId,
   setEventName,
+  notificationContext,
   alertFn = alert,
 }) {
   const { data, error } = await supabase
@@ -139,6 +141,18 @@ export async function createEventRecord({
   if (data) {
     setSelectedEventId(data.id)
     setEventName(data.name)
+    await notifyDomainEvent({
+      type: 'event_created',
+      targetId: data.id,
+      targetType: 'event',
+      variables: {
+        name: data.name,
+        date: data.event_date || data.starts_at || '-',
+        created_at: data.created_at,
+      },
+      metadata: { event_id: data.id },
+      ...notificationContext,
+    })
   }
 
   alertFn('Event wurde angelegt.')
@@ -154,6 +168,7 @@ export async function updateEventRecord({
   resetEventForm,
   selectedEventId,
   setEventName,
+  notificationContext,
   alertFn = alert,
 }) {
   const { error } = await supabase
@@ -169,6 +184,45 @@ export async function updateEventRecord({
     setEventName(payload.name)
   }
 
+  const oldEvent = events.find((event) => event.id === editingEventId)
+  const waitlistWasEnabled = oldEvent?.allow_waitlist !== true && payload.allow_waitlist === true
+  const type = oldEvent?.event_date && payload.event_date && oldEvent.event_date !== payload.event_date
+    ? 'event_moved'
+    : 'event_updated'
+
+  await notifyDomainEvent({
+    type,
+    targetId: editingEventId,
+    targetType: 'event',
+    variables: {
+      name: payload.name || oldEvent?.name,
+      date: payload.event_date || oldEvent?.event_date || '-',
+      updated_at: new Date().toISOString(),
+    },
+    metadata: {
+      event_id: editingEventId,
+      previous_event_date: oldEvent?.event_date || null,
+    },
+    ...notificationContext,
+  })
+
+  if (waitlistWasEnabled) {
+    await notifyDomainEvent({
+      type: 'event_waitlist_enabled',
+      targetId: editingEventId,
+      targetType: 'event',
+      variables: {
+        name: payload.name || oldEvent?.name,
+        updated_at: new Date().toISOString(),
+      },
+      metadata: {
+        event_id: editingEventId,
+        allow_waitlist: true,
+      },
+      ...notificationContext,
+    })
+  }
+
   resetEventForm()
   await loadEvents()
   alertFn('Event wurde aktualisiert.')
@@ -181,6 +235,7 @@ export async function updateEventStatusRecord({
   events,
   createAuditLog,
   loadEvents,
+  notificationContext,
 }) {
   const { error } = await supabase
     .from('events')
@@ -190,6 +245,21 @@ export async function updateEventStatusRecord({
   if (error) return { error }
 
   await createAuditLog('status_change', 'events', eventId, events.find((event) => event.id === eventId), { status })
+
+  if (status === 'abgesagt' || status === 'cancelled') {
+    const event = events.find((item) => item.id === eventId)
+    await notifyDomainEvent({
+      type: 'event_cancelled',
+      targetId: eventId,
+      targetType: 'event',
+      variables: {
+        name: event?.name || 'Event',
+        status,
+      },
+      metadata: { event_id: eventId, status },
+      ...notificationContext,
+    })
+  }
 
   await loadEvents()
   return { ok: true }
