@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: invoiceValidation.error }, invoiceValidation.status)
     }
 
-    const payloadResult = buildInvoiceNotificationPayload({
+    const notificationPayloadResult = buildInvoiceNotificationPayload({
       invoice,
       reminder: payload.reminder,
       allowResend: payload.allowResend,
@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
       mimeType: payload.mimeType,
     })
 
-    if (!payloadResult.ok) {
+    if (!notificationPayloadResult.ok) {
       await logInvoiceEmailAttempt({
         adminClient,
         status: 'failed',
@@ -193,14 +193,14 @@ Deno.serve(async (req) => {
         errorCode: 'invalid_invoice_content',
         startedAt,
       })
-      return jsonResponse({ error: payloadResult.error }, payloadResult.status)
+      return jsonResponse({ error: notificationPayloadResult.error }, notificationPayloadResult.status)
     }
 
     const dispatchResult = await dispatchInvoiceNotification({
       notificationDispatchUrl: `${supabaseUrl}/functions/v1/notification-dispatch`,
       internalSecret: internalNotificationSecret,
       actorUserId: user.id,
-      payload: payloadResult.value,
+      payload: notificationPayloadResult.value,
     })
 
     if (
@@ -256,7 +256,7 @@ Deno.serve(async (req) => {
       success: true,
       invoice_id: payload.invoiceId,
       reminder: payload.reminder,
-      notification_type: payloadResult.value.type,
+      notification_type: notificationPayloadResult.value.type,
       notification_job_id: dispatchResult.data?.job_id || null,
       existing: dispatchResult.data?.existing === true,
       recipient_count: dispatchResult.data?.recipient_count || 0,
