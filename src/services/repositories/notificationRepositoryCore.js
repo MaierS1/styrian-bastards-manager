@@ -58,6 +58,8 @@ function normalizeNotificationCursor(cursor) {
 }
 
 export function createNotificationRepository(client, { now = () => new Date().toISOString() } = {}) {
+  let realtimeSubscriptionId = 0
+
   async function fetchInAppNotifications({
     limit = 20,
     cursor = null,
@@ -274,7 +276,13 @@ export function createNotificationRepository(client, { now = () => new Date().to
       return { unsubscribe: () => {} }
     }
 
-    const channel = client.channel(`in_app_notifications:${authUserId || memberId}`)
+    realtimeSubscriptionId += 1
+    const channel = client.channel([
+      'in_app_notifications',
+      authUserId || 'no-auth-user',
+      memberId || 'no-member',
+      realtimeSubscriptionId,
+    ].join(':'))
 
     if (authUserId) {
       channel.on(

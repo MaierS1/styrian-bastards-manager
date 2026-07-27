@@ -39,6 +39,9 @@ class FakeChannel {
   }
 
   on(event, filter, handler) {
+    if (this.subscribed) {
+      throw new Error('cannot add postgres_changes callbacks after subscribe()')
+    }
     this.handlers.push({ event, filter, handler })
     return this
   }
@@ -331,6 +334,46 @@ test('subscribeToInAppNotifications registers auth and member realtime filters',
 
   subscription.unsubscribe()
   assert.equal(client.state.removedChannels.length, 1)
+})
+
+test('subscribeToInAppNotifications creates isolated channels for popup and page subscriptions', () => {
+  const client = createFakeClient()
+  const repository = createNotificationRepository(client)
+
+  const popupSubscription = repository.subscribeToInAppNotifications({
+    authUserId: 'auth-1',
+    memberId: 'member-1',
+    onChange: () => {},
+  })
+  const pageSubscription = repository.subscribeToInAppNotifications({
+    authUserId: 'auth-1',
+    memberId: 'member-1',
+    onChange: () => {},
+  })
+
+  assert.equal(client.state.channels.length, 2)
+  assert.notEqual(client.state.channels[0].name, client.state.channels[1].name)
+  assert.equal(client.state.channels.every((channel) => channel.subscribed), true)
+  assert.deepEqual(client.state.channels.map((channel) => channel.handlers.length), [2, 2])
+
+  popupSubscription.unsubscribe()
+  pageSubscription.unsubscribe()
+
+  assert.deepEqual(client.state.removedChannels, client.state.channels)
+})
+
+test('subscribeToInAppNotifications registers all postgres_changes callbacks before subscribe', () => {
+  const client = createFakeClient()
+  const repository = createNotificationRepository(client)
+
+  repository.subscribeToInAppNotifications({
+    authUserId: 'auth-1',
+    memberId: 'member-1',
+    onChange: () => {},
+  })
+
+  assert.equal(client.state.channels[0].handlers.length, 2)
+  assert.equal(client.state.channels[0].subscribed, true)
 })
 
 function notification(id, createdAt, overrides = {}) {
