@@ -10,6 +10,7 @@ import {
   secondaryButtonStyle,
 } from '../../styles/appStyles'
 import { PushService } from '../../services/communication/PushService'
+import { supabase } from '../../lib/supabase'
 import {
   fetchNotificationPreferences,
   saveNotificationPreferences,
@@ -28,7 +29,7 @@ import {
 } from './notificationPreferenceConfig'
 
 const ACTIVE_CHANNELS = ['in_app', 'email', 'push']
-const PREPARED_CHANNELS = ['push']
+const PREPARED_CHANNELS = []
 
 const channelLabels = {
   in_app: 'In-App',
@@ -41,7 +42,7 @@ function buildPreferenceKey(notificationType, channel) {
 }
 
 function createDefaultPreference(configItem, channel, currentMember) {
-  const isRequired = requiredNotificationTypes.has(configItem.notification_type)
+  const isRequired = channel !== 'push' && requiredNotificationTypes.has(configItem.notification_type)
   const isPrepared = PREPARED_CHANNELS.includes(channel)
 
   return {
@@ -58,7 +59,7 @@ function createDefaultPreference(configItem, channel, currentMember) {
 }
 
 function normalizePreference(configItem, channel, currentMember, existingPreference) {
-  const isRequired = requiredNotificationTypes.has(configItem.notification_type)
+  const isRequired = channel !== 'push' && requiredNotificationTypes.has(configItem.notification_type)
   const isPrepared = PREPARED_CHANNELS.includes(channel)
   const defaultPreference = createDefaultPreference(configItem, channel, currentMember)
 
@@ -227,7 +228,7 @@ export function PortalNotificationPreferences({ currentMember }) {
       ACTIVE_CHANNELS.map((channel) => {
         const key = buildPreferenceKey(configItem.notification_type, channel)
         const currentPreference = preferencesByKey[key] || createDefaultPreference(configItem, channel, currentMember)
-        const isRequired = requiredNotificationTypes.has(configItem.notification_type)
+        const isRequired = channel !== 'push' && requiredNotificationTypes.has(configItem.notification_type)
         const isPrepared = PREPARED_CHANNELS.includes(channel)
         const enabled = isPrepared ? false : (isRequired ? true : Boolean(currentPreference.enabled))
         const changedAt = new Date().toISOString()
@@ -279,7 +280,7 @@ export function PortalNotificationPreferences({ currentMember }) {
       <h3 style={headingStyle}>Benachrichtigungseinstellungen</h3>
 
       <p style={mutedTextStyle}>
-        In-App und E-Mail sind aktiv. Push ist vorbereitet.
+        In-App, E-Mail und Push verwenden dieselben fachlichen Einstellungen. Push wird nur nach Geraeteregistrierung und aktivierter Push-Praeferenz gesendet.
       </p>
 
       {loading && (
@@ -319,8 +320,9 @@ export function PortalNotificationPreferences({ currentMember }) {
                       const preferenceKey = buildPreferenceKey(item.notification_type, channel)
                       const channelPreference = preferencesByKey[preferenceKey] || createDefaultPreference(item, channel, currentMember)
                       const isPrepared = PREPARED_CHANNELS.includes(channel)
-                      const disabled = isPrepared || isRequired || saving
-                      const checked = isPrepared ? false : (isRequired || Boolean(channelPreference.enabled))
+                      const isRequiredForChannel = channel !== 'push' && isRequired
+                      const disabled = isPrepared || isRequiredForChannel || saving
+                      const checked = isPrepared ? false : (isRequiredForChannel || Boolean(channelPreference.enabled))
 
                       return (
                         <label key={channel} style={isPrepared ? styles.preparedChannel : styles.channelToggle}>
@@ -334,7 +336,7 @@ export function PortalNotificationPreferences({ currentMember }) {
                         <span>
                           <strong>{channelLabels[channel]}</strong>
                           <small style={styles.channelHint}>
-                            {isPrepared ? 'noch nicht verfuegbar' : isRequired ? 'immer aktiv' : 'aktiv'}
+                            {isPrepared ? 'noch nicht verfuegbar' : isRequiredForChannel ? 'immer aktiv' : 'aktiv'}
                           </small>
                         </span>
                         </label>
@@ -525,6 +527,49 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
     setActionLoading(false)
   }, [loadPushState])
 
+  const handleSendTestPush = useCallback(async () => {
+    if (!currentMember?.auth_user_id) {
+      setError('Kein Login fuer dieses Mitglied verknuepft.')
+      return
+    }
+
+    setActionLoading(true)
+    setError('')
+    setMessage('')
+
+    const { data, error: dispatchError } = await supabase.functions.invoke('notification-dispatch', {
+      body: {
+      type: 'staging_push_test',
+      category: 'system',
+      title: 'Staging Push-Test',
+      message: 'Der Push-Kanal der Notification Engine funktioniert.',
+      channels: ['push'],
+      recipient_user_id: currentMember.auth_user_id,
+      source: {
+        module: 'communication',
+        entity_type: 'staging_push_test',
+        entity_id: currentMember.auth_user_id,
+      },
+      url: '/notifications',
+      priority: 'normal',
+      idempotency_key: `staging-push-test:${currentMember.auth_user_id}:${Date.now()}`,
+      metadata: {
+        staging_test: true,
+      },
+      },
+    })
+
+    if (dispatchError || data?.error) {
+      setError(dispatchError?.message || data?.error || 'Test-Push konnte nicht gesendet werden.')
+      setActionLoading(false)
+      return
+    }
+
+    setMessage('Staging-Test-Push wurde an dieses Benutzerkonto gesendet.')
+    await loadPushState()
+    setActionLoading(false)
+  }, [currentMember, loadPushState])
+
   const canActivate = supportStatus?.supported
     && supportStatus?.vapidPublicKey
     && permission !== 'denied'
@@ -539,7 +584,7 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
         <div>
           <h4 style={styles.categoryTitle}>Push auf diesem Geraet</h4>
           <p style={styles.preferenceDescription}>
-            Technische Geraete-Subscription. Der fachliche Push-Versand wird erst nach dem Versand-Sprint aktiviert.
+            Technische Geraete-Subscription. Fachliche Push-Meldungen werden nur gesendet, wenn die jeweilige Push-Praeferenz aktiv ist.
           </p>
         </div>
         <span style={{
@@ -565,7 +610,7 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
       </div>
 
       <p style={styles.supportReason}>
-        {getSupportReasonText(supportStatus?.reason)} Fachliche Push-Kategorien bleiben bis zum Versand-Sprint deaktiviert.
+        {getSupportReasonText(supportStatus?.reason)} Push erzeugt keinen automatischen Permission-Prompt.
       </p>
 
       {loading && (
@@ -618,6 +663,19 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
           }}
         >
           Geraete neu laden
+        </button>
+
+        <button
+          type="button"
+          onClick={handleSendTestPush}
+          disabled={currentDeviceStatus !== 'aktiv' || actionLoading}
+          style={{
+            ...secondaryButtonStyle,
+            opacity: currentDeviceStatus === 'aktiv' && !actionLoading ? 1 : 0.65,
+            cursor: currentDeviceStatus === 'aktiv' && !actionLoading ? 'pointer' : 'not-allowed',
+          }}
+        >
+          Staging-Test-Push senden
         </button>
       </div>
 

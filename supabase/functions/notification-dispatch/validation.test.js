@@ -50,8 +50,9 @@ test('accepts email and combined in-app email dispatch channels', () => {
   assert.deepEqual(validateDispatchPayload(createPayload({ channels: ['in_app', 'email'] })).value.channels, ['in_app', 'email'])
 })
 
-test('rejects unsupported push or unknown channels', () => {
-  assert.equal(validateDispatchPayload(createPayload({ channels: ['push'] })).status, 422)
+test('accepts push and rejects unknown channels', () => {
+  assert.deepEqual(validateDispatchPayload(createPayload({ channels: ['push'] })).value.channels, ['push'])
+  assert.deepEqual(validateDispatchPayload(createPayload({ channels: ['in_app', 'email', 'push'] })).value.channels, ['in_app', 'email', 'push'])
   assert.equal(validateDispatchPayload(createPayload({ channels: ['sms'] })).status, 422)
 })
 

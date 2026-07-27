@@ -27,3 +27,15 @@ test('push subscription hardening migration adds failure count and deterministic
   assert.match(hardeningMigration, /push_subscriptions_failure_count_check/)
   assert.match(hardeningMigration, /push_subscriptions_endpoint_hash_idx/)
 })
+
+test('push delivery migration isolates idempotency per subscription and enables template push defaults', () => {
+  const migration = readFileSync(
+    new URL('../../../supabase/migrations/20260728110000_enable_push_notification_delivery.sql', import.meta.url),
+    'utf8'
+  )
+
+  assert.match(migration, /notification_logs_sent_job_push_subscription_uidx/i)
+  assert.match(migration, /subscription_id/i)
+  assert.match(migration, /channel = 'push'/i)
+  assert.match(migration, /default_channels \|\| array\['push'\]::text\[\]/i)
+})
