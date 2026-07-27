@@ -30,3 +30,4 @@ backups/
 
 # Lokale Sicherungen
 *.backup
+.env*
