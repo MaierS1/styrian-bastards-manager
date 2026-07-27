@@ -1,8 +1,8 @@
 import { hasPermission } from '../../utils/permissions.js'
 
-export const DEFAULT_NOTIFICATION_CHANNELS = ['in_app', 'email']
-export const AVAILABLE_NOTIFICATION_CHANNELS = ['in_app', 'email']
-export const PREPARED_NOTIFICATION_CHANNELS = ['push']
+export const DEFAULT_NOTIFICATION_CHANNELS = ['in_app', 'email', 'push']
+export const AVAILABLE_NOTIFICATION_CHANNELS = ['in_app', 'email', 'push']
+export const PREPARED_NOTIFICATION_CHANNELS = []
 
 export const NOTIFICATION_CATEGORIES = {
   event: 'event',
@@ -551,9 +551,14 @@ export function getMemberDisplayName(member) {
 }
 
 function template(config) {
+  const defaultChannels = uniqueTruthy([
+    ...(config.defaultChannels || DEFAULT_NOTIFICATION_CHANNELS),
+    'push',
+  ])
+
   return {
     ...config,
-    defaultChannels: uniqueTruthy(config.defaultChannels || DEFAULT_NOTIFICATION_CHANNELS),
+    defaultChannels,
   }
 }
 

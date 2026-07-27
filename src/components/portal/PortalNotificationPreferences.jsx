@@ -10,6 +10,7 @@ import {
   secondaryButtonStyle,
 } from '../../styles/appStyles'
 import { PushService } from '../../services/communication/PushService'
+import { supabase } from '../../lib/supabase'
 import {
   fetchNotificationPreferences,
   saveNotificationPreferences,
@@ -19,6 +20,7 @@ import {
   fetchOwnPushSubscriptions,
   markPushSubscriptionSeen,
   savePushSubscription,
+  updateDeviceLabel,
 } from '../../services/repositories/pushSubscriptionRepository'
 import {
   notificationCategoryLabels,
@@ -27,7 +29,7 @@ import {
 } from './notificationPreferenceConfig'
 
 const ACTIVE_CHANNELS = ['in_app', 'email', 'push']
-const PREPARED_CHANNELS = ['push']
+const PREPARED_CHANNELS = []
 
 const channelLabels = {
   in_app: 'In-App',
@@ -40,7 +42,7 @@ function buildPreferenceKey(notificationType, channel) {
 }
 
 function createDefaultPreference(configItem, channel, currentMember) {
-  const isRequired = requiredNotificationTypes.has(configItem.notification_type)
+  const isRequired = channel !== 'push' && requiredNotificationTypes.has(configItem.notification_type)
   const isPrepared = PREPARED_CHANNELS.includes(channel)
 
   return {
@@ -57,7 +59,7 @@ function createDefaultPreference(configItem, channel, currentMember) {
 }
 
 function normalizePreference(configItem, channel, currentMember, existingPreference) {
-  const isRequired = requiredNotificationTypes.has(configItem.notification_type)
+  const isRequired = channel !== 'push' && requiredNotificationTypes.has(configItem.notification_type)
   const isPrepared = PREPARED_CHANNELS.includes(channel)
   const defaultPreference = createDefaultPreference(configItem, channel, currentMember)
 
@@ -226,7 +228,7 @@ export function PortalNotificationPreferences({ currentMember }) {
       ACTIVE_CHANNELS.map((channel) => {
         const key = buildPreferenceKey(configItem.notification_type, channel)
         const currentPreference = preferencesByKey[key] || createDefaultPreference(configItem, channel, currentMember)
-        const isRequired = requiredNotificationTypes.has(configItem.notification_type)
+        const isRequired = channel !== 'push' && requiredNotificationTypes.has(configItem.notification_type)
         const isPrepared = PREPARED_CHANNELS.includes(channel)
         const enabled = isPrepared ? false : (isRequired ? true : Boolean(currentPreference.enabled))
         const changedAt = new Date().toISOString()
@@ -278,7 +280,7 @@ export function PortalNotificationPreferences({ currentMember }) {
       <h3 style={headingStyle}>Benachrichtigungseinstellungen</h3>
 
       <p style={mutedTextStyle}>
-        In-App und E-Mail sind aktiv. Push ist vorbereitet.
+        In-App, E-Mail und Push verwenden dieselben fachlichen Einstellungen. Push wird nur nach Geraeteregistrierung und aktivierter Push-Praeferenz gesendet.
       </p>
 
       {loading && (
@@ -318,8 +320,9 @@ export function PortalNotificationPreferences({ currentMember }) {
                       const preferenceKey = buildPreferenceKey(item.notification_type, channel)
                       const channelPreference = preferencesByKey[preferenceKey] || createDefaultPreference(item, channel, currentMember)
                       const isPrepared = PREPARED_CHANNELS.includes(channel)
-                      const disabled = isPrepared || isRequired || saving
-                      const checked = isPrepared ? false : (isRequired || Boolean(channelPreference.enabled))
+                      const isRequiredForChannel = channel !== 'push' && isRequired
+                      const disabled = isPrepared || isRequiredForChannel || saving
+                      const checked = isPrepared ? false : (isRequiredForChannel || Boolean(channelPreference.enabled))
 
                       return (
                         <label key={channel} style={isPrepared ? styles.preparedChannel : styles.channelToggle}>
@@ -333,7 +336,7 @@ export function PortalNotificationPreferences({ currentMember }) {
                         <span>
                           <strong>{channelLabels[channel]}</strong>
                           <small style={styles.channelHint}>
-                            {isPrepared ? 'noch nicht verfuegbar' : isRequired ? 'immer aktiv' : 'aktiv'}
+                            {isPrepared ? 'noch nicht verfuegbar' : isRequiredForChannel ? 'immer aktiv' : 'aktiv'}
                           </small>
                         </span>
                         </label>
@@ -405,34 +408,23 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
     setLoading(true)
     setError('')
 
-    const nextSupportStatus = PushService.getBrowserSupportStatus()
-    const nextPermission = PushService.getPermission()
-    const nextBrowserSubscription = await PushService.getCurrentSubscription()
-
-    const subscriptionsResult = await fetchOwnPushSubscriptions({
-      authUserId: currentMember.auth_user_id,
-      memberId: currentMember.id,
+    const reconcileResult = await PushService.reconcileSubscription({
+      currentMember,
+      fetchSubscriptions: fetchOwnPushSubscriptions,
+      saveSubscription: savePushSubscription,
+      markSeen: markPushSubscriptionSeen,
     })
 
-    if (subscriptionsResult.error) {
-      setError(subscriptionsResult.error.message)
+    if (reconcileResult.error) {
+      setError(reconcileResult.error.message || 'Push-Status konnte nicht geladen werden.')
       setLoading(false)
       return
     }
 
-    const rows = subscriptionsResult.data || []
-    const matchingSubscription = nextBrowserSubscription
-      ? rows.find((subscription) => subscription.endpoint === nextBrowserSubscription.endpoint)
-      : null
-
-    if (matchingSubscription?.id) {
-      await markPushSubscriptionSeen({ id: matchingSubscription.id })
-    }
-
-    setSupportStatus(nextSupportStatus)
-    setPermission(nextPermission)
-    setBrowserSubscription(nextBrowserSubscription)
-    setSubscriptions(rows)
+    setSupportStatus(reconcileResult.supportStatus)
+    setPermission(reconcileResult.permission)
+    setBrowserSubscription(reconcileResult.browserSubscription)
+    setSubscriptions(reconcileResult.subscriptions)
     setLoading(false)
   }, [currentMember])
 
@@ -473,24 +465,13 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
       return
     }
 
-    const subscriptionResult = await PushService.subscribe()
-
-    if (subscriptionResult.error || !subscriptionResult.subscription) {
-      setError(getSupportReasonText(subscriptionResult.error) || 'Push konnte nicht aktiviert werden.')
-      setActionLoading(false)
-      return
-    }
-
-    const normalizedSubscription = PushService.normalizeSubscription(subscriptionResult.subscription)
-
-    const saveResult = await savePushSubscription({
-      ...normalizedSubscription,
-      auth_user_id: currentMember.auth_user_id,
-      member_id: currentMember.id || null,
+    const subscriptionResult = await PushService.subscribe({
+      currentMember,
+      saveSubscription: savePushSubscription,
     })
 
-    if (saveResult.error) {
-      setError(saveResult.error.message)
+    if (subscriptionResult.error || !subscriptionResult.subscription) {
+      setError(getSupportReasonText(subscriptionResult.error) || subscriptionResult.saveError?.message || 'Push konnte nicht aktiviert werden.')
       setActionLoading(false)
       return
     }
@@ -505,16 +486,14 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
     setError('')
     setMessage('')
 
-    const currentSubscription = await PushService.getCurrentSubscription()
-    await PushService.unsubscribe()
-
-    const deactivateResult = await deactivatePushSubscription({
-      id: currentSavedSubscription?.id,
-      endpoint: currentSavedSubscription?.endpoint || currentSubscription?.endpoint,
+    const unsubscribeResult = await PushService.unsubscribe({
+      subscriptionId: currentSavedSubscription?.id,
+      endpoint: currentSavedSubscription?.endpoint,
+      deactivateSubscription: deactivatePushSubscription,
     })
 
-    if (deactivateResult.error) {
-      setError(deactivateResult.error.message)
+    if (unsubscribeResult.deactivateError) {
+      setError(unsubscribeResult.deactivateError.message)
       setActionLoading(false)
       return
     }
@@ -523,6 +502,74 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
     await loadPushState()
     setActionLoading(false)
   }, [currentSavedSubscription, loadPushState])
+
+  const handleRenameDevice = useCallback(async (subscription) => {
+    const nextLabel = window.prompt('Geraetename', subscription.device_label || 'Browser')
+    if (nextLabel === null) return
+
+    setActionLoading(true)
+    setError('')
+    setMessage('')
+
+    const result = await updateDeviceLabel({
+      id: subscription.id,
+      deviceLabel: nextLabel,
+    })
+
+    if (result.error) {
+      setError(result.error.message)
+      setActionLoading(false)
+      return
+    }
+
+    setMessage('Geraetename gespeichert.')
+    await loadPushState()
+    setActionLoading(false)
+  }, [loadPushState])
+
+  const handleSendTestPush = useCallback(async () => {
+    if (!currentMember?.auth_user_id) {
+      setError('Kein Login fuer dieses Mitglied verknuepft.')
+      return
+    }
+
+    setActionLoading(true)
+    setError('')
+    setMessage('')
+
+    const { data, error: dispatchError } = await supabase.functions.invoke('notification-dispatch', {
+      body: {
+      type: 'staging_push_test',
+      category: 'system',
+      title: 'Staging Push-Test',
+      message: 'Der Push-Kanal der Notification Engine funktioniert.',
+      channels: ['push'],
+      recipient_user_id: currentMember.auth_user_id,
+      source: {
+        module: 'communication',
+        entity_type: 'staging_push_test',
+        entity_id: currentMember.auth_user_id,
+      },
+      url: '/notifications',
+      priority: 'normal',
+      idempotency_key: `staging-push-test:${currentMember.auth_user_id}:${Date.now()}`,
+      metadata: {
+        staging_test: true,
+      },
+      },
+    })
+
+    if (dispatchError || data?.error) {
+      const safeMessage = await getSafeFunctionErrorMessage(dispatchError, data)
+      setError(safeMessage || 'Test-Push konnte nicht gesendet werden.')
+      setActionLoading(false)
+      return
+    }
+
+    setMessage('Staging-Test-Push wurde an dieses Benutzerkonto gesendet.')
+    await loadPushState()
+    setActionLoading(false)
+  }, [currentMember, loadPushState])
 
   const canActivate = supportStatus?.supported
     && supportStatus?.vapidPublicKey
@@ -538,7 +585,7 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
         <div>
           <h4 style={styles.categoryTitle}>Push auf diesem Geraet</h4>
           <p style={styles.preferenceDescription}>
-            Technische Geraete-Subscription. Fachliche Push-Kategorien bleiben vorbereitet.
+            Technische Geraete-Subscription. Fachliche Push-Meldungen werden nur gesendet, wenn die jeweilige Push-Praeferenz aktiv ist.
           </p>
         </div>
         <span style={{
@@ -564,7 +611,7 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
       </div>
 
       <p style={styles.supportReason}>
-        {getSupportReasonText(supportStatus?.reason)}
+        {getSupportReasonText(supportStatus?.reason)} Push erzeugt keinen automatischen Permission-Prompt.
       </p>
 
       {loading && (
@@ -618,6 +665,19 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
         >
           Geraete neu laden
         </button>
+
+        <button
+          type="button"
+          onClick={handleSendTestPush}
+          disabled={currentDeviceStatus !== 'aktiv' || actionLoading}
+          style={{
+            ...secondaryButtonStyle,
+            opacity: currentDeviceStatus === 'aktiv' && !actionLoading ? 1 : 0.65,
+            cursor: currentDeviceStatus === 'aktiv' && !actionLoading ? 'pointer' : 'not-allowed',
+          }}
+        >
+          Staging-Test-Push senden
+        </button>
       </div>
 
       <div style={styles.deviceList}>
@@ -640,9 +700,18 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
               <div style={styles.deviceMeta}>
                 <span>{subscription.platform || 'Plattform unbekannt'}</span>
                 <span>zuletzt gesehen: {formatDateTime(subscription.last_seen_at || subscription.updated_at)}</span>
+                <span>Fehler: {Number(subscription.failure_count || 0)}</span>
                 <span style={subscription.is_active ? styles.activeText : styles.inactiveText}>
                   {subscription.is_active ? 'aktiv' : 'inaktiv'}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => handleRenameDevice(subscription)}
+                  disabled={actionLoading}
+                  style={styles.inlineButton}
+                >
+                  Umbenennen
+                </button>
               </div>
             </article>
           )
@@ -650,6 +719,28 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
       </div>
     </section>
   )
+}
+
+async function getSafeFunctionErrorMessage(error, data) {
+  if (data?.error) return data.error
+
+  const status = error?.context?.status || error?.status || null
+  const response = error?.context
+  let responseMessage = ''
+
+  if (response?.json) {
+    try {
+      const body = await response.json()
+      responseMessage = body?.error || body?.message || ''
+    } catch {
+      responseMessage = ''
+    }
+  }
+
+  const detail = responseMessage || error?.message || ''
+  if (status && detail) return `Test-Push fehlgeschlagen (${status}): ${detail}`
+  if (status) return `Test-Push fehlgeschlagen (${status}).`
+  return detail
 }
 
 function StatusItem({ label, value }) {
@@ -914,5 +1005,12 @@ const styles = {
   inactiveText: {
     color: colors.muted,
     fontWeight: 900,
+  },
+  inlineButton: {
+    ...secondaryButtonStyle,
+    width: 'fit-content',
+    minHeight: 32,
+    padding: '6px 10px',
+    fontSize: 13,
   },
 }

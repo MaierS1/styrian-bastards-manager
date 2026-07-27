@@ -7,7 +7,7 @@ export const MAX_METADATA_BYTES = 8192
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 180
 export const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024
 
-export const SUPPORTED_CHANNELS = ['in_app', 'email']
+export const SUPPORTED_CHANNELS = ['in_app', 'email', 'push']
 export const KNOWN_CHANNELS = ['in_app', 'email', 'push']
 export const ALLOWED_PRIORITIES = ['low', 'normal', 'high', 'critical']
 export const ALLOWED_CATEGORIES = [
@@ -87,7 +87,7 @@ export function validateDispatchPayload(body) {
   if (unknownChannels.length > 0) return invalid(422, 'Unbekannter Benachrichtigungskanal.')
 
   const unsupportedChannels = channels.filter((channel) => !SUPPORTED_CHANNELS.includes(channel))
-  if (unsupportedChannels.length > 0) return invalid(422, 'Dieser Kanal ist im V1-MVP noch nicht unterstuetzt.')
+  if (unsupportedChannels.length > 0) return invalid(422, 'Dieser Kanal ist aktuell nicht unterstuetzt.')
 
   if (new Set(channels).size !== channels.length) return invalid(400, 'channels darf keine Duplikate enthalten.')
 

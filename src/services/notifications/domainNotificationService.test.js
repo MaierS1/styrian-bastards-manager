@@ -97,6 +97,11 @@ test('intersects requested channels with template defaults and technically avail
     requestedChannels: ['email'],
     defaultChannels: ['in_app'],
   }), [])
+
+  assert.deepEqual(resolveEffectiveTemplateChannels({
+    requestedChannels: ['push'],
+    defaultChannels: ['in_app', 'push'],
+  }), ['push'])
 })
 
 test('documents fachlich reviewed default channel policy for V1 templates', () => {
@@ -112,13 +117,13 @@ test('documents fachlich reviewed default channel policy for V1 templates', () =
   ]
 
   for (const type of inAppOnly) {
-    assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES[type].defaultChannels, ['in_app'], type)
+    assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES[type].defaultChannels, ['in_app', 'push'], type)
   }
 
-  assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES.event_cancelled.defaultChannels, ['in_app', 'email'])
-  assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES.invoice_overdue.defaultChannels, ['in_app', 'email'])
-  assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES.membership_fee_due.defaultChannels, ['in_app', 'email'])
-  assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES.news_published.defaultChannels, ['in_app', 'email'])
+  assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES.event_cancelled.defaultChannels, ['in_app', 'email', 'push'])
+  assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES.invoice_overdue.defaultChannels, ['in_app', 'email', 'push'])
+  assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES.membership_fee_due.defaultChannels, ['in_app', 'email', 'push'])
+  assert.deepEqual(DOMAIN_NOTIFICATION_TEMPLATES.news_published.defaultChannels, ['in_app', 'email', 'push'])
 })
 
 test('contains central templates for all requested notification types', () => {

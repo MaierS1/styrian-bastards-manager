@@ -1,3 +1,4 @@
+import * as webpush from 'jsr:@negrel/webpush@0.5.0'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import {
   buildStableIdempotencyKey,
@@ -22,6 +23,11 @@ import {
   sendEmailWithResend,
   shouldDeliverEmail,
 } from './emailAdapter.js'
+import {
+  buildPushPayload,
+  sendWebPushNotification,
+  shouldDeliverPush,
+} from './pushAdapter.js'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -69,6 +75,12 @@ Deno.serve(async (req) => {
       resendApiKey: Deno.env.get('RESEND_API_KEY') || '',
       fromEmail: Deno.env.get('FROM_EMAIL') || 'Styrian Bastards <mail@styrian-bastards.at>',
       replyToEmail: Deno.env.get('REPLY_TO_EMAIL') || '',
+      appPublicUrl: Deno.env.get('APP_PUBLIC_URL') || '',
+    }
+    const pushConfig = {
+      vapidPublicKey: Deno.env.get('VAPID_PUBLIC_KEY') || '',
+      vapidPrivateKey: Deno.env.get('VAPID_PRIVATE_KEY') || '',
+      vapidSubject: Deno.env.get('VAPID_SUBJECT') || '',
       appPublicUrl: Deno.env.get('APP_PUBLIC_URL') || '',
     }
 
@@ -214,6 +226,7 @@ Deno.serve(async (req) => {
       payload,
       recipients,
       emailConfig,
+      pushConfig,
     })
 
     const jobStatus = calculateJobStatus({
@@ -467,7 +480,7 @@ async function loadAuthEmails(adminClient: SupabaseClientLike, authUserIds: stri
   return result
 }
 
-async function deliverNotifications(adminClient: SupabaseClientLike, { jobId, payload, recipients, emailConfig }: {
+async function deliverNotifications(adminClient: SupabaseClientLike, { jobId, payload, recipients, emailConfig, pushConfig }: {
   jobId: string
   payload: any
   recipients: Recipient[]
@@ -477,9 +490,15 @@ async function deliverNotifications(adminClient: SupabaseClientLike, { jobId, pa
     replyToEmail: string
     appPublicUrl: string
   }
+  pushConfig: {
+    vapidPublicKey: string
+    vapidPrivateKey: string
+    vapidSubject: string
+    appPublicUrl: string
+  }
 }) {
   const totals = {
-    recipientCount: recipients.length * payload.channels.length,
+    recipientCount: 0,
     deliveredCount: 0,
     skippedCount: 0,
     failedCount: 0,
@@ -487,6 +506,7 @@ async function deliverNotifications(adminClient: SupabaseClientLike, { jobId, pa
 
   if (payload.channels.includes('in_app')) {
     const result = await deliverInApp(adminClient, { jobId, payload, recipients })
+    totals.recipientCount += result.recipientCount
     totals.deliveredCount += result.deliveredCount
     totals.skippedCount += result.skippedCount
     totals.failedCount += result.failedCount
@@ -494,12 +514,130 @@ async function deliverNotifications(adminClient: SupabaseClientLike, { jobId, pa
 
   if (payload.channels.includes('email')) {
     const result = await deliverEmail(adminClient, { jobId, payload, recipients, emailConfig })
+    totals.recipientCount += result.recipientCount
+    totals.deliveredCount += result.deliveredCount
+    totals.skippedCount += result.skippedCount
+    totals.failedCount += result.failedCount
+  }
+
+  if (payload.channels.includes('push')) {
+    const result = await deliverPush(adminClient, { jobId, payload, recipients, pushConfig })
+    totals.recipientCount += result.recipientCount
     totals.deliveredCount += result.deliveredCount
     totals.skippedCount += result.skippedCount
     totals.failedCount += result.failedCount
   }
 
   return totals
+}
+
+async function deliverPush(adminClient: SupabaseClientLike, { jobId, payload, recipients, pushConfig }: {
+  jobId: string
+  payload: any
+  recipients: Recipient[]
+  pushConfig: {
+    vapidPublicKey: string
+    vapidPrivateKey: string
+    vapidSubject: string
+    appPublicUrl: string
+  }
+}) {
+  let deliveredCount = 0
+  let skippedCount = 0
+  let failedCount = 0
+  let recipientCount = 0
+  const preferences = await loadPreferences(adminClient, payload, recipients, 'push')
+  const subscriptionsByRecipient = await loadActivePushSubscriptions(adminClient, recipients)
+
+  for (const recipient of recipients) {
+    const subscriptions = getSubscriptionsForRecipient(subscriptionsByRecipient, recipient)
+    const preference = getPreferenceForRecipient(preferences, recipient, payload)
+    const decision = shouldDeliverPush({ payload, recipient, preference, subscriptions })
+
+    if (!decision.deliver) {
+      recipientCount += 1
+      skippedCount += 1
+      await writeLog(adminClient, {
+        jobId,
+        channel: 'push',
+        recipient,
+        status: 'skipped',
+        errorCode: decision.errorCode,
+      })
+      continue
+    }
+
+    for (const subscription of subscriptions) {
+      recipientCount += 1
+      const existingDelivered = await hasPushSentLog(adminClient, jobId, subscription.id)
+      if (existingDelivered) {
+        skippedCount += 1
+        await writeLog(adminClient, {
+          jobId,
+          channel: 'push',
+          recipient,
+          subscription,
+          status: 'skipped',
+          errorCode: 'duplicate_delivery',
+        })
+        continue
+      }
+
+      const pushPayload = buildPushPayload({
+        payload,
+        appPublicUrl: pushConfig.appPublicUrl,
+        notificationId: `${jobId}:${subscription.id}`,
+      })
+      const result = await sendWebPushNotification({
+        webpush,
+        subscription,
+        payload: pushPayload,
+        vapidPublicKey: pushConfig.vapidPublicKey,
+        vapidPrivateKey: pushConfig.vapidPrivateKey,
+        vapidSubject: pushConfig.vapidSubject,
+      })
+
+      if (result.ok) {
+        deliveredCount += 1
+        await updatePushSubscriptionSuccess(adminClient, subscription.id)
+        await writeLog(adminClient, {
+          jobId,
+          channel: 'push',
+          recipient,
+          subscription,
+          status: 'sent',
+          httpStatus: result.status || 201,
+          providerResponse: result.providerResponse || null,
+        })
+        continue
+      }
+
+      failedCount += 1
+      await updatePushSubscriptionFailure(adminClient, subscription.id, {
+        errorCode: result.errorCode,
+        errorMessage: result.errorMessage,
+        deactivate: result.deactivateSubscription === true && result.globalConfigurationError !== true,
+      })
+      await writeLog(adminClient, {
+        jobId,
+        channel: 'push',
+        recipient,
+        subscription,
+        status: 'failed',
+        errorCode: result.errorCode,
+        errorMessage: result.errorMessage,
+        httpStatus: result.status || null,
+        providerResponse: result.providerResponse || null,
+      })
+    }
+  }
+
+  return {
+    recipientCount,
+    deliveredCount,
+    skippedCount,
+    failedCount,
+  }
 }
 
 async function deliverInApp(adminClient: SupabaseClientLike, { jobId, payload, recipients }: { jobId: string; payload: any; recipients: Recipient[] }) {
@@ -712,7 +850,145 @@ async function deliverEmail(adminClient: SupabaseClientLike, { jobId, payload, r
   }
 }
 
-async function loadPreferences(adminClient: SupabaseClientLike, payload: any, recipients: Recipient[], channel: 'in_app' | 'email') {
+async function loadActivePushSubscriptions(adminClient: SupabaseClientLike, recipients: Recipient[]) {
+  const authUserIds = [...new Set(recipients.map((recipient) => recipient.auth_user_id).filter(Boolean))]
+  const memberIds = [...new Set(recipients.map((recipient) => recipient.member_id).filter(Boolean))]
+
+  if (authUserIds.length === 0 && memberIds.length === 0) return new Map<string, any[]>()
+
+  let query = adminClient
+    .from('push_subscriptions')
+    .select('id, auth_user_id, member_id, endpoint, endpoint_hash, p256dh, auth, failure_count')
+    .eq('is_active', true)
+    .eq('permission', 'granted')
+    .not('endpoint', 'is', null)
+    .not('p256dh', 'is', null)
+    .not('auth', 'is', null)
+
+  const filters = []
+  if (authUserIds.length > 0) filters.push(`auth_user_id.in.(${authUserIds.join(',')})`)
+  if (memberIds.length > 0) filters.push(`member_id.in.(${memberIds.join(',')})`)
+  query = query.or(filters.join(','))
+
+  const { data, error } = await query
+  if (error) {
+    console.error('notification-dispatch push subscription lookup failed', { error: error.message })
+    return new Map<string, any[]>()
+  }
+
+  const result = new Map<string, any[]>()
+  for (const subscription of data || []) {
+    if (!subscription.endpoint || !subscription.p256dh || !subscription.auth) continue
+    if (subscription.auth_user_id) appendMapValue(result, `auth:${subscription.auth_user_id}`, subscription)
+    if (subscription.member_id) appendMapValue(result, `member:${subscription.member_id}`, subscription)
+  }
+
+  return result
+}
+
+function getSubscriptionsForRecipient(subscriptionsByRecipient: Map<string, any[]>, recipient: Recipient) {
+  const subscriptions = [
+    ...(recipient.auth_user_id ? subscriptionsByRecipient.get(`auth:${recipient.auth_user_id}`) || [] : []),
+    ...(recipient.member_id ? subscriptionsByRecipient.get(`member:${recipient.member_id}`) || [] : []),
+  ]
+  const seen = new Set<string>()
+  return subscriptions.filter((subscription) => {
+    if (!subscription.id || seen.has(subscription.id)) return false
+    seen.add(subscription.id)
+    return true
+  })
+}
+
+function appendMapValue(map: Map<string, any[]>, key: string, value: any) {
+  const existing = map.get(key) || []
+  existing.push(value)
+  map.set(key, existing)
+}
+
+async function updatePushSubscriptionSuccess(adminClient: SupabaseClientLike, subscriptionId: string) {
+  const now = new Date().toISOString()
+  const { error } = await adminClient
+    .from('push_subscriptions')
+    .update({
+      last_success_at: now,
+      last_seen_at: now,
+      failure_count: 0,
+      last_error: null,
+      last_error_at: null,
+      is_active: true,
+      permission: 'granted',
+    })
+    .eq('id', subscriptionId)
+
+  if (error) {
+    console.error('notification-dispatch push subscription success update failed', {
+      subscriptionId,
+      error: error.message,
+    })
+  }
+}
+
+async function updatePushSubscriptionFailure(adminClient: SupabaseClientLike, subscriptionId: string, {
+  errorCode,
+  errorMessage,
+  deactivate = false,
+}: {
+  errorCode?: string | null
+  errorMessage?: string | null
+  deactivate?: boolean
+}) {
+  const now = new Date().toISOString()
+  const payload: Record<string, unknown> = {
+    last_error: sanitizeLogErrorMessage(errorMessage || errorCode || 'push_send_failed'),
+    last_error_at: now,
+  }
+
+  if (deactivate) {
+    payload.is_active = false
+    payload.permission = 'denied'
+    payload.opted_out_at = now
+  }
+
+  const { error } = await adminClient
+    .from('push_subscriptions')
+    .update(payload)
+    .eq('id', subscriptionId)
+
+  if (error) {
+    console.error('notification-dispatch push subscription failure update failed', {
+      subscriptionId,
+      error: error.message,
+    })
+  }
+
+  const { data: currentRow, error: readError } = await adminClient
+    .from('push_subscriptions')
+    .select('failure_count')
+    .eq('id', subscriptionId)
+    .maybeSingle()
+
+  if (readError) {
+    console.error('notification-dispatch push subscription failure count read failed', {
+      subscriptionId,
+      error: readError.message,
+    })
+    return
+  }
+
+  const { error: countError } = await adminClient
+    .from('push_subscriptions')
+    .update({ failure_count: Number(currentRow?.failure_count || 0) + 1 })
+    .eq('id', subscriptionId)
+
+  if (countError) {
+    console.error('notification-dispatch push subscription failure count update failed', {
+      subscriptionId,
+      error: countError.message,
+    })
+  }
+}
+
+async function loadPreferences(adminClient: SupabaseClientLike, payload: any, recipients: Recipient[], channel: 'in_app' | 'email' | 'push') {
   const authUserIds = recipients.map((recipient) => recipient.auth_user_id).filter(Boolean)
   const memberIds = recipients.map((recipient) => recipient.member_id).filter(Boolean)
 
@@ -746,11 +1022,12 @@ function getPreferenceForRecipient(preferences: any[], recipient: Recipient, pay
     || null
 }
 
-async function writeLog(adminClient: SupabaseClientLike, { jobId, channel, recipient, status, errorCode, errorMessage, emailMasked, httpStatus, providerResponse }: {
+async function writeLog(adminClient: SupabaseClientLike, { jobId, channel, recipient, subscription, status, errorCode, errorMessage, emailMasked, httpStatus, providerResponse }: {
   jobId: string
-  channel: 'in_app' | 'email'
+  channel: 'in_app' | 'email' | 'push'
   recipient: Recipient
-  status: 'delivered' | 'skipped' | 'failed'
+  subscription?: any
+  status: 'delivered' | 'sent' | 'skipped' | 'failed'
   errorCode?: string | null
   errorMessage?: string | null
   emailMasked?: string | null
@@ -764,7 +1041,9 @@ async function writeLog(adminClient: SupabaseClientLike, { jobId, channel, recip
     auth_user_id: recipient.invoice_id ? null : recipient.auth_user_id,
     event_registration_id: recipient.event_registration_id || null,
     invoice_id: recipient.invoice_id || null,
+    subscription_id: subscription?.id || null,
     email: emailMasked || null,
+    endpoint_hash: subscription?.endpoint_hash || null,
     status,
     http_status: httpStatus || null,
     error_code: errorCode || null,
@@ -772,7 +1051,7 @@ async function writeLog(adminClient: SupabaseClientLike, { jobId, channel, recip
     provider_response: providerResponse || null,
     attempt_count: 1,
     last_attempt_at: new Date().toISOString(),
-    sent_at: status === 'delivered' ? new Date().toISOString() : null,
+    sent_at: status === 'delivered' || status === 'sent' ? new Date().toISOString() : null,
   }
 
   const { error } = await adminClient
@@ -814,6 +1093,29 @@ async function hasDeliveredLog(adminClient: SupabaseClientLike, jobId: string, r
     console.error('notification-dispatch delivered-log lookup failed', {
       jobId,
       channel,
+      error: error.message,
+    })
+    return false
+  }
+
+  return Boolean(data)
+}
+
+async function hasPushSentLog(adminClient: SupabaseClientLike, jobId: string, subscriptionId: string) {
+  const { data, error } = await adminClient
+    .from('notification_logs')
+    .select('id')
+    .eq('job_id', jobId)
+    .eq('channel', 'push')
+    .eq('subscription_id', subscriptionId)
+    .eq('status', 'sent')
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('notification-dispatch push sent-log lookup failed', {
+      jobId,
+      subscriptionId,
       error: error.message,
     })
     return false
