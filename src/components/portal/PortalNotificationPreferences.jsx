@@ -19,6 +19,7 @@ import {
   fetchOwnPushSubscriptions,
   markPushSubscriptionSeen,
   savePushSubscription,
+  updateDeviceLabel,
 } from '../../services/repositories/pushSubscriptionRepository'
 import {
   notificationCategoryLabels,
@@ -405,34 +406,23 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
     setLoading(true)
     setError('')
 
-    const nextSupportStatus = PushService.getBrowserSupportStatus()
-    const nextPermission = PushService.getPermission()
-    const nextBrowserSubscription = await PushService.getCurrentSubscription()
-
-    const subscriptionsResult = await fetchOwnPushSubscriptions({
-      authUserId: currentMember.auth_user_id,
-      memberId: currentMember.id,
+    const reconcileResult = await PushService.reconcileSubscription({
+      currentMember,
+      fetchSubscriptions: fetchOwnPushSubscriptions,
+      saveSubscription: savePushSubscription,
+      markSeen: markPushSubscriptionSeen,
     })
 
-    if (subscriptionsResult.error) {
-      setError(subscriptionsResult.error.message)
+    if (reconcileResult.error) {
+      setError(reconcileResult.error.message || 'Push-Status konnte nicht geladen werden.')
       setLoading(false)
       return
     }
 
-    const rows = subscriptionsResult.data || []
-    const matchingSubscription = nextBrowserSubscription
-      ? rows.find((subscription) => subscription.endpoint === nextBrowserSubscription.endpoint)
-      : null
-
-    if (matchingSubscription?.id) {
-      await markPushSubscriptionSeen({ id: matchingSubscription.id })
-    }
-
-    setSupportStatus(nextSupportStatus)
-    setPermission(nextPermission)
-    setBrowserSubscription(nextBrowserSubscription)
-    setSubscriptions(rows)
+    setSupportStatus(reconcileResult.supportStatus)
+    setPermission(reconcileResult.permission)
+    setBrowserSubscription(reconcileResult.browserSubscription)
+    setSubscriptions(reconcileResult.subscriptions)
     setLoading(false)
   }, [currentMember])
 
@@ -473,24 +463,13 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
       return
     }
 
-    const subscriptionResult = await PushService.subscribe()
-
-    if (subscriptionResult.error || !subscriptionResult.subscription) {
-      setError(getSupportReasonText(subscriptionResult.error) || 'Push konnte nicht aktiviert werden.')
-      setActionLoading(false)
-      return
-    }
-
-    const normalizedSubscription = PushService.normalizeSubscription(subscriptionResult.subscription)
-
-    const saveResult = await savePushSubscription({
-      ...normalizedSubscription,
-      auth_user_id: currentMember.auth_user_id,
-      member_id: currentMember.id || null,
+    const subscriptionResult = await PushService.subscribe({
+      currentMember,
+      saveSubscription: savePushSubscription,
     })
 
-    if (saveResult.error) {
-      setError(saveResult.error.message)
+    if (subscriptionResult.error || !subscriptionResult.subscription) {
+      setError(getSupportReasonText(subscriptionResult.error) || subscriptionResult.saveError?.message || 'Push konnte nicht aktiviert werden.')
       setActionLoading(false)
       return
     }
@@ -505,16 +484,14 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
     setError('')
     setMessage('')
 
-    const currentSubscription = await PushService.getCurrentSubscription()
-    await PushService.unsubscribe()
-
-    const deactivateResult = await deactivatePushSubscription({
-      id: currentSavedSubscription?.id,
-      endpoint: currentSavedSubscription?.endpoint || currentSubscription?.endpoint,
+    const unsubscribeResult = await PushService.unsubscribe({
+      subscriptionId: currentSavedSubscription?.id,
+      endpoint: currentSavedSubscription?.endpoint,
+      deactivateSubscription: deactivatePushSubscription,
     })
 
-    if (deactivateResult.error) {
-      setError(deactivateResult.error.message)
+    if (unsubscribeResult.deactivateError) {
+      setError(unsubscribeResult.deactivateError.message)
       setActionLoading(false)
       return
     }
@@ -523,6 +500,30 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
     await loadPushState()
     setActionLoading(false)
   }, [currentSavedSubscription, loadPushState])
+
+  const handleRenameDevice = useCallback(async (subscription) => {
+    const nextLabel = window.prompt('Geraetename', subscription.device_label || 'Browser')
+    if (nextLabel === null) return
+
+    setActionLoading(true)
+    setError('')
+    setMessage('')
+
+    const result = await updateDeviceLabel({
+      id: subscription.id,
+      deviceLabel: nextLabel,
+    })
+
+    if (result.error) {
+      setError(result.error.message)
+      setActionLoading(false)
+      return
+    }
+
+    setMessage('Geraetename gespeichert.')
+    await loadPushState()
+    setActionLoading(false)
+  }, [loadPushState])
 
   const canActivate = supportStatus?.supported
     && supportStatus?.vapidPublicKey
@@ -538,7 +539,7 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
         <div>
           <h4 style={styles.categoryTitle}>Push auf diesem Geraet</h4>
           <p style={styles.preferenceDescription}>
-            Technische Geraete-Subscription. Fachliche Push-Kategorien bleiben vorbereitet.
+            Technische Geraete-Subscription. Der fachliche Push-Versand wird erst nach dem Versand-Sprint aktiviert.
           </p>
         </div>
         <span style={{
@@ -564,7 +565,7 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
       </div>
 
       <p style={styles.supportReason}>
-        {getSupportReasonText(supportStatus?.reason)}
+        {getSupportReasonText(supportStatus?.reason)} Fachliche Push-Kategorien bleiben bis zum Versand-Sprint deaktiviert.
       </p>
 
       {loading && (
@@ -640,9 +641,18 @@ function PushDeviceSubscriptionPanel({ currentMember }) {
               <div style={styles.deviceMeta}>
                 <span>{subscription.platform || 'Plattform unbekannt'}</span>
                 <span>zuletzt gesehen: {formatDateTime(subscription.last_seen_at || subscription.updated_at)}</span>
+                <span>Fehler: {Number(subscription.failure_count || 0)}</span>
                 <span style={subscription.is_active ? styles.activeText : styles.inactiveText}>
                   {subscription.is_active ? 'aktiv' : 'inaktiv'}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => handleRenameDevice(subscription)}
+                  disabled={actionLoading}
+                  style={styles.inlineButton}
+                >
+                  Umbenennen
+                </button>
               </div>
             </article>
           )
@@ -914,5 +924,12 @@ const styles = {
   inactiveText: {
     color: colors.muted,
     fontWeight: 900,
+  },
+  inlineButton: {
+    ...secondaryButtonStyle,
+    width: 'fit-content',
+    minHeight: 32,
+    padding: '6px 10px',
+    fontSize: 13,
   },
 }

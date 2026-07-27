@@ -1,5 +1,6 @@
 const IOS_PLATFORM_PATTERN = /iPad|iPhone|iPod/
-const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
+const importMetaEnv = import.meta.env || {}
+const vapidPublicKey = importMetaEnv.VITE_VAPID_PUBLIC_KEY
 
 function isBrowser() {
   return typeof window !== 'undefined' && typeof navigator !== 'undefined'
@@ -40,11 +41,11 @@ function isStandaloneDisplayMode() {
   if (!isBrowser()) return false
 
   return window.matchMedia?.('(display-mode: standalone)').matches === true
-    || window.navigator.standalone === true
+    || window.navigator?.standalone === true
 }
 
 function logDev(message, details) {
-  if (!import.meta.env.DEV) return
+  if (!importMetaEnv.DEV) return
 
   if (details === undefined) {
     console.info(`[PushService] ${message}`)
@@ -54,8 +55,13 @@ function logDev(message, details) {
   console.info(`[PushService] ${message}`, details)
 }
 
-function hasVapidPublicKey() {
-  return typeof vapidPublicKey === 'string' && vapidPublicKey.trim().length > 0
+function getVapidPublicKey(override) {
+  return typeof override === 'string' ? override : vapidPublicKey
+}
+
+function hasVapidPublicKey(override) {
+  const publicKey = getVapidPublicKey(override)
+  return typeof publicKey === 'string' && publicKey.trim().length > 0
 }
 
 function urlBase64ToUint8Array(value) {
@@ -90,6 +96,10 @@ export function getPermission() {
   return Notification.permission
 }
 
+export function getPermissionState() {
+  return getPermission()
+}
+
 export function isSupported() {
   const support = {
     notification: isNotificationApiSupported(),
@@ -121,7 +131,7 @@ export function canRequestPermission() {
   return canRequest
 }
 
-export function getBrowserSupportStatus() {
+export function getBrowserSupportStatus({ vapidPublicKeyOverride = null } = {}) {
   const support = {
     notification: isNotificationApiSupported(),
     serviceWorker: isServiceWorkerSupported(),
@@ -130,7 +140,7 @@ export function getBrowserSupportStatus() {
     ios: isIosDevice(),
     standalone: isStandaloneDisplayMode(),
     iosHomeScreenPwa: !isIosDevice() || isStandaloneDisplayMode(),
-    vapidPublicKey: hasVapidPublicKey(),
+    vapidPublicKey: hasVapidPublicKey(vapidPublicKeyOverride),
     permission: getPermission(),
   }
 
@@ -173,39 +183,55 @@ export async function requestPermission() {
     return 'unsupported'
   }
 
-  const permission = await Notification.requestPermission()
-  logDev('permission request completed', permission)
-  return permission
+  if (Notification.permission === 'denied') {
+    logDev('permission request skipped: already denied')
+    return 'denied'
+  }
+
+  if (Notification.permission === 'granted') {
+    logDev('permission request skipped: already granted')
+    return 'granted'
+  }
+
+  try {
+    const permission = await Notification.requestPermission()
+    logDev('permission request completed', permission)
+    return permission
+  } catch (error) {
+    logDev('permission request failed', error)
+    return 'default'
+  }
 }
 
-export async function getServiceWorkerRegistration({ waitForReady = false } = {}) {
+export async function getServiceWorkerRegistration({ waitForReady = true } = {}) {
   if (!isServiceWorkerSupported()) {
     logDev('service worker unsupported')
     return null
   }
 
-  const existingRegistration = await navigator.serviceWorker.getRegistration()
+  try {
+    const existingRegistration = await navigator.serviceWorker.getRegistration()
 
-  if (existingRegistration) {
-    logDev('service worker registration found', existingRegistration.scope)
-    return existingRegistration
-  }
+    if (existingRegistration) {
+      logDev('service worker registration found', existingRegistration.scope)
+      return existingRegistration
+    }
 
-  if (navigator.serviceWorker.controller) {
+    if (!waitForReady && !navigator.serviceWorker.controller) {
+      logDev('service worker registration not available yet')
+      return null
+    }
+
     const readyRegistration = await navigator.serviceWorker.ready
     logDev('service worker registration ready', readyRegistration.scope)
     return readyRegistration
-  }
-
-  if (!waitForReady) {
-    logDev('service worker registration not available yet')
+  } catch (error) {
+    logDev('service worker registration failed', error)
     return null
   }
-
-  const readyRegistration = await navigator.serviceWorker.ready
-  logDev('service worker registration ready', readyRegistration.scope)
-  return readyRegistration
 }
+
+export const getRegistration = getServiceWorkerRegistration
 
 export async function getCurrentSubscription() {
   const registration = await getServiceWorkerRegistration()
@@ -219,6 +245,8 @@ export async function getCurrentSubscription() {
   logDev('current subscription read', { hasSubscription: Boolean(subscription) })
   return subscription
 }
+
+export const getExistingSubscription = getCurrentSubscription
 
 export function normalizeSubscription(subscription) {
   if (!subscription) return null
@@ -240,8 +268,8 @@ export function normalizeSubscription(subscription) {
   }
 }
 
-export async function subscribe() {
-  const supportStatus = getBrowserSupportStatus()
+export async function subscribe({ currentMember = null, saveSubscription = null, vapidPublicKeyOverride = null } = {}) {
+  const supportStatus = getBrowserSupportStatus({ vapidPublicKeyOverride })
 
   if (!supportStatus.supported) {
     return {
@@ -281,49 +309,184 @@ export async function subscribe() {
 
   if (existingSubscription) {
     logDev('using existing subscription')
-    return {
+    return persistSubscription({
       subscription: existingSubscription,
+      supportStatus,
+      currentMember,
+      saveSubscription,
+    })
+  }
+
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(getVapidPublicKey(vapidPublicKeyOverride).trim()),
+  })
+
+  logDev('subscription created')
+
+  return persistSubscription({
+    subscription,
+    supportStatus,
+    currentMember,
+    saveSubscription,
+  })
+}
+
+async function persistSubscription({
+  subscription,
+  supportStatus,
+  currentMember,
+  saveSubscription,
+}) {
+  const normalizedSubscription = normalizeSubscription(subscription)
+
+  if (!saveSubscription || !normalizedSubscription) {
+    return {
+      subscription,
+      normalizedSubscription,
+      savedSubscription: null,
       error: null,
       supportStatus,
     }
   }
 
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey.trim()),
+  const saveResult = await saveSubscription({
+    ...normalizedSubscription,
+    member_id: currentMember?.id || null,
   })
 
-  logDev('subscription created')
+  if (saveResult.error) {
+    return {
+      subscription,
+      normalizedSubscription,
+      savedSubscription: null,
+      error: 'subscription_save_failed',
+      saveError: saveResult.error,
+      supportStatus,
+    }
+  }
 
   return {
     subscription,
+    normalizedSubscription,
+    savedSubscription: saveResult.data || null,
     error: null,
     supportStatus,
   }
 }
 
-export async function unsubscribe() {
+export async function unsubscribe({ subscriptionId = null, endpoint = null, deactivateSubscription = null } = {}) {
   const subscription = await getCurrentSubscription()
+  let browserUnsubscribed = false
+  let browserError = null
 
-  if (!subscription) {
-    logDev('unsubscribe skipped: no active browser subscription')
-    return false
+  if (subscription) {
+    try {
+      browserUnsubscribed = await subscription.unsubscribe()
+      logDev('browser subscription unsubscribed', { unsubscribed: browserUnsubscribed })
+    } catch (error) {
+      browserError = error
+      logDev('browser subscription unsubscribe failed', error)
+    }
   }
 
-  const unsubscribed = await subscription.unsubscribe()
-  logDev('browser subscription unsubscribed', { unsubscribed })
-  return unsubscribed
+  if (!deactivateSubscription) {
+    return {
+      browserUnsubscribed,
+      deactivatedSubscription: null,
+      error: browserError ? 'browser_unsubscribe_failed' : null,
+      browserError,
+    }
+  }
+
+  const deactivateResult = await deactivateSubscription({
+    id: subscriptionId,
+    endpoint: endpoint || subscription?.endpoint || null,
+  })
+
+  return {
+    browserUnsubscribed,
+    deactivatedSubscription: deactivateResult.data || null,
+    error: deactivateResult.error ? 'subscription_deactivate_failed' : (browserError ? 'browser_unsubscribe_failed' : null),
+    browserError,
+    deactivateError: deactivateResult.error || null,
+  }
+}
+
+export async function reconcileSubscription({
+  currentMember = null,
+  fetchSubscriptions = null,
+  saveSubscription = null,
+  markSeen = null,
+} = {}) {
+  const supportStatus = getBrowserSupportStatus()
+  const permission = getPermission()
+  const browserSubscription = await getCurrentSubscription()
+  const subscriptionsResult = fetchSubscriptions
+    ? await fetchSubscriptions({
+      authUserId: currentMember?.auth_user_id || null,
+      memberId: currentMember?.id || null,
+    })
+    : { data: [], error: null }
+
+  if (subscriptionsResult.error) {
+    return {
+      supportStatus,
+      permission,
+      browserSubscription,
+      subscriptions: [],
+      currentSavedSubscription: null,
+      error: subscriptionsResult.error,
+    }
+  }
+
+  const subscriptions = subscriptionsResult.data || []
+  let currentSavedSubscription = browserSubscription
+    ? subscriptions.find((subscription) => subscription.endpoint === browserSubscription.endpoint) || null
+    : null
+  let nextSubscriptions = subscriptions
+
+  if (browserSubscription && permission === 'granted' && saveSubscription) {
+    const normalizedSubscription = normalizeSubscription(browserSubscription)
+    const saveResult = await saveSubscription({
+      ...normalizedSubscription,
+      member_id: currentMember?.id || null,
+    })
+
+    if (!saveResult.error && saveResult.data) {
+      currentSavedSubscription = saveResult.data
+      nextSubscriptions = [
+        saveResult.data,
+        ...subscriptions.filter((subscription) => subscription.id !== saveResult.data.id),
+      ]
+    }
+  } else if (currentSavedSubscription?.id && markSeen) {
+    await markSeen({ id: currentSavedSubscription.id })
+  }
+
+  return {
+    supportStatus,
+    permission,
+    browserSubscription,
+    subscriptions: nextSubscriptions,
+    currentSavedSubscription,
+    error: null,
+  }
 }
 
 export const PushService = {
   isSupported,
   getPermission,
+  getPermissionState,
   canRequestPermission,
   getBrowserSupportStatus,
   requestPermission,
   getServiceWorkerRegistration,
+  getRegistration,
   getCurrentSubscription,
+  getExistingSubscription,
   subscribe,
   unsubscribe,
+  reconcileSubscription,
   normalizeSubscription,
 }
