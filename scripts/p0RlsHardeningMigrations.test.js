@@ -9,22 +9,22 @@ const migrations = [
     modules: ['dokumente'],
   },
   {
-    file: '../supabase/migrations/20260728150227_harden_public_invoice_rls.sql',
+    file: '../supabase/migrations/20260728150230_harden_public_invoice_rls.sql',
     tables: ['invoice_customers', 'invoices', 'invoice_items'],
     modules: ['rechnungen', 'kassa'],
   },
   {
-    file: '../supabase/migrations/20260728150227_harden_public_inventory_rls.sql',
+    file: '../supabase/migrations/20260728150229_harden_public_inventory_rls.sql',
     tables: ['inventory_items'],
     modules: ['inventar'],
   },
   {
-    file: '../supabase/migrations/20260728150227_harden_public_member_fee_rls.sql',
+    file: '../supabase/migrations/20260728150231_harden_public_member_fee_rls.sql',
     tables: ['membership_fees', 'member_change_requests'],
     modules: ['beitraege', 'kassa', 'mitglieder'],
   },
   {
-    file: '../supabase/migrations/20260728150227_harden_public_event_cash_aux_rls.sql',
+    file: '../supabase/migrations/20260728150228_harden_public_event_cash_aux_rls.sql',
     tables: ['event_checkins', 'cash_month_closings'],
     modules: ['events', 'kassa'],
   },

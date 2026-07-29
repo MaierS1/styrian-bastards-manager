@@ -6,21 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-const purchaseRoles = new Set([
-  'admin',
-  'super_admin',
-  'administrator',
-  'vorstand',
-  'cashier',
-  'kassier',
-  'schriftfuehrer',
-  'obmann',
-  'obmann_stv',
-  'schriftfuehrer_stv',
-  'kassier_stv',
-  'vorstandsmitglied',
-])
-
 const allowedSupplierNames = new Set(['METRO', 'Transgourmet'])
 
 type SupplierDetection = {
@@ -91,23 +76,22 @@ Deno.serve(async (req) => {
       },
     })
 
-    const { data: member, error: memberError } = await adminClient
-      .from('members')
-      .select('id, app_role, role')
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
+    const { data: canSearchOffers, error: permissionError } = await userClient.rpc('has_app_permission', {
+      p_module: 'einkauf',
+      p_action: 'edit',
+    })
 
-    if (memberError) {
+    if (permissionError) {
       return jsonResponse(
         {
           error: 'Suche konnte nicht ausgefuehrt werden.',
-          details: memberError.message,
+          details: 'Berechtigung konnte nicht geprueft werden.',
         },
         500,
       )
     }
 
-    if (!member || !isPurchaseManager(member)) {
+    if (!canSearchOffers) {
       return jsonResponse({ error: 'Keine Berechtigung fuer Einkauf & Preisvergleich.' }, 403)
     }
 
@@ -631,14 +615,6 @@ function decodeHtmlEntities(value: string) {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&#x27;/g, "'")
-}
-
-function isPurchaseManager(member: { app_role?: string | null; role?: string | null }) {
-  if (purchaseRoles.has(String(member?.app_role || '').trim())) {
-    return true
-  }
-
-  return purchaseRoles.has(String(member?.role || '').trim())
 }
 
 function isAllowedSupplier(value: string | null | undefined) {

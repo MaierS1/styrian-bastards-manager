@@ -67,17 +67,16 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Benutzer konnte nicht geprüft werden.' }, 401)
     }
 
-    const { data: callerMember, error: callerError } = await adminClient
-      .from('members')
-      .select('id, app_role, email')
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
+    const { data: canInviteUsers, error: permissionError } = await userClient.rpc('has_app_permission', {
+      p_module: 'systemeinstellungen',
+      p_action: 'edit',
+    })
 
-    if (callerError) {
-      return jsonResponse({ error: callerError.message }, 500)
+    if (permissionError) {
+      return jsonResponse({ error: 'Berechtigung konnte nicht geprueft werden.' }, 500)
     }
 
-    if (!['admin', 'super_admin', 'administrator'].includes(callerMember?.app_role || '')) {
+    if (!canInviteUsers) {
       return jsonResponse({ error: 'Nur Admins dürfen Benutzer einladen.' }, 403)
     }
 
