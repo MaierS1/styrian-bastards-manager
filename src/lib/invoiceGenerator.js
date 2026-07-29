@@ -7,7 +7,7 @@ const CLUB = {
   name: 'Styrian Bastards Eishockey-Fanclub',
   address: 'Marburger Straße 12/2/13',
   city: '8042 Graz',
-  email: 'mailatbastards@gmail.com',
+  email: 'mail@styrian-bastards.at',
   zvr: '1183844282',
   iban: 'AT55 1400 0009 1041 7894',
   bic: 'BAWAATWW',
