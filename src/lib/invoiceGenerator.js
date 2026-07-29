@@ -1,11 +1,21 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import QRCode from 'qrcode'
+import { getShowPaymentQr } from './invoicePdfSettings'
+
+const CLUB = {
+  name: 'Styrian Bastards Eishockey-Fanclub',
+  address: 'Marburger Straße 12/2/13',
+  city: '8042 Graz',
+  email: 'mailatbastards@gmail.com',
+  zvr: '1183844282',
+  iban: 'AT55 1400 0009 1041 7894',
+  bic: 'BAWAATWW',
+}
 
 async function imageToBase64(url) {
   const response = await fetch(url)
   const blob = await response.blob()
-
   return await new Promise((resolve) => {
     const reader = new FileReader()
     reader.onloadend = () => resolve(reader.result)
@@ -24,20 +34,14 @@ function sanitizeFileName(value) {
 }
 
 function createEpcQrText(invoice, amount) {
-  const iban = 'WIRD NOCH EINGEFÜGT'
-
-  if (!iban || iban.includes('WIRD')) {
-    return `${window.location.origin}${window.location.pathname}?invoice=${encodeURIComponent(invoice.invoice_number || '')}`
-  }
-
   return [
     'BCD',
     '002',
     '1',
     'SCT',
-    '',
-    'Styrian Bastards Eishockey-Fanclub',
-    iban.replace(/\s/g, ''),
+    CLUB.bic,
+    CLUB.name,
+    CLUB.iban.replace(/\s/g, ''),
     `EUR${Number(amount || 0).toFixed(2)}`,
     '',
     '',
@@ -47,8 +51,7 @@ function createEpcQrText(invoice, amount) {
 }
 
 function getInvoiceTitle(invoice) {
-  if (invoice.invoice_type === 'storno') return 'STORNORECHNUNG'
-  return 'RECHNUNG'
+  return invoice.invoice_type === 'storno' ? 'STORNORECHNUNG' : 'RECHNUNG'
 }
 
 function getInvoiceDate(invoice) {
@@ -72,14 +75,8 @@ function getCustomerLines(invoice, member) {
     ].filter((line) => line && line.trim())
   }
 
-  const streetLine = [invoice.customer_street, invoice.customer_house_number]
-    .filter(Boolean)
-    .join(' ')
-
-  const cityLine = [invoice.customer_postal_code, invoice.customer_city]
-    .filter(Boolean)
-    .join(' ')
-
+  const streetLine = [invoice.customer_street, invoice.customer_house_number].filter(Boolean).join(' ')
+  const cityLine = [invoice.customer_postal_code, invoice.customer_city].filter(Boolean).join(' ')
   const structuredLines = [
     invoice.customer_name || '',
     streetLine,
@@ -89,9 +86,7 @@ function getCustomerLines(invoice, member) {
     invoice.customer_email ? `E-Mail: ${invoice.customer_email}` : '',
   ].filter((line) => line && String(line).trim())
 
-  if (structuredLines.length > 1) {
-    return structuredLines
-  }
+  if (structuredLines.length > 1) return structuredLines
 
   return [
     invoice.customer_name || '',
@@ -108,44 +103,39 @@ export async function generateInvoicePdf({
   isCancelled = false,
   download = true,
   returnBlob = false,
+  showPaymentQr = getShowPaymentQr(),
 }) {
   const doc = new jsPDF('p', 'mm', 'a4')
   const pageWidth = doc.internal.pageSize.getWidth()
-
   let logo = null
 
   try {
     logo = await imageToBase64('/styrian-bastards-logo.jpg')
   } catch {
-    try {
-      logo = await imageToBase64('/styrian-bastards-logo.jpg')
-    } catch {
-      // Logo bleibt null; der PDF-Fallback rendert dann den Textblock.
-    }
+    // Logo bleibt null; der PDF-Fallback rendert dann den Textblock.
   }
 
   const normalizedItems = items.map((item) => ({
     description: item.description || '',
     quantity: Number(item.quantity || 0),
     unit_price: Number(item.unit_price || 0),
-    total:
-      item.total !== undefined
-        ? Number(item.total || 0)
-        : item.total_price !== undefined
-          ? Number(item.total_price || 0)
-          : Number(item.quantity || 0) * Number(item.unit_price || 0),
+    total: item.total !== undefined
+      ? Number(item.total || 0)
+      : item.total_price !== undefined
+        ? Number(item.total_price || 0)
+        : Number(item.quantity || 0) * Number(item.unit_price || 0),
   }))
-
   const total = normalizedItems.reduce((sum, item) => sum + Number(item.total || 0), 0)
   const invoiceNumber = invoice.invoice_number || 'SB'
-  const qrText = createEpcQrText(invoice, Math.abs(total))
-  const qrCode = await QRCode.toDataURL(qrText)
+  const qrCode = showPaymentQr
+    ? await QRCode.toDataURL(createEpcQrText(invoice, Math.abs(total)))
+    : null
 
   doc.setFillColor(255, 255, 255)
   doc.rect(0, 0, 210, 297, 'F')
 
   if (logo) {
-    doc.addImage(logo, 'PNG', 15, 10, 34, 34)
+    doc.addImage(logo, 'JPEG', 15, 10, 34, 34)
   } else {
     doc.setFillColor(0, 0, 0)
     doc.roundedRect(15, 10, 34, 34, 2, 2, 'F')
@@ -158,21 +148,12 @@ export async function generateInvoicePdf({
   doc.setTextColor(0, 0, 0)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(17)
-  doc.text('Styrian Bastards Eishockey-Fanclub', 55, 17)
-
+  doc.text(CLUB.name, 55, 17)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
 
-  const clubData = [
-    'Marburger Straße 12/2/13',
-    '8042 Graz',
-    'E-Mail: mailatbastards@gmail.com',
-    'ZVR: noch nicht bekannt',
-  ]
-
   let y = 25
-
-  clubData.forEach((line) => {
+  ;[CLUB.address, CLUB.city, `E-Mail: ${CLUB.email}`, `ZVR: ${CLUB.zvr}`].forEach((line) => {
     doc.text(line, 55, y)
     y += 5
   })
@@ -180,7 +161,6 @@ export async function generateInvoicePdf({
   doc.setDrawColor(0, 0, 0)
   doc.setLineWidth(0.4)
   doc.line(15, 50, 195, 50)
-
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(24)
   doc.text(getInvoiceTitle(invoice), 15, 64)
@@ -200,30 +180,23 @@ export async function generateInvoicePdf({
   }
 
   doc.setTextColor(0, 0, 0)
-
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.text('Rechnung an', 15, 80)
-
   doc.setFont('helvetica', 'normal')
-  const customerLines = getCustomerLines(invoice, member)
-
   y = 87
-
-  customerLines.forEach((line) => {
+  getCustomerLines(invoice, member).forEach((line) => {
     doc.text(String(line), 15, y, { maxWidth: 85 })
     y += 5
   })
 
   const infoX = 125
   const valueX = 190
-
   doc.setFont('helvetica', 'bold')
   doc.text('Rechnungsnummer:', infoX, 80)
   doc.text('Rechnungsdatum:', infoX, 87)
   doc.text('Fällig bis:', infoX, 94)
   doc.text('Status:', infoX, 101)
-
   doc.setFont('helvetica', 'normal')
   doc.text(invoiceNumber, valueX, 80, { align: 'right' })
   doc.text(getInvoiceDate(invoice), valueX, 87, { align: 'right' })
@@ -236,7 +209,6 @@ export async function generateInvoicePdf({
     doc.setFont('helvetica', 'normal')
     doc.text('Mitgliedsbeitrag', valueX, 108, { align: 'right' })
   }
-
   if (invoice.invoice_type === 'storno') {
     doc.setFont('helvetica', 'bold')
     doc.text('Art:', infoX, 115)
@@ -254,15 +226,8 @@ export async function generateInvoicePdf({
       formatEuro(item.total),
     ]),
     theme: 'grid',
-    headStyles: {
-      fillColor: [0, 0, 0],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-    },
-    styles: {
-      fontSize: 10,
-      cellPadding: 4,
-    },
+    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold' },
+    styles: { fontSize: 10, cellPadding: 4 },
     columnStyles: {
       0: { cellWidth: 88 },
       1: { halign: 'right', cellWidth: 24 },
@@ -272,47 +237,41 @@ export async function generateInvoicePdf({
   })
 
   const tableEndY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : 165
-
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
   doc.text(`Gesamtsumme: ${formatEuro(total)}`, 190, tableEndY, { align: 'right' })
-
   doc.setFontSize(11)
   doc.text('Zahlungsinformationen', 15, tableEndY + 20)
-
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
 
   const paymentLines = [
     'Bitte den Rechnungsbetrag unter Angabe der Rechnungsnummer überweisen.',
     '',
-    'Empfänger: Styrian Bastards Eishockey-Fanclub',
-    'IBAN: wird noch eingefügt',
+    `Kontoinhaber: ${CLUB.name}`,
+    `IBAN: ${CLUB.iban}`,
+    `BIC: ${CLUB.bic}`,
     `Verwendungszweck: ${invoiceNumber}`,
   ]
-
   y = tableEndY + 28
-
   paymentLines.forEach((line) => {
     doc.text(line, 15, y)
     y += 5
   })
 
-  doc.addImage(qrCode, 'PNG', 153, tableEndY + 18, 32, 32)
-  doc.setFontSize(7)
-  doc.text('Banking-QR / Verwendungszweck', 169, tableEndY + 54, { align: 'center' })
+  if (qrCode) {
+    doc.addImage(qrCode, 'PNG', 153, tableEndY + 18, 32, 32)
+    doc.setFontSize(7)
+    doc.text('SEPA-Zahlungs-QR', 169, tableEndY + 54, { align: 'center' })
+  }
 
   doc.setFont('helvetica', 'italic')
   doc.setFontSize(9)
-
-  const taxLines = [
+  y += 8
+  ;[
     'Gemäß § 6 Abs. 1 Z 27 UStG umsatzsteuerbefreit (Kleinunternehmerregelung).',
     'Es wird keine Umsatzsteuer ausgewiesen.',
-  ]
-
-  y += 8
-
-  taxLines.forEach((line) => {
+  ].forEach((line) => {
     doc.text(line, 15, y, { maxWidth: 170 })
     y += 4
   })
@@ -324,7 +283,6 @@ export async function generateInvoicePdf({
     doc.text(`Storno-Grund: ${invoice.cancellation_reason}`, 15, y, { maxWidth: 170 })
     doc.setTextColor(0, 0, 0)
   }
-
   if (invoice.notes) {
     y += 7
     doc.setFont('helvetica', 'normal')
@@ -334,34 +292,13 @@ export async function generateInvoicePdf({
 
   doc.setDrawColor(0, 0, 0)
   doc.line(15, 280, 195, 280)
-
   doc.setFontSize(8)
   doc.setFont('helvetica', 'normal')
-  doc.text(
-    'Styrian Bastards Eishockey-Fanclub · Marburger Straße 12/2/13 · 8042 Graz',
-    pageWidth / 2,
-    285,
-    { align: 'center' }
-  )
-  doc.text('mailatbastards@gmail.com · ZVR: noch nicht bekannt', pageWidth / 2, 289, {
-    align: 'center',
-  })
+  doc.text(`${CLUB.name} · ${CLUB.address} · ${CLUB.city}`, pageWidth / 2, 285, { align: 'center' })
+  doc.text(`${CLUB.email} · ZVR: ${CLUB.zvr}`, pageWidth / 2, 289, { align: 'center' })
 
   const filename = `${invoice.invoice_type === 'storno' ? 'Stornorechnung' : 'Rechnung'}_${sanitizeFileName(invoiceNumber)}.pdf`
-
-  if (returnBlob) {
-    return {
-      blob: doc.output('blob'),
-      filename,
-    }
-  }
-
-  if (download) {
-    doc.save(filename)
-  }
-
-  return {
-    blob: doc.output('blob'),
-    filename,
-  }
+  if (returnBlob) return { blob: doc.output('blob'), filename }
+  if (download) doc.save(filename)
+  return { blob: doc.output('blob'), filename }
 }
