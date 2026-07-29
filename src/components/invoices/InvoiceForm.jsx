@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { setShowPaymentQr } from '../../lib/invoicePdfSettings'
 import { buttonStyle, cardStyle, colors, dangerButtonStyle, headingStyle, inputStyle, isMobile, secondaryButtonStyle } from '../../styles/appStyles'
 
 export function InvoiceForm({
@@ -39,6 +41,14 @@ export function InvoiceForm({
   createInvoice,
   resetInvoiceForm,
 }) {
+  const [showPaymentQr, setShowPaymentQrState] = useState(false)
+
+  function handlePaymentQrChange(event) {
+    const enabled = event.target.checked
+    setShowPaymentQrState(enabled)
+    setShowPaymentQr(enabled)
+  }
+
   return (
     <>
       <h3 style={headingStyle}>Neue Rechnung erstellen</h3>
@@ -193,6 +203,16 @@ export function InvoiceForm({
         onChange={(e) => setInvoiceNotes(e.target.value)}
         style={inputStyle}
       />
+
+      <label style={{ display: 'block', marginBottom: 12, fontWeight: 800, color: colors.black }}>
+        <input
+          type="checkbox"
+          checked={showPaymentQr}
+          onChange={handlePaymentQrChange}
+          style={{ marginRight: 8 }}
+        />
+        Zahlungs-QR-Code anzeigen
+      </label>
 
       <label style={{ display: 'block', marginBottom: 12, fontWeight: 800, color: colors.black }}>
         <input
