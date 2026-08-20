@@ -5,8 +5,11 @@ import {
   ACTIONS,
   DOMAIN_CONFIG,
   DOMAINS,
+  DIAGNOSTIC_STORAGE_BUCKETS,
+  MIGRATION_STORAGE_BUCKETS,
   SCHEMA_TABLES,
   SECRET_HEADER,
+  STORAGE_COLUMN_BUCKETS,
   STORAGE_BUCKETS,
   nextCursor,
   parseCursor,
@@ -66,9 +69,14 @@ describe('migration read api contract', () => {
   })
 
   it('keeps storage access bucket-scoped', () => {
-    assert.deepEqual(STORAGE_BUCKETS, ['public-assets', 'production-backups', 'cash-receipts'])
-    assert.equal(validateBucket('public-assets').ok, true)
+    assert.deepEqual(STORAGE_BUCKETS, ['backups', 'documents', 'receipts'])
+    assert.deepEqual(MIGRATION_STORAGE_BUCKETS, ['documents', 'receipts'])
+    assert.deepEqual(DIAGNOSTIC_STORAGE_BUCKETS, ['backups'])
+    assert.equal(validateBucket('documents').ok, true)
+    assert.equal(validateBucket('public-assets').ok, false)
     assert.equal(validateBucket('private-user-secrets').ok, false)
+    assert.equal(STORAGE_COLUMN_BUCKETS.documents.file_path, 'documents')
+    assert.equal(STORAGE_COLUMN_BUCKETS.cash.receipt_url, 'receipts')
   })
 
   it('uses deterministic schema serialization inputs', () => {
@@ -78,6 +86,15 @@ describe('migration read api contract', () => {
     const first = stableJson({ b: 1, a: { d: 2, c: 3 } })
     const second = stableJson({ a: { c: 3, d: 2 }, b: 1 })
     assert.equal(first, second)
+  })
+
+  it('matches live V1 member and document contract fields', () => {
+    const members = SCHEMA_TABLES.find((table) => table.table === 'members')
+    const documents = SCHEMA_TABLES.find((table) => table.table === 'documents')
+    assert.ok(members.status_values.member_type.includes('ehrenmitglied'))
+    assert.ok(documents.columns.some((column) => column.name === 'file_url'))
+    assert.ok(documents.columns.some((column) => column.name === 'visibility'))
+    assert.equal(documents.columns.some((column) => column.name === 'published_at'), false)
   })
 
   it('uses stable offset cursors without duplicates or gaps', () => {

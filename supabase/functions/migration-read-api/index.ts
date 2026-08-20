@@ -1,13 +1,17 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import postgres from 'npm:postgres@3.4.7'
 import {
   ACTIONS,
   API_VERSION,
+  DIAGNOSTIC_STORAGE_BUCKETS,
   DOMAIN_CONFIG,
   DOMAINS,
+  MIGRATION_STORAGE_BUCKETS,
   RELATED_TABLES,
   RPCS_AND_VIEWS,
   SCHEMA_TABLES,
   SECRET_HEADER,
+  STORAGE_COLUMN_BUCKETS,
   STORAGE_BUCKETS,
   V1_SOURCE_VERSION,
   nextCursor,
@@ -180,13 +184,18 @@ async function routeAction({
   if (action === 'schema') {
     const counts = await getDomainCounts(client)
     const buckets = await getStorageBuckets(client)
+    const tables = await getSchemaTables(client)
     const payload = {
       source_version: V1_SOURCE_VERSION,
       migration_read_api_version: API_VERSION,
-      tables: await withRowCounts(client, SCHEMA_TABLES),
+      schema_metadata_source: tables.source,
+      tables: tables.tables,
       domains: DOMAINS,
       buckets,
       domain_counts: counts,
+      storage: await getStorageBaseline(client),
+      migration_storage_buckets: MIGRATION_STORAGE_BUCKETS,
+      diagnostic_storage_buckets: DIAGNOSTIC_STORAGE_BUCKETS,
     }
     const encoded = new TextEncoder().encode(stableJson(payload))
     const hashBuffer = await crypto.subtle.digest('SHA-256', encoded)
@@ -195,7 +204,7 @@ async function routeAction({
         ...payload,
         schema_hash: [...new Uint8Array(hashBuffer)].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
       },
-      auditCount: SCHEMA_TABLES.length,
+      auditCount: tables.tables.length,
     }
   }
 
@@ -351,7 +360,8 @@ async function getFinanceBaseline(client: SupabaseClientLike) {
       count: invoices.length,
       total_cents: sumCents(invoices, 'total_amount'),
       paid_cents: sumCents(invoices.filter((row: any) => row?.status === 'bezahlt'), 'total_amount'),
-      open_cents: sumCents(invoices.filter((row: any) => !['bezahlt', 'storniert'].includes(row?.status)), 'total_amount'),
+      open_cents: sumCents(invoices.filter((row: any) => row?.status === 'offen'), 'total_amount'),
+      status_counts: groupCount(invoices, 'status'),
     },
     financing: {
       total_cents: sumCents(activeFinancing, 'original_amount'),
@@ -416,6 +426,8 @@ async function listStorage(client: SupabaseClientLike, body: Record<string, unkn
     body: {
       bucket,
       prefix,
+      migration_relevant: MIGRATION_STORAGE_BUCKETS.includes(bucket),
+      diagnostic_only: DIAGNOSTIC_STORAGE_BUCKETS.includes(bucket),
       files: items,
       next_cursor: items.length >= limit ? String(cursor + items.length) : null,
       limit,
@@ -487,14 +499,192 @@ async function withRowCounts(client: SupabaseClientLike, tables: unknown[]) {
   return result
 }
 
+async function getSchemaTables(client: SupabaseClientLike) {
+  const live = await getLiveSchemaTables(client)
+  if (live) return { source: 'information_schema', tables: live }
+  return { source: 'static_contract_fallback', tables: await withRowCounts(client, SCHEMA_TABLES) }
+}
+
+async function getLiveSchemaTables(client: SupabaseClientLike) {
+  const dbUrl = Deno.env.get('SUPABASE_DB_URL') || Deno.env.get('DATABASE_URL') || ''
+  if (!dbUrl) return null
+
+  const sql = postgres(dbUrl, { max: 1, ssl: 'require' })
+  try {
+    const [columns, constraints] = await Promise.all([
+      sql`
+        select
+          c.table_name,
+          c.column_name,
+          c.ordinal_position,
+          c.data_type,
+          c.is_nullable,
+          c.column_default
+        from information_schema.columns c
+        join information_schema.tables t
+          on t.table_schema = c.table_schema
+         and t.table_name = c.table_name
+        where c.table_schema = 'public'
+          and t.table_type = 'BASE TABLE'
+        order by c.table_name asc, c.ordinal_position asc
+      `,
+      sql`
+        select
+          tc.table_name,
+          tc.constraint_name,
+          tc.constraint_type,
+          kcu.column_name,
+          kcu.ordinal_position,
+          ccu.table_name as foreign_table_name,
+          ccu.column_name as foreign_column_name
+        from information_schema.table_constraints tc
+        left join information_schema.key_column_usage kcu
+          on kcu.constraint_schema = tc.constraint_schema
+         and kcu.constraint_name = tc.constraint_name
+         and kcu.table_schema = tc.table_schema
+         and kcu.table_name = tc.table_name
+        left join information_schema.constraint_column_usage ccu
+          on ccu.constraint_schema = tc.constraint_schema
+         and ccu.constraint_name = tc.constraint_name
+        where tc.table_schema = 'public'
+          and tc.constraint_type in ('PRIMARY KEY', 'FOREIGN KEY')
+        order by tc.table_name asc, tc.constraint_name asc, kcu.ordinal_position asc
+      `,
+    ])
+
+    const byTable = new Map<string, any>()
+    for (const column of columns as any[]) {
+      const tableName = String(column.table_name)
+      if (!byTable.has(tableName)) {
+        byTable.set(tableName, {
+          table: tableName,
+          migration_scope: migrationScopeForTable(tableName),
+          columns: [],
+          primary_key: [],
+          fk_hints: [],
+          status_values: null,
+          row_count: null,
+        })
+      }
+      byTable.get(tableName).columns.push({
+        name: column.column_name,
+        ordinal_position: Number(column.ordinal_position),
+        data_type: column.data_type,
+        nullable: column.is_nullable === 'YES',
+        default: column.column_default || null,
+      })
+    }
+
+    const seenFk = new Set<string>()
+    for (const constraint of constraints as any[]) {
+      const table = byTable.get(String(constraint.table_name))
+      if (!table || !constraint.column_name) continue
+      if (constraint.constraint_type === 'PRIMARY KEY') table.primary_key.push(String(constraint.column_name))
+      if (constraint.constraint_type === 'FOREIGN KEY' && constraint.foreign_table_name && constraint.foreign_column_name) {
+        const hint = `${constraint.column_name}->${constraint.foreign_table_name}.${constraint.foreign_column_name}`
+        if (!seenFk.has(`${constraint.table_name}:${hint}`)) {
+          seenFk.add(`${constraint.table_name}:${hint}`)
+          table.fk_hints.push({
+            column: String(constraint.column_name),
+            references: `${constraint.foreign_table_name}.${constraint.foreign_column_name}`,
+          })
+        }
+      }
+    }
+
+    const tables = [...byTable.values()].sort((a, b) => a.table.localeCompare(b.table))
+    for (const table of tables) {
+      table.primary_key = table.primary_key.sort()
+      table.fk_hints = table.fk_hints.sort((a: any, b: any) => `${a.column}:${a.references}`.localeCompare(`${b.column}:${b.references}`))
+      table.status_values = STATUS_VALUES_FOR_TABLE(table.table)
+      const { count, error } = await client.from(table.table).select('*', { count: 'exact', head: true })
+      table.row_count = error ? null : count || 0
+    }
+    return tables
+  } catch (error) {
+    console.error('migration-read-api live schema metadata failed', {
+      error: error instanceof Error ? error.message : 'unknown',
+    })
+    return null
+  } finally {
+    await sql.end({ timeout: 1 })
+  }
+}
+
+function migrationScopeForTable(table: string) {
+  const domain = DOMAINS.find((item) => DOMAIN_CONFIG[item].sourceTables.includes(table))
+  if (domain) return 'domain'
+  if (['invoice_items', 'sponsor_contracts', 'merch_variants', 'shop_order_items', 'financing_liability_repayments', 'membership_fee_periods'].includes(table)) return 'supporting'
+  if (/notification|push|backup|restore|search|audit|log|session|job|temp/i.test(table)) return 'not_migrated'
+  return 'review'
+}
+
+function STATUS_VALUES_FOR_TABLE(table: string) {
+  const staticTable = (SCHEMA_TABLES as any[]).find((item) => item.table === table)
+  return staticTable?.status_values || null
+}
+
 async function getStorageBuckets(client: SupabaseClientLike) {
   const { data, error } = await client.storage.listBuckets()
   if (error) throw error
   return (data || [])
     .filter((bucket) => STORAGE_BUCKETS.includes(bucket.name))
-    .map((bucket) => ({ id: bucket.id, name: bucket.name, public: bucket.public === true }))
+    .map((bucket) => ({
+      id: bucket.id,
+      name: bucket.name,
+      public: bucket.public === true,
+      migration_relevant: MIGRATION_STORAGE_BUCKETS.includes(bucket.name),
+      diagnostic_only: DIAGNOSTIC_STORAGE_BUCKETS.includes(bucket.name),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
+
+async function getStorageBaseline(client: SupabaseClientLike) {
+  const buckets: Record<string, { files: number; bytes: number; migration_relevant: boolean; diagnostic_only: boolean }> = {}
+  for (const bucket of STORAGE_BUCKETS) {
+    const files = await listAllStorageFiles(client, bucket)
+    buckets[bucket] = {
+      files: files.length,
+      bytes: files.reduce((sum, file: any) => sum + Number(file?.metadata?.size ?? file?.size ?? 0), 0),
+      migration_relevant: MIGRATION_STORAGE_BUCKETS.includes(bucket),
+      diagnostic_only: DIAGNOSTIC_STORAGE_BUCKETS.includes(bucket),
+    }
+  }
+
+  const receiptRefs = await selectAll(client, 'cash_entries', 'receipt_url')
+  const knownReceiptPaths = new Set(
+    receiptRefs
+      .map((row: any) => parseStorageReference(row?.receipt_url, '', 'receipts'))
+      .filter((ref: any) => ref?.bucket === 'receipts')
+      .map((ref: any) => ref.path),
+  )
+  const receiptFiles = await listAllStorageFiles(client, 'receipts')
+
+  return {
+    buckets,
+    orphan_storage_files: {
+      receipts: receiptFiles.filter((file: any) => !knownReceiptPaths.has(file.path)).length,
+    },
+  }
+}
+
+async function listAllStorageFiles(client: SupabaseClientLike, bucket: string, prefix = '') {
+  const rows: any[] = []
+  const pageSize = 1000
+  for (let offset = 0; offset < 100_000; offset += pageSize) {
+    const { data, error } = await client.storage.from(bucket).list(prefix, {
+      limit: pageSize,
+      offset,
+      sortBy: { column: 'name', order: 'asc' },
+    })
+    if (error) return rows
+    const batch = Array.isArray(data) ? data : []
+    rows.push(...batch.map((item: any) => ({ ...item, path: prefix ? `${prefix}/${item.name}` : item.name })))
+    if (batch.length < pageSize) break
+  }
+  return rows
+}
+
 
 async function selectAll(client: SupabaseClientLike, table: string, select: string) {
   const pageSize = 1000
@@ -515,7 +705,8 @@ function collectStorageReferences(domain: string, records: unknown[]) {
   for (const record of records as any[]) {
     for (const column of config.storageColumns || []) {
       const value = record?.[column]
-      const parsed = parseStorageReference(value)
+      const defaultBucket = STORAGE_COLUMN_BUCKETS[domain]?.[column] || ''
+      const parsed = parseStorageReference(value, '', defaultBucket)
       if (parsed) refs.push({ ...parsed, source_column: column, source_id: record?.id || null })
     }
   }
@@ -524,22 +715,23 @@ function collectStorageReferences(domain: string, records: unknown[]) {
 
 async function isKnownStorageReference(client: SupabaseClientLike, bucket: string, path: string, supabaseUrl: string) {
   const checks = [
-    ['documents', 'file_path'],
-    ['cash_entries', 'receipt_url'],
-    ['invoices', 'pdf_url'],
-    ['sponsors', 'logo_path'],
-    ['inventory_items', 'qr_url'],
-    ['events', 'event_image_url'],
-    ['events', 'public_image_path'],
-    ['events', 'public_image_url'],
-    ['merch_items', 'image_path'],
+    ['documents', 'file_path', 'documents'],
+    ['cash_entries', 'receipt_url', 'receipts'],
+    ['invoices', 'pdf_url', 'documents'],
+    ['financing_liabilities', 'receipt_url', 'receipts'],
+    ['sponsors', 'logo_path', ''],
+    ['inventory_items', 'qr_url', ''],
+    ['events', 'event_image_url', ''],
+    ['events', 'public_image_path', ''],
+    ['events', 'public_image_url', ''],
+    ['merch_items', 'image_path', ''],
   ]
 
-  for (const [table, column] of checks) {
+  for (const [table, column, defaultBucket] of checks) {
     const { data, error } = await client.from(table).select(column).limit(1000)
     if (error) continue
     const found = (data || []).some((row: any) => {
-      const parsed = parseStorageReference(row?.[column], supabaseUrl)
+      const parsed = parseStorageReference(row?.[column], supabaseUrl, defaultBucket)
       return parsed?.bucket === bucket && parsed?.path === path
     })
     if (found) return true
@@ -548,10 +740,11 @@ async function isKnownStorageReference(client: SupabaseClientLike, bucket: strin
   return false
 }
 
-function parseStorageReference(value: unknown, supabaseUrl = '') {
+function parseStorageReference(value: unknown, supabaseUrl = '', defaultBucket = '') {
   if (!value || typeof value !== 'string') return null
   const text = value.trim()
   if (!text) return null
+  if (/^https?:\/\//i.test(text) && supabaseUrl && !text.startsWith(supabaseUrl)) return null
 
   for (const bucket of STORAGE_BUCKETS) {
     const marker = `/storage/v1/object/public/${bucket}/`
@@ -562,7 +755,8 @@ function parseStorageReference(value: unknown, supabaseUrl = '') {
   }
 
   if (supabaseUrl && text.startsWith(supabaseUrl)) return null
-  return { bucket: 'public-assets', path: normalizeStoragePath(text) }
+  if (defaultBucket && !/^https?:\/\//i.test(text)) return { bucket: defaultBucket, path: normalizeStoragePath(text) }
+  return null
 }
 
 function normalizeStoragePath(path: string) {

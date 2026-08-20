@@ -1,4 +1,4 @@
-export const API_VERSION = '35.2a.1'
+export const API_VERSION = '35.2b.1'
 export const V1_SOURCE_VERSION = 'v1.5.1'
 
 export const SECRET_HEADER = 'x-v1-migration-read-secret'
@@ -34,10 +34,27 @@ export const DOMAINS = Object.freeze([
 ])
 
 export const STORAGE_BUCKETS = Object.freeze([
-  'public-assets',
-  'production-backups',
-  'cash-receipts',
+  'backups',
+  'documents',
+  'receipts',
 ])
+
+export const MIGRATION_STORAGE_BUCKETS = Object.freeze([
+  'documents',
+  'receipts',
+])
+
+export const DIAGNOSTIC_STORAGE_BUCKETS = Object.freeze([
+  'backups',
+])
+
+export const STORAGE_COLUMN_BUCKETS = Object.freeze({
+  cash: { receipt_url: 'receipts' },
+  cash_receipts: { receipt_url: 'receipts' },
+  documents: { file_path: 'documents' },
+  invoices: { pdf_url: 'documents' },
+  financing_liabilities: { receipt_url: 'receipts' },
+})
 
 const SELECTS = {
   members: [
@@ -376,16 +393,19 @@ const SELECTS = {
     'id',
     'title',
     'category',
+    'file_url',
+    'visibility',
+    'uploaded_by',
     'document_date',
     'description',
     'file_path',
     'file_name',
     'mime_type',
+    'show_in_member_area',
     'member_area_category',
     'members_only',
     'is_active',
     'sort_order',
-    'published_at',
     'created_at',
     'updated_at',
   ],
@@ -522,7 +542,7 @@ export const RELATED_TABLES = Object.freeze({
 })
 
 export const STATUS_VALUES = Object.freeze({
-  members: { status: ['aktiv', 'inaktiv', 'ausgetreten'], member_type: ['vollmitglied', 'foerdermitglied', 'probejahr'] },
+  members: { status: ['aktiv', 'inaktiv', 'ausgetreten'], member_type: ['vollmitglied', 'foerdermitglied', 'probejahr', 'ehrenmitglied'] },
   membership_fee_periods: { status: ['open', 'closed'] },
   membership_fee_items: { status: ['open', 'reminded', 'paid', 'waived', 'cancelled'] },
   cash_entries: { type: ['einnahme', 'ausgabe'], payment_method: ['bar', 'ebanking'] },
@@ -653,9 +673,9 @@ function fkHintsFor(table) {
     invoices: [{ column: 'member_id', references: 'members.id' }, { column: 'customer_id', references: 'invoice_customers.id' }],
     financing_liability_repayments: [{ column: 'liability_id', references: 'financing_liabilities.id' }, { column: 'cash_entry_id', references: 'cash_entries.id' }],
     sponsor_contracts: [{ column: 'sponsor_id', references: 'sponsors.id' }],
-    event_registrations: [{ column: 'event_id', references: 'events.id' }, { column: 'member_id', references: 'members.id' }],
-    merch_variants: [{ column: 'item_id', references: 'merch_items.id' }],
-    shop_order_items: [{ column: 'order_id', references: 'shop_orders.id' }],
+    event_registrations: [{ column: 'event_id', references: 'events.id' }],
+    merch_variants: [{ column: 'merch_item_id', references: 'merch_items.id' }],
+    shop_order_items: [{ column: 'shop_order_id', references: 'shop_orders.id' }, { column: 'merch_item_id', references: 'merch_items.id' }, { column: 'merch_variant_id', references: 'merch_variants.id' }],
     role_permissions: [{ column: 'role_key', references: 'roles.key' }, { column: 'permission_key', references: 'permissions.key' }],
     user_roles: [{ column: 'role_key', references: 'roles.key' }],
     user_permissions: [{ column: 'permission_key', references: 'permissions.key' }],
@@ -672,7 +692,7 @@ function defaultFor(name) {
 
 function inferType(name) {
   if (name.endsWith('_id') || name === 'id' || name === 'auth_user_id' || name === 'assigned_by') return 'uuid'
-  if (name.endsWith('_at') || name === 'checked_in_at' || name === 'published_at') return 'timestamptz'
+  if (name.endsWith('_at') || name === 'checked_in_at') return 'timestamptz'
   if (name.endsWith('_date') || name.endsWith('_on') || name === 'due_date' || name === 'birthdate' || name === 'joined_at') return 'date'
   if (name.includes('amount') || name.includes('price') || name === 'value' || name === 'total_price' || name === 'unit_price') return 'numeric'
   if (name.includes('count') || name.includes('quantity') || name === 'year' || name === 'sort_order') return 'integer'
