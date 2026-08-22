@@ -11,6 +11,7 @@ import {
   SECRET_HEADER,
   STORAGE_COLUMN_BUCKETS,
   STORAGE_BUCKETS,
+  canonicalizeMigrationSchema,
   nextCursor,
   parseCursor,
   parseLimit,
@@ -87,6 +88,36 @@ describe('migration read api contract', () => {
     const first = stableJson({ b: 1, a: { d: 2, c: 3 } })
     const second = stableJson({ a: { c: 3, d: 2 }, b: 1 })
     assert.equal(first, second)
+  })
+
+  it('hashes only a canonical structural projection across repeated analyses', () => {
+    const base = {
+      schema_contract_version: '35.7c.1',
+      source_version: 'v1.5.1',
+      tables: [{
+        table: 'members',
+        row_count: 13,
+        columns: [
+          { name: 'email', data_type: 'text', nullable: true, default: null },
+          { name: 'id', data_type: 'uuid', nullable: false, default: 'gen_random_uuid()' },
+        ],
+        primary_key: ['id'],
+        fk_hints: [],
+        status_values: { status: ['aktiv', 'inaktiv'] },
+      }],
+      buckets: [{ name: 'documents', object_count: 15, bytes: 1234 }],
+      rpc_contracts: { rpcs: ['get_public_events'], views: [] },
+    }
+    assert.equal(canonicalizeMigrationSchema(base), canonicalizeMigrationSchema({
+      ...base,
+      generated_at: '2026-08-22T12:00:00Z',
+      tables: [{ ...base.tables[0], row_count: 14, columns: [...base.tables[0].columns].reverse() }],
+      buckets: [{ name: 'documents', object_count: 16, bytes: 9999 }],
+    }))
+    assert.notEqual(canonicalizeMigrationSchema(base), canonicalizeMigrationSchema({
+      ...base,
+      tables: [{ ...base.tables[0], columns: [...base.tables[0].columns, { name: 'new_column', data_type: 'text', nullable: true, default: null }] }],
+    }))
   })
 
   it('matches live V1 member and document contract fields', () => {

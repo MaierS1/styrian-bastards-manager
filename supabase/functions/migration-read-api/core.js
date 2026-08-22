@@ -1,5 +1,6 @@
 export const API_VERSION = '35.6f.1'
 export const V1_SOURCE_VERSION = 'v1.5.1'
+export const SCHEMA_CONTRACT_VERSION = '35.7c.1'
 
 export const SECRET_HEADER = 'x-v1-migration-read-secret'
 
@@ -641,6 +642,47 @@ export function toCents(value) {
 
 export function stableJson(value) {
   return JSON.stringify(sortValue(value))
+}
+
+// Keep runtime observations out of schema_hash. This is the sole structural
+// fingerprint projection used by the migration read API.
+export function canonicalizeMigrationSchema(input) {
+  const tables = (Array.isArray(input?.tables) ? input.tables : [])
+    .map((table) => ({
+      name: String(table?.table ?? table?.name ?? ''),
+      migration_scope: table?.migration_scope ?? null,
+      columns: (Array.isArray(table?.columns) ? table.columns : [])
+        .map((column) => ({
+          name: String(column?.name ?? column?.column_name ?? ''),
+          data_type: column?.data_type ?? null,
+          nullable: column?.nullable ?? null,
+          default: column?.default ?? column?.column_default ?? null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      primary_key: [...(Array.isArray(table?.primary_key) ? table.primary_key : [])].map(String).sort(),
+      foreign_keys: (Array.isArray(table?.foreign_keys) ? table.foreign_keys : Array.isArray(table?.fk_hints) ? table.fk_hints : [])
+        .map((foreignKey) => typeof foreignKey === 'string'
+          ? { column: foreignKey.split('->')[0] ?? foreignKey, references: foreignKey.split('->')[1] ?? '' }
+          : { column: String(foreignKey?.column ?? ''), references: String(foreignKey?.references ?? '') })
+        .sort((a, b) => `${a.column}:${a.references}`.localeCompare(`${b.column}:${b.references}`)),
+      status_values: table?.status_values ?? null,
+    }))
+    .filter((table) => table.name)
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const buckets = (Array.isArray(input?.buckets) ? input.buckets : [])
+    .map((bucket) => typeof bucket === 'string' ? { name: bucket } : { name: String(bucket?.name ?? '') })
+    .filter((bucket) => bucket.name)
+    .sort((a, b) => a.name.localeCompare(b.name))
+  return stableJson({
+    schema_contract_version: input?.schema_contract_version ?? SCHEMA_CONTRACT_VERSION,
+    source_version: input?.source_version ?? null,
+    tables,
+    buckets,
+    rpc_contracts: {
+      rpcs: [...(input?.rpc_contracts?.rpcs ?? [])].map(String).sort(),
+      views: [...(input?.rpc_contracts?.views ?? [])].map(String).sort(),
+    },
+  })
 }
 
 function sortValue(value) {

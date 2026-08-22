@@ -10,6 +10,7 @@ import {
   RELATED_TABLES,
   RPCS_AND_VIEWS,
   SCHEMA_TABLES,
+  SCHEMA_CONTRACT_VERSION,
   SECRET_HEADER,
   STORAGE_COLUMN_BUCKETS,
   STORAGE_BUCKETS,
@@ -17,7 +18,7 @@ import {
   nextCursor,
   parseCursor,
   parseLimit,
-  stableJson,
+  canonicalizeMigrationSchema,
   toCents,
   validateAction,
   validateBucket,
@@ -198,7 +199,14 @@ async function routeAction({
       migration_storage_buckets: MIGRATION_STORAGE_BUCKETS,
       diagnostic_storage_buckets: DIAGNOSTIC_STORAGE_BUCKETS,
     }
-    const encoded = new TextEncoder().encode(stableJson(payload))
+    const schemaPayload = canonicalizeMigrationSchema({
+      schema_contract_version: SCHEMA_CONTRACT_VERSION,
+      source_version: V1_SOURCE_VERSION,
+      tables: tables.tables,
+      buckets: MIGRATION_STORAGE_BUCKETS,
+      rpc_contracts: RPCS_AND_VIEWS,
+    })
+    const encoded = new TextEncoder().encode(schemaPayload)
     const hashBuffer = await crypto.subtle.digest('SHA-256', encoded)
     return {
       body: {
