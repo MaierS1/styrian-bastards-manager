@@ -157,16 +157,22 @@ describe('migration read api static security checks', () => {
   it('exposes a canonical signed binary read descriptor with verified bytes', () => {
     assert.match(indexSource, /downloadStorage\(client, body, supabaseUrl\)/)
     assert.match(indexSource, /client\.storage\.from\(bucket\)\.download\(path\)/)
+    assert.match(indexSource, /createSignedUrl\(path, 300\)/)
     assert.match(indexSource, /sha256/)
     assert.match(indexSource, /byte_size/)
     assert.match(indexSource, /mime_type/)
+    assert.match(indexSource, /download_url/)
     assert.match(indexSource, /download:\s*{\s*type: 'signed_url'/)
+    assert.match(indexSource, /normalizeSignedUrl/)
     assert.match(indexSource, /binary_size_mismatch/)
   })
 
-  it('rejects folder paths and permits document file_url references', () => {
+  it('rejects unsafe paths and permits listed migration storage files', () => {
     assert.match(indexSource, /\['documents', 'file_url', 'documents'\]/)
     assert.match(indexSource, /path_is_folder/)
+    assert.match(indexSource, /isSafeStorageDownloadPath/)
+    assert.match(indexSource, /isListedMigrationStorageObject/)
+    assert.match(indexSource, /MIGRATION_STORAGE_BUCKETS\.includes\(bucket\)/)
     assert.match(indexSource, /isLikelyStorageObjectPath/)
   })
 })

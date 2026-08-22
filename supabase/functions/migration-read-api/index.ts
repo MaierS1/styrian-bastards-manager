@@ -35,7 +35,7 @@ type SupabaseClientLike = {
   storage: {
     from: (bucket: string) => {
       list: (path?: string, options?: Record<string, unknown>) => Promise<{ data: unknown[] | null; error: Error | null }>
-      createSignedUrl: (path: string, expiresIn: number) => Promise<{ data: { signedUrl?: string } | null; error: Error | null }>
+      createSignedUrl: (path: string, expiresIn: number) => Promise<{ data: { signedUrl?: string; signed_url?: string } | null; error: Error | null }>
       download: (path: string) => Promise<{ data: Blob | null; error: Error | null }>
     }
     listBuckets: () => Promise<{ data: Array<{ id: string; name: string; public?: boolean }> | null; error: Error | null }>
@@ -439,7 +439,7 @@ async function downloadStorage(client: SupabaseClientLike, body: Record<string, 
   if (!bucketResult.ok) return { body: { error: bucketResult.error }, status: bucketResult.status, auditCount: 0 }
 
   const path = normalizeStoragePath(String(body.path || ''))
-  if (!path || path.includes('..')) {
+  if (!isSafeStorageDownloadPath(path)) {
     return { body: { error: 'invalid_path' }, status: 400, auditCount: 0 }
   }
 
@@ -466,6 +466,7 @@ async function downloadStorage(client: SupabaseClientLike, body: Record<string, 
 
   const { data, error } = await client.storage.from(bucket).createSignedUrl(path, 300)
   if (error) throw error
+  const signedUrl = normalizeSignedUrl(data?.signedUrl || data?.signed_url || null, supabaseUrl)
 
   return {
     body: {
@@ -475,10 +476,11 @@ async function downloadStorage(client: SupabaseClientLike, body: Record<string, 
       byte_size: byteSize,
       mime_type: descriptor.mime_type || downloaded.data.type || 'application/octet-stream',
       sha256,
-      signed_url: data?.signedUrl || null,
+      signed_url: signedUrl,
+      download_url: signedUrl,
       download: {
         type: 'signed_url',
-        url: data?.signedUrl || null,
+        url: signedUrl,
       },
       expires_in_seconds: 300,
     },
@@ -762,7 +764,14 @@ async function isKnownStorageReference(client: SupabaseClientLike, bucket: strin
     if (found) return true
   }
 
+  if (MIGRATION_STORAGE_BUCKETS.includes(bucket) && await isListedMigrationStorageObject(client, bucket, path)) return true
+
   return false
+}
+
+async function isListedMigrationStorageObject(client: SupabaseClientLike, bucket: string, path: string) {
+  const descriptor = await getStorageFileDescriptor(client, bucket, path)
+  return descriptor.exists === true
 }
 
 function parseStorageReference(value: unknown, supabaseUrl = '', defaultBucket = '') {
@@ -786,6 +795,28 @@ function parseStorageReference(value: unknown, supabaseUrl = '', defaultBucket =
 
 function normalizeStoragePath(path: string) {
   return path.replace(/^\/+/, '').replace(/\/+/g, '/')
+}
+
+function isSafeStorageDownloadPath(path: string) {
+  if (!path || path.endsWith('/')) return false
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return false
+  if (path.startsWith('\\\\') || path.startsWith('//')) return false
+  const decoded = safeDecodeURIComponent(path)
+  return !/(^|\/|\\)\.\.($|\/|\\)/.test(path) && !/(^|\/|\\)\.\.($|\/|\\)/.test(decoded)
+}
+
+function safeDecodeURIComponent(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function normalizeSignedUrl(value: string | null, supabaseUrl: string) {
+  if (!value) return null
+  if (/^https?:\/\//i.test(value)) return value
+  return new URL(value, supabaseUrl.replace(/\/$/, '')).toString()
 }
 
 function minimalStorageMetadata(metadata: Record<string, unknown> | null | undefined) {
