@@ -76,6 +76,7 @@ describe('migration read api contract', () => {
     assert.equal(validateBucket('public-assets').ok, false)
     assert.equal(validateBucket('private-user-secrets').ok, false)
     assert.equal(STORAGE_COLUMN_BUCKETS.documents.file_path, 'documents')
+    assert.equal(STORAGE_COLUMN_BUCKETS.documents.file_url, 'documents')
     assert.equal(STORAGE_COLUMN_BUCKETS.cash.receipt_url, 'receipts')
   })
 
@@ -144,5 +145,28 @@ describe('migration read api static security checks', () => {
     assert.doesNotMatch(indexSource, /\.move\s*\(/)
     assert.doesNotMatch(indexSource, /\.copy\s*\(/)
     assert.doesNotMatch(indexSource, /\.remove\s*\(/)
+  })
+
+  it('returns recursive file listings instead of folder placeholders', () => {
+    assert.match(indexSource, /listAllStorageFiles\(client, bucket, prefix\)/)
+    assert.match(indexSource, /isStorageFolder\(item\)/)
+    assert.match(indexSource, /rows\.push\(\.\.\.await listAllStorageFiles\(client, bucket, path\)\)/)
+    assert.doesNotMatch(indexSource, /path: prefix \? `\$\{prefix\}\/\$\{item\.name\}` : item\.name/)
+  })
+
+  it('exposes a canonical signed binary read descriptor with verified bytes', () => {
+    assert.match(indexSource, /downloadStorage\(client, body, supabaseUrl\)/)
+    assert.match(indexSource, /client\.storage\.from\(bucket\)\.download\(path\)/)
+    assert.match(indexSource, /sha256/)
+    assert.match(indexSource, /byte_size/)
+    assert.match(indexSource, /mime_type/)
+    assert.match(indexSource, /download:\s*{\s*type: 'signed_url'/)
+    assert.match(indexSource, /binary_size_mismatch/)
+  })
+
+  it('rejects folder paths and permits document file_url references', () => {
+    assert.match(indexSource, /\['documents', 'file_url', 'documents'\]/)
+    assert.match(indexSource, /path_is_folder/)
+    assert.match(indexSource, /isLikelyStorageObjectPath/)
   })
 })

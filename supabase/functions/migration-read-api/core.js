@@ -1,4 +1,4 @@
-export const API_VERSION = '35.2b.1'
+export const API_VERSION = '35.6e.1'
 export const V1_SOURCE_VERSION = 'v1.5.1'
 
 export const SECRET_HEADER = 'x-v1-migration-read-secret'
@@ -51,9 +51,9 @@ export const DIAGNOSTIC_STORAGE_BUCKETS = Object.freeze([
 export const STORAGE_COLUMN_BUCKETS = Object.freeze({
   cash: { receipt_url: 'receipts' },
   cash_receipts: { receipt_url: 'receipts' },
-  documents: { file_path: 'documents' },
   invoices: { pdf_url: 'documents' },
   financing_liabilities: { receipt_url: 'receipts' },
+  documents: { file_path: 'documents', file_url: 'documents' },
 })
 
 const SELECTS = {
@@ -514,7 +514,7 @@ export const DOMAIN_CONFIG = Object.freeze({
     sourceTables: ['documents'],
     order: [{ column: 'document_date', ascending: true }, { column: 'id', ascending: true }],
     select: SELECTS.documents,
-    storageColumns: ['file_path'],
+    storageColumns: ['file_path', 'file_url'],
   },
 })
 

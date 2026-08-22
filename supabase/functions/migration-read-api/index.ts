@@ -36,6 +36,7 @@ type SupabaseClientLike = {
     from: (bucket: string) => {
       list: (path?: string, options?: Record<string, unknown>) => Promise<{ data: unknown[] | null; error: Error | null }>
       createSignedUrl: (path: string, expiresIn: number) => Promise<{ data: { signedUrl?: string } | null; error: Error | null }>
+      download: (path: string) => Promise<{ data: Blob | null; error: Error | null }>
     }
     listBuckets: () => Promise<{ data: Array<{ id: string; name: string; public?: boolean }> | null; error: Error | null }>
   }
@@ -404,16 +405,11 @@ async function listStorage(client: SupabaseClientLike, body: Record<string, unkn
   if (cursor === null) return { body: { error: 'invalid_cursor' }, status: 400, auditCount: 0 }
   const limit = parseLimit(body.limit, 100, 500)
 
-  const { data, error } = await client.storage.from(bucket).list(prefix, {
-    limit,
-    offset: cursor,
-    sortBy: { column: 'name', order: 'asc' },
-  })
-  if (error) throw error
-
-  const items = (Array.isArray(data) ? data : []).map((item: any) => ({
+  const allFiles = await listAllStorageFiles(client, bucket, prefix)
+  const page = allFiles.slice(cursor, cursor + limit)
+  const items = page.map((item: any) => ({
     bucket,
-    path: prefix ? `${prefix}/${item.name}` : item.name,
+    path: item.path,
     name: item.name,
     size: item.metadata?.size ?? item.size ?? null,
     mime: item.metadata?.mimetype ?? item.metadata?.mimeType ?? null,
@@ -429,7 +425,7 @@ async function listStorage(client: SupabaseClientLike, body: Record<string, unkn
       migration_relevant: MIGRATION_STORAGE_BUCKETS.includes(bucket),
       diagnostic_only: DIAGNOSTIC_STORAGE_BUCKETS.includes(bucket),
       files: items,
-      next_cursor: items.length >= limit ? String(cursor + items.length) : null,
+      next_cursor: cursor + items.length < allFiles.length ? String(cursor + items.length) : null,
       limit,
       cursor: String(cursor),
     },
@@ -452,6 +448,22 @@ async function downloadStorage(client: SupabaseClientLike, body: Record<string, 
     return { body: { error: 'path_not_in_migration_manifest' }, status: 403, auditCount: 0 }
   }
 
+  const descriptor = await getStorageFileDescriptor(client, bucket, path)
+  if (!descriptor.exists) {
+    return { body: { error: descriptor.error }, status: descriptor.status, auditCount: 0 }
+  }
+
+  const downloaded = await client.storage.from(bucket).download(path)
+  if (downloaded.error || !downloaded.data) {
+    return { body: { error: 'binary_download_failed' }, status: 502, auditCount: 0 }
+  }
+  const bytes = await downloaded.data.arrayBuffer()
+  const sha256 = await hashBytes(bytes)
+  const byteSize = bytes.byteLength
+  if (descriptor.size !== null && descriptor.size !== byteSize) {
+    return { body: { error: 'binary_size_mismatch', expected_size: descriptor.size, downloaded_size: byteSize }, status: 409, auditCount: 0 }
+  }
+
   const { data, error } = await client.storage.from(bucket).createSignedUrl(path, 300)
   if (error) throw error
 
@@ -459,7 +471,15 @@ async function downloadStorage(client: SupabaseClientLike, body: Record<string, 
     body: {
       bucket,
       path,
+      size: byteSize,
+      byte_size: byteSize,
+      mime_type: descriptor.mime_type || downloaded.data.type || 'application/octet-stream',
+      sha256,
       signed_url: data?.signedUrl || null,
+      download: {
+        type: 'signed_url',
+        url: data?.signedUrl || null,
+      },
       expires_in_seconds: 300,
     },
     auditCount: 1,
@@ -679,7 +699,11 @@ async function listAllStorageFiles(client: SupabaseClientLike, bucket: string, p
     })
     if (error) return rows
     const batch = Array.isArray(data) ? data : []
-    rows.push(...batch.map((item: any) => ({ ...item, path: prefix ? `${prefix}/${item.name}` : item.name })))
+    for (const item of batch as any[]) {
+      const path = prefix ? `${prefix}/${item.name}` : item.name
+      if (isStorageFolder(item)) rows.push(...await listAllStorageFiles(client, bucket, path))
+      else rows.push({ ...item, path })
+    }
     if (batch.length < pageSize) break
   }
   return rows
@@ -716,6 +740,7 @@ function collectStorageReferences(domain: string, records: unknown[]) {
 async function isKnownStorageReference(client: SupabaseClientLike, bucket: string, path: string, supabaseUrl: string) {
   const checks = [
     ['documents', 'file_path', 'documents'],
+    ['documents', 'file_url', 'documents'],
     ['cash_entries', 'receipt_url', 'receipts'],
     ['invoices', 'pdf_url', 'documents'],
     ['financing_liabilities', 'receipt_url', 'receipts'],
@@ -755,7 +780,7 @@ function parseStorageReference(value: unknown, supabaseUrl = '', defaultBucket =
   }
 
   if (supabaseUrl && text.startsWith(supabaseUrl)) return null
-  if (defaultBucket && !/^https?:\/\//i.test(text)) return { bucket: defaultBucket, path: normalizeStoragePath(text) }
+  if (defaultBucket && !/^https?:\/\//i.test(text) && isLikelyStorageObjectPath(text)) return { bucket: defaultBucket, path: normalizeStoragePath(text) }
   return null
 }
 
@@ -770,6 +795,45 @@ function minimalStorageMetadata(metadata: Record<string, unknown> | null | undef
     mimetype: metadata.mimetype ?? metadata.mimeType ?? null,
     cacheControl: metadata.cacheControl ?? null,
   }
+}
+
+async function getStorageFileDescriptor(client: SupabaseClientLike, bucket: string, path: string) {
+  const normalized = normalizeStoragePath(path)
+  const segments = normalized.split('/')
+  const name = segments.pop() || ''
+  const prefix = segments.join('/')
+  const { data, error } = await client.storage.from(bucket).list(prefix, {
+    limit: 1000,
+    offset: 0,
+    sortBy: { column: 'name', order: 'asc' },
+  })
+  if (error) throw error
+  const match = (Array.isArray(data) ? data : []).find((item: any) => item?.name === name) as any
+  if (!match) return { exists: false as const, status: 404, error: 'file_not_found' }
+  if (isStorageFolder(match)) return { exists: false as const, status: 400, error: 'path_is_folder' }
+  return {
+    exists: true as const,
+    size: Number.isFinite(Number(match.metadata?.size ?? match.size)) ? Number(match.metadata?.size ?? match.size) : null,
+    mime_type: match.metadata?.mimetype ?? match.metadata?.mimeType ?? match.metadata?.contentType ?? null,
+    metadata: minimalStorageMetadata(match.metadata),
+  }
+}
+
+function isStorageFolder(item: any) {
+  if (!item || typeof item !== 'object') return false
+  return !item.id && !item.metadata
+}
+
+function isLikelyStorageObjectPath(value: string) {
+  const normalized = normalizeStoragePath(value)
+  if (!normalized || normalized.endsWith('/')) return false
+  const name = normalized.split('/').pop() || ''
+  return name.includes('.')
+}
+
+async function hashBytes(bytes: ArrayBuffer) {
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function sumCents(rows: unknown[], column: string) {
