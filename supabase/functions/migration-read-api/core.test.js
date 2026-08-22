@@ -26,6 +26,7 @@ describe('migration read api contract', () => {
   it('exposes only whitelisted read actions', () => {
     assert.deepEqual(ACTIONS, [
       'health',
+      'source-info',
       'schema',
       'domain-counts',
       'domain-export',

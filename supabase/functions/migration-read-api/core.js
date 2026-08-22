@@ -6,6 +6,7 @@ export const SECRET_HEADER = 'x-v1-migration-read-secret'
 
 export const ACTIONS = Object.freeze([
   'health',
+  'source-info',
   'schema',
   'domain-counts',
   'domain-export',

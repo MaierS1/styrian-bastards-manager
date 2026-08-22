@@ -183,6 +183,24 @@ async function routeAction({
     }
   }
 
+  if (action === 'source-info') {
+    return {
+      body: {
+        source_version: V1_SOURCE_VERSION,
+        contract_version: API_VERSION,
+        schema_contract_version: SCHEMA_CONTRACT_VERSION,
+        capabilities: {
+          schema: true,
+          finance_baseline: true,
+          domain_export: true,
+          storage_listing: true,
+          binary_download: true,
+          membership_fee_periods: true,
+        },
+      },
+    }
+  }
+
   if (action === 'schema') {
     const counts = await getDomainCounts(client)
     const buckets = await getStorageBuckets(client)
@@ -211,6 +229,16 @@ async function routeAction({
     return {
       body: {
         ...payload,
+        contract_version: API_VERSION,
+        schema_contract_version: SCHEMA_CONTRACT_VERSION,
+        capabilities: {
+          schema: true,
+          finance_baseline: true,
+          domain_export: true,
+          storage_listing: true,
+          binary_download: true,
+          membership_fee_periods: true,
+        },
         schema_hash: [...new Uint8Array(hashBuffer)].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
       },
       auditCount: tables.tables.length,
@@ -318,6 +346,16 @@ async function loadRelated(client: SupabaseClientLike, domain: string, records: 
     const { data, error } = await query
     if (error) throw error
     related[spec.table] = Array.isArray(data) ? data : []
+    if (domain === 'membership_fees' && spec.table === 'membership_fee_periods') {
+      related[spec.table] = related[spec.table].map((period: any) => ({
+        ...period,
+        period_key: [period.year, period.title, period.due_date].map((value) => String(value ?? '').trim().toLowerCase()).join('|'),
+        name: period.title ?? null,
+        starts_on: null,
+        ends_on: null,
+        due_on: period.due_date ?? null,
+      }))
+    }
   }
 
   return related
