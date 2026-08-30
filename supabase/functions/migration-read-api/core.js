@@ -204,7 +204,6 @@ const SELECTS = {
     'website',
     'logo_path',
     'logo_alt',
-    'description',
     'public_description',
     'public_description_html',
     'is_public',
