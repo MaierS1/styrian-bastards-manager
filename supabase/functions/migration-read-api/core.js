@@ -306,7 +306,6 @@ const SELECTS = {
     'public_description_html',
     'category',
     'image_path',
-    'image_alt',
     'item_number',
     'status',
     'is_public',
